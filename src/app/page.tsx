@@ -56,6 +56,9 @@ export default function Home() {
             ZATOSHI.MARKET
           </div>
           <div className="flex gap-6">
+            <Link href="/wallet" className="px-6 py-2 text-gold-400">
+              WALLET
+            </Link>
             <a
               href="https://zerdinals.com/"
               target="_blank"
@@ -165,6 +168,9 @@ export default function Home() {
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="text-2xl text-gold-400">ZATOSHI.MARKET</div>
             <div className="flex gap-6 text-gold-300/80">
+              <Link href="/wallet" className="hover:text-gold-400 transition-all">
+                WALLET
+              </Link>
               <a href="https://zerdinals.com/" target="_blank" rel="noopener noreferrer" className="hover:text-gold-400 transition-all">
                 EXPLORER
               </a>
