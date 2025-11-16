@@ -47,7 +47,7 @@ export function generateWallet(): Wallet {
   const publicKey = Buffer.from(keyPair.publicKey).toString('hex');
 
   // Generate Zcash transparent address (t-address)
-  const address = createZcashAddress(keyPair.publicKey);
+  const address = createZcashAddress(Buffer.from(keyPair.publicKey));
 
   return {
     address,
@@ -70,7 +70,7 @@ export function importFromMnemonic(mnemonic: string): Wallet {
 
   const privateKey = keyPair.toWIF();
   const publicKey = Buffer.from(keyPair.publicKey).toString('hex');
-  const address = createZcashAddress(keyPair.publicKey);
+  const address = createZcashAddress(Buffer.from(keyPair.publicKey));
 
   return {
     address,
@@ -86,7 +86,7 @@ export function importFromMnemonic(mnemonic: string): Wallet {
 export function importFromPrivateKey(privateKeyWIF: string): Omit<Wallet, 'mnemonic'> {
   const keyPair = ECPair.fromWIF(privateKeyWIF);
   const publicKey = Buffer.from(keyPair.publicKey).toString('hex');
-  const address = createZcashAddress(keyPair.publicKey);
+  const address = createZcashAddress(Buffer.from(keyPair.publicKey));
 
   return {
     address,
