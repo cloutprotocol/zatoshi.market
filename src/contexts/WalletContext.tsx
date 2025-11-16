@@ -6,6 +6,7 @@ import type { Wallet } from '@/lib/wallet';
 interface WalletContextType {
   wallet: Wallet | null;
   isConnected: boolean;
+  mounted: boolean;
   connectWallet: (wallet: Wallet) => void;
   disconnectWallet: () => void;
   updateBalance: (confirmed: number, unconfirmed: number) => void;
@@ -18,9 +19,11 @@ const WALLET_STORAGE_KEY = 'zatoshi_wallet';
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   // Load wallet from localStorage on mount
   useEffect(() => {
+    setMounted(true);
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(WALLET_STORAGE_KEY);
       if (stored) {
@@ -62,6 +65,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       value={{
         wallet,
         isConnected,
+        mounted,
         connectWallet,
         disconnectWallet,
         updateBalance,

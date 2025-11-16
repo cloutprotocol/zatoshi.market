@@ -2,38 +2,27 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useWallet } from '@/contexts/WalletContext';
-import WalletDrawer from './WalletDrawer';
+
+const WalletDrawer = dynamic(() => import('./WalletDrawer'), {
+  ssr: false
+});
 
 export default function Header() {
-  const { wallet, isConnected } = useWallet();
+  const { wallet, isConnected, mounted } = useWallet();
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
     <>
-      <nav className="px-6 py-6 flex justify-between items-center bg-black/90 border-b border-gold-500/20">
+      <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-6 flex justify-between items-center bg-black/90 border-b border-gold-500/20">
         <Link href="/" className="text-2xl text-gold-400">
           ZATOSHI.MARKET
         </Link>
 
         {/* Desktop Navigation */}
         <div className="hidden lg:flex gap-6 items-center">
-          {isConnected && wallet ? (
-            <button
-              onClick={() => setIsWalletOpen(true)}
-              className="px-4 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 rounded font-mono text-sm hover:bg-gold-500/30 transition-all"
-            >
-              {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
-            </button>
-          ) : (
-            <button
-              onClick={() => setIsWalletOpen(true)}
-              className="px-6 py-2 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-all"
-            >
-              CONNECT WALLET
-            </button>
-          )}
           <a
             href="https://zerdinals.com/"
             target="_blank"
@@ -48,11 +37,38 @@ export default function Header() {
           <Link href="/token/zore" className="px-4 py-2 text-gold-400 hover:text-gold-300">
             ZORE TOKEN
           </Link>
+          {!mounted ? (
+            <button
+              className="px-6 py-2 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-all"
+            >
+              CONNECT WALLET
+            </button>
+          ) : isConnected && wallet ? (
+            <button
+              onClick={() => setIsWalletOpen(true)}
+              className="px-4 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 rounded font-mono text-sm hover:bg-gold-500/30 transition-all"
+            >
+              {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsWalletOpen(true)}
+              className="px-6 py-2 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-all"
+            >
+              CONNECT WALLET
+            </button>
+          )}
         </div>
 
         {/* Mobile Navigation */}
         <div className="flex lg:hidden items-center gap-3">
-          {isConnected && wallet ? (
+          {!mounted ? (
+            <button
+              className="px-4 py-2 bg-gold-500 text-black font-bold rounded text-sm"
+            >
+              CONNECT
+            </button>
+          ) : isConnected && wallet ? (
             <button
               onClick={() => setIsWalletOpen(true)}
               className="px-3 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 rounded text-sm font-mono"
@@ -78,7 +94,7 @@ export default function Header() {
 
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden bg-black border-b border-gold-500/20">
+        <div className="fixed top-20 left-0 right-0 z-40 lg:hidden bg-black border-b border-gold-500/20">
           <div className="px-6 py-4 space-y-3">
             <a
               href="https://zerdinals.com/"

@@ -1,13 +1,11 @@
 /* eslint-disable react/no-unknown-property */
 'use client';
 
-import { useRef, useEffect, forwardRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { EffectComposer, wrapEffect } from '@react-three/postprocessing';
 import { Effect } from 'postprocessing';
 import * as THREE from 'three';
-
-import './Dither.css';
 
 const waveVertexShader = `
 precision highp float;
@@ -297,7 +295,7 @@ export default function Dither({
 }: DitherProps) {
   return (
     <Canvas
-      className="dither-container"
+      style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: -1 }}
       camera={{ position: [0, 0, 6] }}
       dpr={1}
       gl={{ antialias: true, preserveDrawingBuffer: true }}

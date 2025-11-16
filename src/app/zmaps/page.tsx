@@ -1,13 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import dynamic from 'next/dynamic';
 import Link from 'next/link';
+import Dither from '@/components/Dither';
 import { zcashRPC } from '@/services/zcash';
-
-const Dither = dynamic(() => import('@/components/Dither'), {
-  ssr: false,
-});
 
 export default function ZmapsPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -22,6 +18,11 @@ export default function ZmapsPage() {
   const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number } | null>(null);
   const [blockCount, setBlockCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const BLOCKS_PER_MAP = 100; // Each ZMAP square represents 100 Zcash blocks
   const ZMAP_PRICE = 0.0015; // 0.0015 ZEC per ZMAP
   const ZORE_PER_MAP = 10000; // 10,000 ZORE per ZMAP
@@ -483,19 +484,21 @@ export default function ZmapsPage() {
   }, [blockCount, loading]);
 
   return (
-    <main className="relative w-full h-screen overflow-hidden bg-black">
+    <main className="relative w-full h-screen overflow-hidden bg-black pt-20">
       {/* Dither Background */}
-      <div className="fixed inset-0 w-full h-full opacity-20">
-        <Dither
-          waveColor={[0.8, 0.6, 0.2]}
-          disableAnimation={false}
-          enableMouseInteraction={false}
-          mouseRadius={0.3}
-          colorNum={4}
-          waveAmplitude={0.3}
-          waveFrequency={3}
-          waveSpeed={0.05}
-        />
+      <div className="fixed inset-0 w-full h-full opacity-20 -z-10">
+        {mounted && (
+          <Dither
+            waveColor={[0.8, 0.6, 0.2]}
+            disableAnimation={false}
+            enableMouseInteraction={false}
+            mouseRadius={0.3}
+            colorNum={4}
+            waveAmplitude={0.3}
+            waveFrequency={3}
+            waveSpeed={0.05}
+          />
+        )}
       </div>
 
       {/* Header */}

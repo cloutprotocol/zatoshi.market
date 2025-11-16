@@ -12,7 +12,7 @@ interface WalletDrawerProps {
 }
 
 export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
-  const { wallet, connectWallet, disconnectWallet } = useWallet();
+  const { wallet, connectWallet, disconnectWallet, mounted } = useWallet();
   const [balance, setBalance] = useState({ confirmed: 0, unconfirmed: 0 });
   const [usdPrice, setUsdPrice] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -119,7 +119,8 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   const totalBalance = balance.confirmed + balance.unconfirmed;
   const usdValue = totalBalance * usdPrice;
 
-  if (!isOpen) return null;
+  // Prevent hydration mismatch and don't show until client is ready
+  if (!mounted || !isOpen) return null;
 
   return (
     <>
@@ -134,7 +135,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
         bottom-0 left-0 right-0 max-h-[80vh] lg:max-h-none
         lg:top-0 lg:right-0 lg:left-auto lg:w-[400px] lg:bottom-0
         transition-transform duration-300
-        ${isOpen ? 'translate-y-0' : 'translate-y-full lg:translate-y-0 lg:translate-x-full'}
+        translate-y-0
       `}>
         <div className="p-6">
           {/* Close button */}
@@ -176,12 +177,6 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
               {/* Header */}
               <div className="flex justify-between items-center">
                 <h2 className="text-xl text-gold-400 font-bold">WALLET</h2>
-                <button
-                  onClick={handleExport}
-                  className="text-gold-400 text-sm hover:text-gold-300"
-                >
-                  Export
-                </button>
               </div>
 
               {/* Address */}
@@ -260,13 +255,21 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                 </div>
               )}
 
-              {/* Disconnect */}
-              <button
-                onClick={handleDisconnect}
-                className="w-full px-6 py-2 text-gold-400/60 text-sm hover:text-gold-400 transition-all"
-              >
-                Disconnect Wallet
-              </button>
+              {/* Bottom Actions */}
+              <div className="space-y-2">
+                <button
+                  onClick={handleExport}
+                  className="w-full px-6 py-2 bg-gold-500/10 text-gold-400 text-sm border border-gold-500/30 rounded hover:bg-gold-500/20 transition-all"
+                >
+                  Export Private Key
+                </button>
+                <button
+                  onClick={handleDisconnect}
+                  className="w-full px-6 py-2 text-gold-400/60 text-sm hover:text-gold-400 transition-all"
+                >
+                  Disconnect Wallet
+                </button>
+              </div>
             </div>
           )}
         </div>
