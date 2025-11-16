@@ -161,13 +161,7 @@ class RetroEffectImpl extends Effect {
   }
 }
 
-const WrappedRetro = wrapEffect(RetroEffectImpl);
-
-const RetroEffect = forwardRef<any, { colorNum: number; pixelSize: number }>((props, ref) => {
-  const { colorNum, pixelSize } = props;
-  return <WrappedRetro ref={ref} colorNum={colorNum} pixelSize={pixelSize} />;
-});
-RetroEffect.displayName = 'RetroEffect';
+const RetroEffect = wrapEffect(RetroEffectImpl) as any;
 
 interface DitheredWavesProps {
   waveSpeed: number;
