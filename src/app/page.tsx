@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import Header from '@/components/Header';
 import { zcashRPC } from '@/services/zcash';
 
 const Dither = dynamic(() => import('@/components/Dither'), {
@@ -51,30 +52,7 @@ export default function Home() {
       {/* Content */}
       <div className="relative z-10">
         {/* Navigation */}
-        <nav className="px-6 py-8 flex justify-between items-center bg-black/90">
-          <div className="text-2xl text-gold-400">
-            ZATOSHI.MARKET
-          </div>
-          <div className="flex gap-6">
-            <Link href="/wallet" className="px-6 py-2 text-gold-400">
-              WALLET
-            </Link>
-            <a
-              href="https://zerdinals.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-6 py-2 text-gold-400"
-            >
-              EXPLORER
-            </a>
-            <Link href="/zmaps" className="px-6 py-2 text-gold-400">
-              ZMAPS
-            </Link>
-            <Link href="/token/zore" className="px-6 py-2 text-gold-400">
-              ZORE TOKEN
-            </Link>
-          </div>
-        </nav>
+        <Header />
 
         {/* Hero Section */}
         <div className="container mx-auto px-6 py-24 md:py-32">
