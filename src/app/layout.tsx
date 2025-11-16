@@ -3,8 +3,8 @@ import "./globals.css";
 import { ClientLayout } from "@/components/ClientLayout";
 
 export const metadata: Metadata = {
-  title: "Zatoshi.market - Zerdinals & ZRC20 Marketplace",
-  description: "The premiere marketplace for Zerdinals & ZRC20 on Zcash",
+  title: "zatoshi.market",
+  description: "Host and trade ZRC20 tokens, ZMAPS, and Zerdinal inscriptions on Zcash.",
 };
 
 export default function RootLayout({
