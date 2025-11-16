@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import type { Wallet } from '@/lib/wallet';
 import { zcashRPCService } from '@/services/zcashRPC';
 import QRCode from 'qrcode';
@@ -22,6 +23,17 @@ export default function WalletPage() {
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [sendForm, setSendForm] = useState({ to: '', amount: '' });
 
+  const fetchBalance = useCallback(async () => {
+    if (!wallet?.address) return;
+    const bal = await zcashRPCService.getBalance(wallet.address);
+    setBalance(bal);
+  }, [wallet?.address]);
+
+  const fetchPrice = useCallback(async () => {
+    const price = await zcashRPCService.getPrice();
+    setUsdPrice(price);
+  }, []);
+
   useEffect(() => {
     // Load wallet from session storage (temporary, not secure for production)
     const stored = sessionStorage.getItem('zcash_wallet');
@@ -40,18 +52,7 @@ export default function WalletPage() {
       }, 30000); // Refresh every 30 seconds
       return () => clearInterval(interval);
     }
-  }, [wallet]);
-
-  const fetchBalance = async () => {
-    if (!wallet?.address) return;
-    const bal = await zcashRPCService.getBalance(wallet.address);
-    setBalance(bal);
-  };
-
-  const fetchPrice = async () => {
-    const price = await zcashRPCService.getPrice();
-    setUsdPrice(price);
-  };
+  }, [wallet?.address, fetchBalance, fetchPrice]);
 
   const handleCreateWallet = async () => {
     setLoading(true);
@@ -309,6 +310,7 @@ export default function WalletPage() {
           <div className="glass-modal max-w-md w-full p-8 text-center">
             <h3 className="text-2xl font-bold text-gold-300 mb-6">RECEIVE ZEC</h3>
             {qrDataUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
               <img src={qrDataUrl} alt="Wallet QR" className="mx-auto mb-6 rounded-lg" />
             )}
             <div className="bg-black/40 p-4 rounded mb-6">
