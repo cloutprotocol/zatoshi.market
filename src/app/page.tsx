@@ -1,33 +1,13 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-
-const Dither = dynamic(() => import('@/components/Dither'), {
-  ssr: false,
-});
-
 export default function Home() {
   return (
-    <main className="relative min-h-screen">
-      {/* Dither Background */}
-      <div className="fixed inset-0 w-full h-full">
-        <Dither
-          waveColor={[0.8, 0.6, 0.2]}
-          disableAnimation={false}
-          enableMouseInteraction={true}
-          mouseRadius={0.3}
-          colorNum={4}
-          waveAmplitude={0.3}
-          waveFrequency={3}
-          waveSpeed={0.05}
-        />
-      </div>
-
+    <main className="relative min-h-screen bg-black">
       {/* Content */}
       <div className="relative z-10">
         {/* Navigation */}
         <nav className="px-6 py-8 flex justify-between items-center">
-          <div className="text-2xl font-bold tracking-tight text-gold-400 animate-glow">
+          <div className="text-2xl font-bold tracking-tight text-gold-400 animate-glow font-vcr">
             ZATOSHI.MARKET
           </div>
           <div className="flex gap-6">
@@ -44,7 +24,7 @@ export default function Home() {
         {/* Hero Section */}
         <div className="container mx-auto px-6 py-24 md:py-32">
           <div className="max-w-4xl">
-            <h1 className="text-6xl md:text-8xl font-bold mb-8 leading-none text-gold-300 drop-shadow-[0_0_20px_rgba(255,200,55,0.5)]">
+            <h1 className="text-6xl md:text-8xl font-bold mb-8 leading-none text-gold-300 drop-shadow-[0_0_20px_rgba(255,200,55,0.5)] font-vcr">
               THE PREMIERE
               <br />
               MARKETPLACE
@@ -127,7 +107,7 @@ export default function Home() {
         {/* Footer */}
         <footer className="container mx-auto px-6 py-12 border-t-2 border-gold-600">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="text-2xl font-bold text-gold-400">ZATOSHI.MARKET</div>
+            <div className="text-2xl font-bold text-gold-400 font-vcr">ZATOSHI.MARKET</div>
             <div className="flex gap-6 opacity-80 text-gold-300">
               <a href="#" className="hover:opacity-100 hover:text-gold-400 transition-all">DOCS</a>
               <a href="#" className="hover:opacity-100 hover:text-gold-400 transition-all">GITHUB</a>
