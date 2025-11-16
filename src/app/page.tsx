@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import Header from '@/components/Header';
 import { zcashRPC } from '@/services/zcash';
 
 const Dither = dynamic(() => import('@/components/Dither'), {
@@ -51,9 +50,6 @@ export default function Home() {
 
       {/* Content */}
       <div className="relative z-10">
-        {/* Navigation */}
-        <Header />
-
         {/* Hero Section */}
         <div className="container mx-auto px-6 py-24 md:py-32">
           <div className="max-w-4xl">

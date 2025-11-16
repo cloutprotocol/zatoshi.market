@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Providers } from "@/components/Providers";
+import { ClientLayout } from "@/components/ClientLayout";
 
 export const metadata: Metadata = {
   title: "Zatoshi.market - Zerdinals & ZRC20 Marketplace",
@@ -18,7 +18,7 @@ export default function RootLayout({
         <link href="https://fonts.cdnfonts.com/css/vcr-osd-mono" rel="stylesheet" />
       </head>
       <body style={{ fontFamily: "'VCR OSD Mono', monospace" }}>
-        <Providers>{children}</Providers>
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );
