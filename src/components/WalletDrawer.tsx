@@ -23,6 +23,8 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   const [showExport, setShowExport] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [sendForm, setSendForm] = useState({ to: '', amount: '' });
+  const [dragStart, setDragStart] = useState(0);
+  const [dragOffset, setDragOffset] = useState(0);
 
   const fetchBalance = useCallback(async () => {
     if (!wallet?.address) return;
@@ -119,6 +121,26 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   const totalBalance = balance.confirmed + balance.unconfirmed;
   const usdValue = totalBalance * usdPrice;
 
+  // Drag handlers for mobile bottom sheet
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setDragStart(e.touches[0].clientY);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const offset = e.touches[0].clientY - dragStart;
+    if (offset > 0) {
+      setDragOffset(offset);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (dragOffset > 100) {
+      onClose();
+    }
+    setDragOffset(0);
+    setDragStart(0);
+  };
+
   // Prevent hydration mismatch and don't show until client is ready
   if (!mounted || !isOpen) return null;
 
@@ -131,17 +153,30 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       />
 
       {/* Drawer */}
-      <div className={`fixed z-50 bg-black border-l border-gold-500/30 overflow-y-auto
+      <div
+        className={`fixed z-50 backdrop-blur-xl bg-black/30 overflow-y-auto rounded-t-3xl lg:rounded-none
         bottom-0 left-0 right-0 max-h-[80vh] lg:max-h-none
         lg:top-0 lg:right-0 lg:left-auto lg:w-[400px] lg:bottom-0
         transition-transform duration-300
-        translate-y-0
-      `}>
+        ${dragOffset === 0 ? 'translate-y-0' : ''}
+      `}
+        style={{
+          transform: dragOffset > 0 ? `translateY(${dragOffset}px)` : 'translateY(0)'
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Drag Handle (mobile only) */}
+        <div className="lg:hidden flex justify-center pt-3 pb-2">
+          <div className="w-12 h-1.5 bg-gold-500/40 rounded-full"></div>
+        </div>
+
         <div className="p-6">
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-gold-400 hover:text-gold-300 text-2xl"
+            className="absolute top-4 right-4 text-gold-400 hover:text-gold-300 text-2xl lg:block hidden"
           >
             ×
           </button>
@@ -277,8 +312,8 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
 
       {/* Modals */}
       {showMnemonic && wallet && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-6">
-          <div className="bg-black border border-gold-500/30 rounded-lg max-w-2xl w-full p-8">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
+          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded-lg max-w-2xl w-full p-8">
             <h3 className="text-2xl font-bold text-gold-300 mb-4">BACKUP SEED PHRASE</h3>
             <div className="bg-gold-500/10 border border-gold-500/30 rounded p-4 mb-6">
               <p className="text-sm text-gold-300">
@@ -312,8 +347,8 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       )}
 
       {showReceive && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-6">
-          <div className="bg-black border border-gold-500/30 rounded-lg max-w-md w-full p-8 text-center">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
+          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded-lg max-w-md w-full p-8 text-center">
             <h3 className="text-2xl font-bold text-gold-300 mb-6">RECEIVE ZEC</h3>
             {qrDataUrl && (
               // eslint-disable-next-line @next/next/no-img-element
@@ -341,8 +376,8 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       )}
 
       {showSend && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-6">
-          <div className="bg-black border border-gold-500/30 rounded-lg max-w-md w-full p-8">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
+          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded-lg max-w-md w-full p-8">
             <h3 className="text-2xl font-bold text-gold-300 mb-6">SEND ZEC</h3>
             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-4 mb-6">
               <p className="text-sm text-yellow-400">
@@ -391,8 +426,8 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       )}
 
       {showExport && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-6">
-          <div className="bg-black border border-gold-500/30 rounded-lg max-w-md w-full p-8">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
+          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded-lg max-w-md w-full p-8">
             <h3 className="text-2xl font-bold text-gold-300 mb-4">EXPORT PRIVATE KEY</h3>
             <div className="bg-gold-500/10 border border-gold-500/30 rounded p-4 mb-6">
               <p className="text-sm text-gold-300 mb-2">

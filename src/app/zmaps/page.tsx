@@ -484,7 +484,7 @@ export default function ZmapsPage() {
   }, [blockCount, loading]);
 
   return (
-    <main className="relative w-full h-screen overflow-hidden bg-black pt-20">
+    <main className="relative w-full h-screen overflow-hidden pt-20">
       {/* Dither Background */}
       <div className="fixed inset-0 w-full h-full opacity-20 -z-10">
         {mounted && (
@@ -502,7 +502,7 @@ export default function ZmapsPage() {
       </div>
 
       {/* Header */}
-      <header className="fixed top-0 left-0 w-full flex items-center justify-between px-6 py-4 bg-black z-20 border-b border-gold-700/30">
+      <header className="fixed top-0 left-0 w-full flex items-center justify-between px-6 py-4 backdrop-blur-xl bg-black/30 z-20 border-b border-gold-700/30">
         <div className="flex items-center gap-6">
           <Link href="/" className="text-2xl text-gold-400">
             ZATOSHI.MARKET
@@ -529,7 +529,7 @@ export default function ZmapsPage() {
         <button
           id="zoom-in-btn"
           title="Zoom In"
-          className="size-12 bg-black border border-gold-700 text-gold-400 flex items-center justify-center"
+          className="size-12 backdrop-blur-xl bg-black/30 border border-gold-700 text-gold-400 flex items-center justify-center"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -549,7 +549,7 @@ export default function ZmapsPage() {
         <button
           id="zoom-out-btn"
           title="Zoom Out"
-          className="size-12 bg-black border border-gold-700 text-gold-400 flex items-center justify-center"
+          className="size-12 backdrop-blur-xl bg-black/30 border border-gold-700 text-gold-400 flex items-center justify-center"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -568,7 +568,7 @@ export default function ZmapsPage() {
         <button
           id="reset-btn"
           title="Reset View"
-          className="size-12 bg-black border border-gold-700 text-gold-400 flex items-center justify-center"
+          className="size-12 backdrop-blur-xl bg-black/30 border border-gold-700 text-gold-400 flex items-center justify-center"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

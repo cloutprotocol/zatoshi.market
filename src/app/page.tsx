@@ -34,9 +34,9 @@ export default function Home() {
   const totalZmaps = Math.ceil(blockHeight / 100);
 
   return (
-    <main className="relative min-h-screen bg-black pt-20">
+    <main className="relative min-h-screen pt-20">
       {/* Dither Background */}
-      <div className="fixed inset-0 w-full h-full bg-black -z-10">
+      <div className="fixed inset-0 w-full h-full -z-10">
         {mounted && (
           <Dither
             waveColor={[0.8, 0.6, 0.2]}

@@ -34,8 +34,8 @@ export default function Header() {
           <Link href="/zmaps" className="px-4 py-2 text-gold-400 hover:text-gold-300">
             ZMAPS
           </Link>
-          <Link href="/token/zore" className="px-4 py-2 text-gold-400 hover:text-gold-300">
-            ZORE TOKEN
+          <Link href="/mine" className="px-4 py-2 text-gold-400 hover:text-gold-300">
+            MINE ZORE
           </Link>
           {!mounted ? (
             <button
@@ -113,11 +113,11 @@ export default function Header() {
               ZMAPS
             </Link>
             <Link
-              href="/token/zore"
+              href="/mine"
               className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              ZORE TOKEN
+              MINE ZORE
             </Link>
           </div>
         </div>
