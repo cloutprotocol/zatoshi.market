@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
+import { zcashRPC } from '@/services/zcash';
 
 const Dither = dynamic(() => import('@/components/Dither'), {
   ssr: false,
@@ -9,18 +11,48 @@ const Dither = dynamic(() => import('@/components/Dither'), {
 
 export default function ZmapsPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [selectedCell, setSelectedCell] = useState<{ x: number; y: number } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<{
+    x: number;
+    y: number;
+    blockNumber: number;
+    isInscribed: boolean;
+  } | null>(null);
+  const [blockCount, setBlockCount] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
+  const BLOCK_PRICE = 0.10; // $0.10 per block for ZORE mining
+  const COLS = 100; // Grid columns
+
+  // Fetch real Zcash block count
+  useEffect(() => {
+    async function fetchBlockCount() {
+      try {
+        const count = await zcashRPC.getBlockCount();
+        setBlockCount(count);
+        setLoading(false);
+      } catch (error) {
+        console.error('Failed to fetch block count:', error);
+        // Fallback to a reasonable default if API fails
+        setBlockCount(2500000);
+        setLoading(false);
+      }
+    }
+    fetchBlockCount();
+    // Refresh every 2 minutes
+    const interval = setInterval(fetchBlockCount, 120000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || loading || blockCount === 0) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // --- Grid Configuration ---
+    // --- Grid Configuration (Dynamic based on block count) ---
     const numCols = 100;
-    const numRows = 300;
+    // Calculate rows based on actual block count, minimum 300 for padding
+    const numRows = Math.max(300, Math.ceil(blockCount / numCols) + 50);
     const cellSize = 30;
     const gridColor = '#7c6c3c'; // gold-700 darkened for grid lines
     const goldColor = '#ffc837'; // gold-500
@@ -151,10 +183,20 @@ export default function ZmapsPage() {
       const gridCol = Math.floor(worldX / cellSize);
       const gridRow = Math.floor(worldY / cellSize);
 
-      const clickedCube = goldCubes.find((cube) => cube.x === gridCol && cube.y === gridRow);
+      // Check if click is within grid bounds
+      if (gridCol >= 0 && gridCol < numCols && gridRow >= 0 && gridRow < numRows) {
+        // Calculate block number (row * columns + column)
+        const blockNumber = gridRow * numCols + gridCol;
 
-      if (clickedCube) {
-        setSelectedCell({ x: clickedCube.x, y: clickedCube.y });
+        // Check if this block is inscribed (has a gold cube)
+        const isInscribed = goldCubes.some((cube) => cube.x === gridCol && cube.y === gridRow);
+
+        setSelectedCell({
+          x: gridCol,
+          y: gridRow,
+          blockNumber,
+          isInscribed,
+        });
       }
     }
 
@@ -359,7 +401,7 @@ export default function ZmapsPage() {
       zoomOutBtn?.removeEventListener('click', handleZoomOut);
       resetBtn?.removeEventListener('click', handleReset);
     };
-  }, []);
+  }, [blockCount, loading]);
 
   return (
     <main className="relative w-full h-screen overflow-hidden bg-black">
@@ -378,9 +420,22 @@ export default function ZmapsPage() {
       </div>
 
       {/* Header */}
-      <header className="fixed top-0 left-0 w-full flex items-center justify-start px-6 py-4 bg-black/80 backdrop-blur-md border-b border-gold-700 z-20">
-        <span className="text-3xl text-gold-400 animate-glow">ZMAPS</span>
-        <span className="ml-4 text-xl text-gold-300/60">/ 100x300 Grid / Demo</span>
+      <header className="fixed top-0 left-0 w-full flex items-center justify-between px-6 py-4 bg-black/80 backdrop-blur-md border-b border-gold-700 z-20">
+        <div className="flex items-center">
+          <Link href="/" className="text-3xl text-gold-400 animate-glow hover:text-gold-300 transition-colors mr-6">
+            ZATOSHI.MARKET
+          </Link>
+          <span className="text-3xl text-gold-400 animate-glow">ZMAPS</span>
+          <span className="ml-4 text-xl text-gold-300/60">
+            / {blockCount > 0 ? `${blockCount.toLocaleString()} Blocks` : 'Loading...'}
+          </span>
+        </div>
+        <Link
+          href="/token/zore"
+          className="px-6 py-2 border-2 border-gold-500 text-gold-400 hover:bg-gold-500 hover:text-black transition-all rounded"
+        >
+          ZORE TOKEN
+        </Link>
       </header>
 
       {/* Canvas */}
@@ -457,54 +512,111 @@ export default function ZmapsPage() {
         </button>
       </div>
 
-      {/* Mint Modal */}
+      {/* High-End Liquid Glass Modal */}
       {selectedCell && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl"
           onClick={() => setSelectedCell(null)}
         >
           <div
-            className="bg-black/90 border-2 border-gold-500 rounded-lg shadow-2xl w-full max-w-md relative overflow-hidden animate-glow"
+            className="bg-gradient-to-br from-gold-900/20 via-black/40 to-gold-900/20 backdrop-blur-2xl rounded-2xl shadow-[0_8px_32px_0_rgba(255,200,55,0.2)] w-full max-w-2xl relative overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Glowing border effect */}
-            <div className="absolute inset-0 border-2 border-gold-400 opacity-50 blur-sm"></div>
-
-            {/* Header */}
-            <div className="relative flex items-center justify-between p-4 border-b border-gold-700/50 bg-liquid-glass">
-              <h3 className="text-3xl text-gold-400 animate-glow">Mint ZMAPS Block</h3>
-              <button
-                onClick={() => setSelectedCell(null)}
-                className="text-gold-400 hover:text-gold-300 text-3xl transition-colors"
-              >
-                &times;
-              </button>
-            </div>
+            {/* Ambient glow effect */}
+            <div className="absolute inset-0 bg-liquid-glass opacity-30"></div>
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-400 to-transparent opacity-50"></div>
 
             {/* Content */}
-            <div className="relative p-6">
-              <p className="text-xl text-gold-200 mb-4">
-                You have selected the block at coordinates:
-              </p>
+            <div className="relative p-8">
+              {/* Close button */}
+              <button
+                onClick={() => setSelectedCell(null)}
+                className="absolute top-6 right-6 text-gold-400/60 hover:text-gold-300 text-2xl transition-colors"
+              >
+                ✕
+              </button>
 
-              {/* Coordinate Display */}
-              <div className="bg-gold-900/30 border-2 border-gold-700 rounded p-4 mb-6 backdrop-blur-sm">
-                <span className="text-4xl text-gold-300 block text-center tracking-wider">
-                  X: {selectedCell.x}, Y: {selectedCell.y}
+              {/* Block Number Badge */}
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-gold-500/10 backdrop-blur-sm rounded-full mb-6">
+                <span className="text-gold-400 text-sm tracking-wider">BLOCK</span>
+                <span className="text-gold-300 text-lg font-bold">
+                  #{selectedCell.blockNumber.toLocaleString()}
                 </span>
               </div>
 
-              <p className="text-lg text-gold-300/70 mb-2">
-                This block is pre-minted for demo purposes.
-              </p>
-              <p className="text-lg text-gold-300/70 mb-6">
-                In a full application, this would be a live minting page.
-              </p>
+              {/* Status Badge */}
+              <div className="mb-8">
+                <div
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${
+                    selectedCell.isInscribed
+                      ? 'bg-gold-500/20 text-gold-400'
+                      : 'bg-emerald-500/20 text-emerald-400'
+                  }`}
+                >
+                  <div
+                    className={`size-2 rounded-full ${
+                      selectedCell.isInscribed ? 'bg-gold-400' : 'bg-emerald-400'
+                    } animate-pulse`}
+                  ></div>
+                  <span className="text-sm font-medium tracking-wide">
+                    {selectedCell.isInscribed ? 'INSCRIBED' : 'AVAILABLE'}
+                  </span>
+                </div>
+              </div>
 
-              {/* Mint Button */}
-              <button className="w-full bg-gold-500 text-black text-2xl py-3 px-6 rounded-md hover:bg-liquid-glass hover:text-gold-900 transition-all active:scale-95 border-2 border-gold-500 hover:border-gold-400 animate-glow">
-                MINT BLOCK
-              </button>
+              {/* Block Info Grid */}
+              <div className="grid grid-cols-2 gap-6 mb-8">
+                <div className="space-y-2">
+                  <div className="text-gold-400/60 text-sm tracking-wider">COORDINATES</div>
+                  <div className="text-3xl text-gold-300 font-bold tracking-tight">
+                    {selectedCell.x}, {selectedCell.y}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-gold-400/60 text-sm tracking-wider">ZORE MINING</div>
+                  <div className="text-3xl text-gold-300 font-bold tracking-tight">
+                    ${BLOCK_PRICE.toFixed(2)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="mb-8 p-6 bg-black/30 backdrop-blur-sm rounded-xl">
+                <p className="text-gold-200/80 text-lg leading-relaxed">
+                  {selectedCell.isInscribed
+                    ? 'This block has already been inscribed on the Zcash blockchain. View inscription details or transfer ownership.'
+                    : `Claim this block and mine ZORE tokens. Each block represents a unique position on the Zcash blockchain. Total supply limited to ${blockCount.toLocaleString()} blocks.`}
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-4">
+                {selectedCell.isInscribed ? (
+                  <>
+                    <button className="flex-1 px-6 py-4 bg-gold-500/10 hover:bg-gold-500/20 text-gold-400 rounded-xl transition-all font-medium tracking-wide">
+                      VIEW DETAILS
+                    </button>
+                    <button className="flex-1 px-6 py-4 bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-400 hover:to-gold-500 text-black rounded-xl transition-all font-bold tracking-wide shadow-[0_0_20px_rgba(255,200,55,0.3)]">
+                      TRANSFER
+                    </button>
+                  </>
+                ) : (
+                  <button className="w-full px-6 py-4 bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-400 hover:to-gold-500 text-black rounded-xl transition-all font-bold text-lg tracking-wide shadow-[0_0_30px_rgba(255,200,55,0.4)] hover:shadow-[0_0_40px_rgba(255,200,55,0.6)]">
+                    MINT BLOCK FOR ${BLOCK_PRICE.toFixed(2)}
+                  </button>
+                )}
+              </div>
+
+              {/* Footer Link */}
+              <div className="mt-6 text-center">
+                <Link
+                  href="/token/zore"
+                  className="text-gold-400/60 hover:text-gold-300 text-sm transition-colors inline-flex items-center gap-2"
+                >
+                  Learn more about ZORE token
+                  <span className="text-xs">→</span>
+                </Link>
+              </div>
             </div>
           </div>
         </div>
