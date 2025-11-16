@@ -55,8 +55,8 @@ class ZerdinalsAPIService {
   private apiUrl: string;
 
   constructor() {
-    // Configure the API base URL
-    this.apiUrl = process.env.NEXT_PUBLIC_ZERDINALS_API_URL || 'https://zerdinals.com/api';
+    // Use Next.js API proxy to avoid CORS issues
+    this.apiUrl = '/api/zerdinals';
   }
 
   /**

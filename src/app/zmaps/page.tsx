@@ -267,11 +267,17 @@ export default function ZmapsPage() {
       zoomAt(e.clientX, e.clientY, newScale);
     };
 
+    let clickStartX = 0;
+    let clickStartY = 0;
+    const CLICK_THRESHOLD = 10; // pixels - must be within this distance to count as click
+
     const handleMouseDown = (e: MouseEvent) => {
       if (!canvas) return;
       isPanning = true;
       lastMouseX = e.clientX;
       lastMouseY = e.clientY;
+      clickStartX = e.clientX;
+      clickStartY = e.clientY;
       canvas.style.cursor = 'grabbing';
     };
 
@@ -280,9 +286,12 @@ export default function ZmapsPage() {
       isPanning = false;
       canvas.style.cursor = 'grab';
 
-      const dx = e.clientX - lastMouseX;
-      const dy = e.clientY - lastMouseY;
-      if (Math.abs(dx) < 5 && Math.abs(dy) < 5) {
+      // Only trigger click if mouse didn't move much (not a drag)
+      const dx = e.clientX - clickStartX;
+      const dy = e.clientY - clickStartY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance < CLICK_THRESHOLD) {
         handleCanvasClick(e.clientX, e.clientY);
       }
     };
@@ -339,6 +348,8 @@ export default function ZmapsPage() {
         isPanning = true;
         lastMouseX = touchCache[0].clientX;
         lastMouseY = touchCache[0].clientY;
+        touchStartX = touchCache[0].clientX;
+        touchStartY = touchCache[0].clientY;
       } else if (touchCache.length === 2) {
         isPanning = false;
         initialPinchDistance = getPinchDistance(touchCache);
@@ -375,15 +386,21 @@ export default function ZmapsPage() {
       }
     };
 
+    let touchStartX = 0;
+    let touchStartY = 0;
+
     const handleTouchEnd = (e: TouchEvent) => {
       e.preventDefault();
 
       if (e.changedTouches.length === 1 && touchCache.length === 1) {
         const touch = e.changedTouches[0];
-        const dx = touch.clientX - lastMouseX;
-        const dy = touch.clientY - lastMouseY;
-        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
-          handleCanvasClick(lastMouseX, lastMouseY);
+        const dx = touch.clientX - touchStartX;
+        const dy = touch.clientY - touchStartY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Only trigger click if touch didn't move much (not a drag/pan)
+        if (distance < CLICK_THRESHOLD * 1.5) {
+          handleCanvasClick(touch.clientX, touch.clientY);
         }
       }
 

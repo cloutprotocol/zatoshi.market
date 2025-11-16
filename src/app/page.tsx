@@ -1,16 +1,41 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import { zcashRPC } from '@/services/zcash';
 
 const Dither = dynamic(() => import('@/components/Dither'), {
   ssr: false,
 });
 
 export default function Home() {
+  const [blockHeight, setBlockHeight] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const height = await zcashRPC.getBlockCount();
+        setBlockHeight(height);
+      } catch (error) {
+        console.error('Failed to fetch block height:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+    // Refresh every 2 minutes
+    const interval = setInterval(fetchData, 120000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const totalZmaps = Math.ceil(blockHeight / 100);
+
   return (
-    <main className="relative min-h-screen">
+    <main className="relative min-h-screen bg-black">
       {/* Dither Background */}
-      <div className="fixed inset-0 w-full h-full">
+      <div className="fixed inset-0 w-full h-full bg-black">
         <Dither
           waveColor={[0.8, 0.6, 0.2]}
           disableAnimation={false}
@@ -26,43 +51,56 @@ export default function Home() {
       {/* Content */}
       <div className="relative z-10">
         {/* Navigation */}
-        <nav className="px-6 py-8 flex justify-between items-center">
-          <div className="text-2xl font-bold tracking-tight text-gold-400 animate-glow">
+        <nav className="px-6 py-8 flex justify-between items-center bg-black/90">
+          <div className="text-2xl text-gold-400">
             ZATOSHI.MARKET
           </div>
           <div className="flex gap-6">
-            <button className="px-6 py-2 border-2 border-gold-500 text-gold-400 hover:bg-gold-500 hover:text-black transition-all relative overflow-hidden group">
-              <span className="relative z-10">EXPLORE</span>
-              <div className="absolute inset-0 bg-liquid-glass opacity-0 group-hover:opacity-100 transition-opacity"></div>
-            </button>
-            <button className="px-6 py-2 bg-gold-500 text-black border-2 border-gold-500 hover:bg-liquid-glass transition-all relative overflow-hidden animate-glow">
-              CONNECT
-            </button>
+            <a
+              href="https://zerdinals.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-6 py-2 text-gold-400"
+            >
+              EXPLORER
+            </a>
+            <Link href="/zmaps" className="px-6 py-2 text-gold-400">
+              ZMAPS
+            </Link>
+            <Link href="/token/zore" className="px-6 py-2 text-gold-400">
+              ZORE TOKEN
+            </Link>
           </div>
         </nav>
 
         {/* Hero Section */}
         <div className="container mx-auto px-6 py-24 md:py-32">
           <div className="max-w-4xl">
-            <h1 className="text-6xl md:text-8xl font-bold mb-8 leading-none text-gold-300 drop-shadow-[0_0_20px_rgba(255,200,55,0.5)]">
-              THE PREMIERE
+            <h1 className="text-6xl md:text-8xl font-bold mb-8 leading-none text-gold-300">
+              ZERDINALS
               <br />
               MARKETPLACE
               <br />
-              FOR <span className="text-gold-400 animate-glow">ZERDINALS</span>
+              ON <span className="text-gold-400">ZCASH</span>
             </h1>
-            <p className="text-xl md:text-2xl mb-12 max-w-2xl opacity-90 text-gold-100">
-              Discover, trade, and mint ZRC20 tokens on Zcash.
-              Built with privacy and security at its core.
+            <p className="text-xl md:text-2xl mb-12 max-w-2xl text-gold-100/80">
+              Host and trade ZRC20 tokens, ZMAPS, and Zerdinal inscriptions on Zcash.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <button className="px-8 py-4 bg-gold-500 text-black text-lg font-semibold border-2 border-gold-500 hover:bg-liquid-glass transition-all relative overflow-hidden group animate-glow">
-                <span className="relative z-10 font-bold">START EXPLORING</span>
-              </button>
-              <button className="px-8 py-4 border-2 border-gold-500 text-gold-400 text-lg font-semibold hover:bg-gold-500 hover:text-black transition-all relative overflow-hidden group">
-                <span className="relative z-10">LEARN MORE</span>
-                <div className="absolute inset-0 bg-liquid-glass opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              </button>
+              <Link
+                href="/zmaps"
+                className="px-8 py-4 bg-gold-500 text-black text-lg font-bold text-center"
+              >
+                EXPLORE ZMAPS
+              </Link>
+              <a
+                href="https://zerdinals.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-8 py-4 bg-gold-500/10 text-gold-400 text-lg font-bold text-center"
+              >
+                VIEW EXPLORER
+              </a>
             </div>
           </div>
         </div>
@@ -70,73 +108,79 @@ export default function Home() {
         {/* Features Grid */}
         <div className="container mx-auto px-6 py-24">
           <div className="grid md:grid-cols-3 gap-8">
-            <div className="border-2 border-gold-600 p-8 hover:bg-liquid-glass transition-all bg-black/40 backdrop-blur-sm relative overflow-hidden group">
-              <div className="text-4xl mb-4">🔒</div>
-              <h3 className="text-2xl font-bold mb-4 text-gold-400">PRIVATE</h3>
-              <p className="opacity-80 text-gold-100">
-                Built on Zcash, the privacy-focused blockchain. Your transactions, your business.
+            <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
+              <h3 className="text-2xl font-bold mb-4 text-gold-400">ZRC20 TOKENS</h3>
+              <p className="text-gold-100/80">
+                Host and trade ZRC20 tokens on Zcash. ZORE token mining through ZMAPS inscriptions.
               </p>
-              <div className="absolute inset-0 border-2 border-gold-400 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
             </div>
 
-            <div className="border-2 border-gold-600 p-8 hover:bg-liquid-glass transition-all bg-black/40 backdrop-blur-sm relative overflow-hidden group">
-              <div className="text-4xl mb-4">⚡</div>
-              <h3 className="text-2xl font-bold mb-4 text-gold-400">FAST</h3>
-              <p className="opacity-80 text-gold-100">
-                Lightning-fast transactions with low fees. Trade Zerdinals without the wait.
+            <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
+              <h3 className="text-2xl font-bold mb-4 text-gold-400">ZMAPS</h3>
+              <p className="text-gold-100/80">
+                Each ZMAP represents 100 Zcash blocks. Inscribe ZMAPs for 0.0015 ZEC and receive 10,000 ZORE tokens.
               </p>
-              <div className="absolute inset-0 border-2 border-gold-400 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
             </div>
 
-            <div className="border-2 border-gold-600 p-8 hover:bg-liquid-glass transition-all bg-black/40 backdrop-blur-sm relative overflow-hidden group">
-              <div className="text-4xl mb-4">🎨</div>
-              <h3 className="text-2xl font-bold mb-4 text-gold-400">UNIQUE</h3>
-              <p className="opacity-80 text-gold-100">
-                Discover one-of-a-kind digital artifacts inscribed directly on Zcash.
+            <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
+              <h3 className="text-2xl font-bold mb-4 text-gold-400">ZERDINAL INSCRIPTIONS</h3>
+              <p className="text-gold-100/80">
+                Browse and trade Zerdinal inscriptions. Digital artifacts permanently inscribed on Zcash blockchain.
               </p>
-              <div className="absolute inset-0 border-2 border-gold-400 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
             </div>
           </div>
         </div>
 
-        {/* Stats Section */}
+        {/* Stats Section - Live Data */}
         <div className="container mx-auto px-6 py-24">
-          <div className="border-2 border-gold-600 p-12 bg-black/40 backdrop-blur-sm relative overflow-hidden">
+          <div className="p-12 bg-black/40 relative overflow-hidden">
             <div className="absolute inset-0 bg-liquid-glass opacity-30"></div>
             <div className="grid md:grid-cols-4 gap-8 text-center relative z-10">
               <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">0</div>
-                <div className="opacity-80 text-gold-200 text-sm">TOTAL INSCRIPTIONS</div>
+                <div className="text-5xl font-bold mb-2 text-gold-400">
+                  {loading ? '...' : blockHeight.toLocaleString()}
+                </div>
+                <div className="text-gold-200/80 text-sm">ZCASH BLOCKS</div>
               </div>
               <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">0</div>
-                <div className="opacity-80 text-gold-200 text-sm">ZRC20 TOKENS</div>
+                <div className="text-5xl font-bold mb-2 text-gold-400">
+                  {loading ? '...' : totalZmaps.toLocaleString()}
+                </div>
+                <div className="text-gold-200/80 text-sm">TOTAL ZMAPS</div>
               </div>
               <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">0</div>
-                <div className="opacity-80 text-gold-200 text-sm">TOTAL VOLUME</div>
+                <div className="text-5xl font-bold mb-2 text-gold-400">150</div>
+                <div className="text-gold-200/80 text-sm">INSCRIBED ZMAPS</div>
               </div>
               <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">0</div>
-                <div className="opacity-80 text-gold-200 text-sm">ACTIVE TRADERS</div>
+                <div className="text-5xl font-bold mb-2 text-gold-400">10K</div>
+                <div className="text-gold-200/80 text-sm">ZORE PER ZMAP</div>
               </div>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <footer className="container mx-auto px-6 py-12 border-t-2 border-gold-600">
+        <footer className="container mx-auto px-6 py-12">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="text-2xl font-bold text-gold-400">ZATOSHI.MARKET</div>
-            <div className="flex gap-6 opacity-80 text-gold-300">
-              <a href="#" className="hover:opacity-100 hover:text-gold-400 transition-all">DOCS</a>
-              <a href="#" className="hover:opacity-100 hover:text-gold-400 transition-all">GITHUB</a>
-              <a href="#" className="hover:opacity-100 hover:text-gold-400 transition-all">TWITTER</a>
-              <a href="#" className="hover:opacity-100 hover:text-gold-400 transition-all">DISCORD</a>
+            <div className="text-2xl text-gold-400">ZATOSHI.MARKET</div>
+            <div className="flex gap-6 text-gold-300/80">
+              <a href="https://zerdinals.com/" target="_blank" rel="noopener noreferrer" className="hover:text-gold-400 transition-all">
+                EXPLORER
+              </a>
+              <Link href="/zmaps" className="hover:text-gold-400 transition-all">
+                ZMAPS
+              </Link>
+              <Link href="/token/zore" className="hover:text-gold-400 transition-all">
+                ZORE
+              </Link>
+              <a href="https://twitter.com/zatoshimarket" target="_blank" rel="noopener noreferrer" className="hover:text-gold-400 transition-all">
+                TWITTER
+              </a>
             </div>
           </div>
-          <div className="text-center mt-8 opacity-60 text-gold-200">
-            Built with privacy and security on Zcash
+          <div className="text-center mt-8 text-gold-200/60">
+            ZRC20 tokens, ZMAPS, and Zerdinal inscriptions on Zcash
           </div>
         </footer>
       </div>
