@@ -1,17 +1,13 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import dynamic from 'next/dynamic';
-import Image from 'next/image';
-import type { Wallet } from '@/lib/wallet';
+import { useWallet } from '@/contexts/WalletContext';
+import { generateWallet, importFromMnemonic } from '@/lib/wallet';
 import { zcashRPCService } from '@/services/zcashRPC';
 import QRCode from 'qrcode';
 
-// Import wallet functions dynamically to avoid SSR issues
-const walletModule = import('@/lib/wallet');
-
 export default function WalletPage() {
-  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const { wallet, connectWallet, disconnectWallet } = useWallet();
   const [balance, setBalance] = useState({ confirmed: 0, unconfirmed: 0 });
   const [usdPrice, setUsdPrice] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -35,14 +31,6 @@ export default function WalletPage() {
   }, []);
 
   useEffect(() => {
-    // Load wallet from session storage (temporary, not secure for production)
-    const stored = sessionStorage.getItem('zcash_wallet');
-    if (stored) {
-      setWallet(JSON.parse(stored));
-    }
-  }, []);
-
-  useEffect(() => {
     if (wallet?.address) {
       fetchBalance();
       fetchPrice();
@@ -54,29 +42,30 @@ export default function WalletPage() {
     }
   }, [wallet?.address, fetchBalance, fetchPrice]);
 
-  const handleCreateWallet = async () => {
+  const handleCreateWallet = () => {
     setLoading(true);
-    const { generateWallet } = await walletModule;
     setTimeout(() => {
       const newWallet = generateWallet();
-      setWallet(newWallet);
-      sessionStorage.setItem('zcash_wallet', JSON.stringify(newWallet));
+      connectWallet(newWallet);
       setShowMnemonic(true);
       setLoading(false);
     }, 500);
   };
 
-  const handleImportWallet = async () => {
+  const handleImportWallet = () => {
     const mnemonic = prompt('Enter your 12-word mnemonic phrase:');
-    if (mnemonic) {
-      try {
-        const { importFromMnemonic } = await walletModule;
-        const imported = importFromMnemonic(mnemonic.trim());
-        setWallet(imported);
-        sessionStorage.setItem('zcash_wallet', JSON.stringify(imported));
-      } catch (error) {
-        alert('Invalid mnemonic phrase. Please try again.');
-      }
+    if (!mnemonic) return;
+
+    try {
+      setLoading(true);
+      const imported = importFromMnemonic(mnemonic.trim());
+      connectWallet(imported);
+      alert(`Wallet imported successfully! Address: ${imported.address}`);
+    } catch (error) {
+      console.error('Import error:', error);
+      alert(`Failed to import wallet: ${error instanceof Error ? error.message : 'Invalid mnemonic phrase'}`);
+    } finally {
+      setLoading(false);
     }
   };
 
