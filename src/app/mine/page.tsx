@@ -12,9 +12,9 @@ export default function MinePage() {
   }, []);
 
   return (
-    <main className="relative min-h-screen bg-black text-gold-100 pt-20">
+    <main className="relative min-h-screen text-gold-100 pt-20">
       {/* Dither Background */}
-      <div className="fixed inset-0 w-full h-full opacity-30 -z-10">
+      <div className="fixed inset-0 w-full h-full -z-10">
         {mounted && (
           <Dither
             waveColor={[0.8, 0.6, 0.2]}

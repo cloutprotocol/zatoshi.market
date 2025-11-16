@@ -57,7 +57,7 @@ export default function Home() {
         <div className="container mx-auto px-6 py-24 md:py-32">
           <div className="max-w-4xl">
             <h1 className="text-6xl md:text-8xl font-bold mb-8 leading-none text-gold-300">
-              ZATOSHI
+              ZORDINALS
               <br />
               MARKETPLACE
               <br />
@@ -143,7 +143,7 @@ export default function Home() {
         {/* Footer */}
         <footer className="container mx-auto px-6 py-12">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="text-2xl text-gold-400">ZATOSHI.MARKET</div>
+            <div className="text-2xl text-gold-400">ZORDINALS.MARKET</div>
             <div className="flex gap-6 text-gold-300/80">
               <Link href="/wallet" className="hover:text-gold-400 transition-all">
                 WALLET

@@ -68,7 +68,7 @@ export default function ZORETokenPage() {
         {/* Navigation */}
         <nav className="px-6 py-3 flex justify-between items-center backdrop-blur-xl bg-black/30 border-b border-gold-500/20">
           <Link href="/" className="text-2xl font-bold tracking-tight text-gold-400 animate-glow hover:text-gold-300 transition-colors">
-            ZATOSHI.MARKET
+            ZORDINALS.MARKET
           </Link>
           <div className="flex gap-4">
             <Link

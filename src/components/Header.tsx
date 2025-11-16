@@ -18,7 +18,7 @@ export default function Header() {
     <>
       <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-3 flex justify-between items-center backdrop-blur-xl bg-black/30 border-b border-gold-500/20">
         <Link href="/" className="text-2xl text-gold-400">
-          ZATOSHI.MARKET
+          ZORDINALS.MARKET
         </Link>
 
         {/* Desktop Navigation */}
