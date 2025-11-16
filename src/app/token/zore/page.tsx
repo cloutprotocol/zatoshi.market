@@ -18,15 +18,8 @@ export default function ZORETokenPage() {
     async function fetchTokenData() {
       try {
         setLoading(true);
-        // Try to fetch real data, fall back to mock data
-        try {
-          const data = await zerdinalsAPI.getZOREToken();
-          setTokenData(data);
-        } catch (apiError) {
-          console.warn('Failed to fetch live data, using mock data:', apiError);
-          const mockData = await zerdinalsAPI.getZORETokenMock();
-          setTokenData(mockData);
-        }
+        const data = await zerdinalsAPI.getZOREToken();
+        setTokenData(data);
       } catch (err) {
         setError('Failed to load token data');
         console.error(err);
@@ -70,14 +63,14 @@ export default function ZORETokenPage() {
       {/* Content */}
       <div className="relative z-10">
         {/* Navigation */}
-        <nav className="px-6 py-8 flex justify-between items-center border-b border-gold-700/30 backdrop-blur-sm bg-black/50">
+        <nav className="px-6 py-8 flex justify-between items-center bg-black/90">
           <Link href="/" className="text-2xl font-bold tracking-tight text-gold-400 animate-glow hover:text-gold-300 transition-colors">
             ZATOSHI.MARKET
           </Link>
           <div className="flex gap-4">
             <Link
               href="/zmaps"
-              className="px-6 py-2 border-2 border-gold-500 text-gold-400 hover:bg-gold-500 hover:text-black transition-all rounded"
+              className="px-6 py-2 text-gold-400 hover:text-gold-300 transition-all"
             >
               ZMAPS
             </Link>
@@ -113,8 +106,8 @@ export default function ZORETokenPage() {
               {/* Price Stats */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
                 {/* Price */}
-                <div className="border-2 border-gold-600 p-6 bg-black/40 backdrop-blur-sm relative overflow-hidden group hover:bg-liquid-glass transition-all">
-                  <div className="absolute inset-0 border-2 border-gold-400 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
+                <div className="p-6 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
                   <div className="relative">
                     <div className="text-gold-300/60 text-sm mb-2">PRICE</div>
                     <div className="text-3xl font-bold text-gold-400">
@@ -134,8 +127,8 @@ export default function ZORETokenPage() {
                 </div>
 
                 {/* Market Cap */}
-                <div className="border-2 border-gold-600 p-6 bg-black/40 backdrop-blur-sm relative overflow-hidden group hover:bg-liquid-glass transition-all">
-                  <div className="absolute inset-0 border-2 border-gold-400 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
+                <div className="p-6 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
                   <div className="relative">
                     <div className="text-gold-300/60 text-sm mb-2">MARKET CAP</div>
                     <div className="text-3xl font-bold text-gold-400">
@@ -145,8 +138,8 @@ export default function ZORETokenPage() {
                 </div>
 
                 {/* Volume 24h */}
-                <div className="border-2 border-gold-600 p-6 bg-black/40 backdrop-blur-sm relative overflow-hidden group hover:bg-liquid-glass transition-all">
-                  <div className="absolute inset-0 border-2 border-gold-400 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
+                <div className="p-6 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
                   <div className="relative">
                     <div className="text-gold-300/60 text-sm mb-2">VOLUME 24H</div>
                     <div className="text-3xl font-bold text-gold-400">
@@ -156,8 +149,8 @@ export default function ZORETokenPage() {
                 </div>
 
                 {/* Holders */}
-                <div className="border-2 border-gold-600 p-6 bg-black/40 backdrop-blur-sm relative overflow-hidden group hover:bg-liquid-glass transition-all">
-                  <div className="absolute inset-0 border-2 border-gold-400 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
+                <div className="p-6 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
                   <div className="relative">
                     <div className="text-gold-300/60 text-sm mb-2">HOLDERS</div>
                     <div className="text-3xl font-bold text-gold-400">
@@ -170,8 +163,8 @@ export default function ZORETokenPage() {
               {/* Supply Info */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-12">
                 {/* Minting Progress */}
-                <div className="border-2 border-gold-600 p-8 bg-black/40 backdrop-blur-sm relative overflow-hidden group hover:bg-liquid-glass transition-all">
-                  <div className="absolute inset-0 border-2 border-gold-400 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
+                <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
                   <div className="relative">
                     <h3 className="text-2xl font-bold text-gold-400 mb-6">Minting Progress</h3>
                     <div className="mb-4">
@@ -207,8 +200,8 @@ export default function ZORETokenPage() {
                 </div>
 
                 {/* Token Stats */}
-                <div className="border-2 border-gold-600 p-8 bg-black/40 backdrop-blur-sm relative overflow-hidden group hover:bg-liquid-glass transition-all">
-                  <div className="absolute inset-0 border-2 border-gold-400 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
+                <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
                   <div className="relative">
                     <h3 className="text-2xl font-bold text-gold-400 mb-6">Token Information</h3>
                     <div className="space-y-4">
@@ -244,8 +237,8 @@ export default function ZORETokenPage() {
               </div>
 
               {/* ZMAPS Mining Info */}
-              <div className="border-2 border-gold-600 p-8 bg-black/40 backdrop-blur-sm relative overflow-hidden group hover:bg-liquid-glass transition-all">
-                <div className="absolute inset-0 border-2 border-gold-400 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
+              <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
                 <div className="relative">
                   <h3 className="text-3xl font-bold text-gold-400 mb-4 animate-glow">
                     Mine ZORE on ZMAPS
@@ -257,7 +250,7 @@ export default function ZORETokenPage() {
                   </p>
                   <Link
                     href="/zmaps"
-                    className="inline-block px-8 py-4 bg-gold-500 text-black text-xl font-bold rounded-md hover:bg-liquid-glass hover:text-gold-900 transition-all border-2 border-gold-500 hover:border-gold-400 animate-glow"
+                    className="inline-block px-8 py-4 bg-gold-500 text-black text-xl font-bold rounded-md hover:bg-liquid-glass hover:text-gold-900 transition-all animate-glow"
                   >
                     EXPLORE ZMAPS →
                   </Link>

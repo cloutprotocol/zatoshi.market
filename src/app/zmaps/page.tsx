@@ -31,8 +31,6 @@ export default function ZmapsPage() {
         setLoading(false);
       } catch (error) {
         console.error('Failed to fetch block count:', error);
-        // Fallback to a reasonable default if API fails
-        setBlockCount(2500000);
         setLoading(false);
       }
     }
@@ -420,19 +418,19 @@ export default function ZmapsPage() {
       </div>
 
       {/* Header */}
-      <header className="fixed top-0 left-0 w-full flex items-center justify-between px-6 py-4 bg-black/80 backdrop-blur-md border-b border-gold-700 z-20">
-        <div className="flex items-center">
-          <Link href="/" className="text-3xl text-gold-400 animate-glow hover:text-gold-300 transition-colors mr-6">
+      <header className="fixed top-0 left-0 w-full flex items-center justify-between px-6 py-4 bg-black/90 z-20">
+        <div className="flex items-center gap-6">
+          <Link href="/" className="text-3xl text-gold-400 animate-glow hover:text-gold-300 transition-colors">
             ZATOSHI.MARKET
           </Link>
           <span className="text-3xl text-gold-400 animate-glow">ZMAPS</span>
-          <span className="ml-4 text-xl text-gold-300/60">
+          <span className="text-xl text-gold-300/60">
             / {blockCount > 0 ? `${blockCount.toLocaleString()} Blocks` : 'Loading...'}
           </span>
         </div>
         <Link
           href="/token/zore"
-          className="px-6 py-2 border-2 border-gold-500 text-gold-400 hover:bg-gold-500 hover:text-black transition-all rounded"
+          className="px-6 py-2 text-gold-400 hover:text-gold-300 transition-all"
         >
           ZORE TOKEN
         </Link>
@@ -450,7 +448,7 @@ export default function ZmapsPage() {
         <button
           id="zoom-in-btn"
           title="Zoom In"
-          className="size-12 bg-black/70 backdrop-blur-md border-2 border-gold-700 text-gold-300 rounded-full flex items-center justify-center shadow-lg transition-all hover:bg-gold-500/20 hover:text-gold-400 hover:border-gold-500 hover:scale-105 active:scale-95 animate-glow"
+          className="size-12 bg-black/70 text-gold-300 rounded-full flex items-center justify-center transition-all hover:bg-gold-500/20 hover:text-gold-400 hover:scale-105 active:scale-95 animate-glow"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -470,7 +468,7 @@ export default function ZmapsPage() {
         <button
           id="zoom-out-btn"
           title="Zoom Out"
-          className="size-12 bg-black/70 backdrop-blur-md border-2 border-gold-700 text-gold-300 rounded-full flex items-center justify-center shadow-lg transition-all hover:bg-gold-500/20 hover:text-gold-400 hover:border-gold-500 hover:scale-105 active:scale-95 animate-glow"
+          className="size-12 bg-black/70 text-gold-300 rounded-full flex items-center justify-center transition-all hover:bg-gold-500/20 hover:text-gold-400 hover:scale-105 active:scale-95 animate-glow"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -489,7 +487,7 @@ export default function ZmapsPage() {
         <button
           id="reset-btn"
           title="Reset View"
-          className="size-12 bg-black/70 backdrop-blur-md border-2 border-gold-700 text-gold-300 rounded-full flex items-center justify-center shadow-lg transition-all hover:bg-gold-500/20 hover:text-gold-400 hover:border-gold-500 hover:scale-105 active:scale-95 animate-glow"
+          className="size-12 bg-black/70 text-gold-300 rounded-full flex items-center justify-center transition-all hover:bg-gold-500/20 hover:text-gold-400 hover:scale-105 active:scale-95 animate-glow"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -515,11 +513,11 @@ export default function ZmapsPage() {
       {/* High-End Liquid Glass Modal */}
       {selectedCell && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80"
           onClick={() => setSelectedCell(null)}
         >
           <div
-            className="bg-gradient-to-br from-gold-900/20 via-black/40 to-gold-900/20 backdrop-blur-2xl rounded-2xl shadow-[0_8px_32px_0_rgba(255,200,55,0.2)] w-full max-w-2xl relative overflow-hidden"
+            className="bg-gradient-to-br from-gold-900/20 via-black/40 to-gold-900/20 rounded-2xl shadow-[0_8px_32px_0_rgba(255,200,55,0.2)] w-full max-w-2xl relative overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Ambient glow effect */}
@@ -537,7 +535,7 @@ export default function ZmapsPage() {
               </button>
 
               {/* Block Number Badge */}
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-gold-500/10 backdrop-blur-sm rounded-full mb-6">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-gold-500/10 rounded-full mb-6">
                 <span className="text-gold-400 text-sm tracking-wider">BLOCK</span>
                 <span className="text-gold-300 text-lg font-bold">
                   #{selectedCell.blockNumber.toLocaleString()}
@@ -581,7 +579,7 @@ export default function ZmapsPage() {
               </div>
 
               {/* Description */}
-              <div className="mb-8 p-6 bg-black/30 backdrop-blur-sm rounded-xl">
+              <div className="mb-8 p-6 bg-black/30 rounded-xl">
                 <p className="text-gold-200/80 text-lg leading-relaxed">
                   {selectedCell.isInscribed
                     ? 'This block has already been inscribed on the Zcash blockchain. View inscription details or transfer ownership.'

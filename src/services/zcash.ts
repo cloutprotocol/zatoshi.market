@@ -44,110 +44,120 @@ export interface ZcashBlock {
 }
 
 class ZcashRPCService {
-  private rpcUrl: string;
-  private rpcUser: string;
-  private rpcPassword: string;
+  private apiUrl: string;
 
   constructor() {
     // These can be set via environment variables or directly
-    this.rpcUrl = process.env.NEXT_PUBLIC_ZCASH_RPC_URL || 'https://mainnet.zcashexplorer.app/api';
-    this.rpcUser = process.env.ZCASH_RPC_USER || '';
-    this.rpcPassword = process.env.ZCASH_RPC_PASSWORD || '';
+    this.apiUrl = process.env.NEXT_PUBLIC_ZCASH_RPC_URL || 'https://api.blockchair.com/zcash';
   }
 
   /**
-   * Make an RPC call to the Zcash node
+   * Make an API call to the Zcash blockchain API
    */
-  private async rpcCall<T>(method: string, params: any[] = []): Promise<T> {
+  private async apiCall<T>(endpoint: string): Promise<T> {
     try {
-      const response = await fetch(this.rpcUrl, {
-        method: 'POST',
+      const response = await fetch(`${this.apiUrl}${endpoint}`, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          ...(this.rpcUser && this.rpcPassword && {
-            Authorization: `Basic ${Buffer.from(`${this.rpcUser}:${this.rpcPassword}`).toString('base64')}`,
-          }),
         },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 'zatoshi',
-          method,
-          params,
-        }),
       });
 
       if (!response.ok) {
-        throw new Error(`RPC call failed: ${response.statusText}`);
+        throw new Error(`API call failed: ${response.statusText}`);
       }
 
       const data = await response.json();
-
-      if (data.error) {
-        throw new Error(`RPC error: ${data.error.message}`);
-      }
-
-      return data.result;
+      return data;
     } catch (error) {
-      console.error(`Zcash RPC error (${method}):`, error);
+      console.error(`Zcash API error (${endpoint}):`, error);
       throw error;
     }
   }
 
   /**
    * Get the current block count (height)
+   * Uses Blockchair API: /stats
    */
   async getBlockCount(): Promise<number> {
-    return this.rpcCall<number>('getblockcount');
+    const data: any = await this.apiCall('/stats');
+    return data.data.blocks;
   }
 
   /**
    * Get comprehensive blockchain information
    */
   async getBlockchainInfo(): Promise<ZcashBlockchainInfo> {
-    return this.rpcCall<ZcashBlockchainInfo>('getblockchaininfo');
+    const data: any = await this.apiCall('/stats');
+    return {
+      chain: 'main',
+      blocks: data.data.blocks,
+      headers: data.data.blocks,
+      bestblockhash: data.data.best_block_hash,
+      difficulty: data.data.difficulty,
+      verificationprogress: 1,
+      chainwork: '',
+      pruned: false,
+    };
   }
 
   /**
    * Get block hash by height
    */
   async getBlockHash(height: number): Promise<string> {
-    return this.rpcCall<string>('getblockhash', [height]);
+    const data: any = await this.apiCall(`/dashboards/block/${height}`);
+    return data.data.block.hash;
   }
 
   /**
    * Get block information by hash
    */
-  async getBlock(hash: string, verbosity: number = 1): Promise<ZcashBlock> {
-    return this.rpcCall<ZcashBlock>('getblock', [hash, verbosity]);
+  async getBlock(hash: string): Promise<ZcashBlock> {
+    const data: any = await this.apiCall(`/dashboards/block/${hash}`);
+    const block = data.data.block;
+    return {
+      hash: block.hash,
+      confirmations: 1,
+      height: block.id,
+      version: block.version,
+      merkleroot: '',
+      time: new Date(block.time).getTime() / 1000,
+      nonce: '',
+      bits: '',
+      difficulty: block.difficulty,
+      previousblockhash: block.previous_block_hash,
+      nextblockhash: block.next_block_hash,
+    };
   }
 
   /**
    * Get block by height
    */
   async getBlockByHeight(height: number): Promise<ZcashBlock> {
-    const hash = await this.getBlockHash(height);
-    return this.getBlock(hash);
+    return this.getBlock(height.toString());
   }
 
   /**
    * Get the best block hash
    */
   async getBestBlockHash(): Promise<string> {
-    return this.rpcCall<string>('getbestblockhash');
+    const data: any = await this.apiCall('/stats');
+    return data.data.best_block_hash;
   }
 
   /**
    * Get network hash rate per second
    */
-  async getNetworkHashPS(blocks: number = 120, height: number = -1): Promise<number> {
-    return this.rpcCall<number>('getnetworkhashps', [blocks, height]);
+  async getNetworkHashPS(): Promise<number> {
+    const data: any = await this.apiCall('/stats');
+    return data.data.hashrate_24h;
   }
 
   /**
    * Get mining info
    */
   async getMiningInfo(): Promise<any> {
-    return this.rpcCall<any>('getmininginfo');
+    return this.apiCall('/stats');
   }
 }
 
