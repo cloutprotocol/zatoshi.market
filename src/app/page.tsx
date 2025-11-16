@@ -57,7 +57,7 @@ export default function Home() {
         <div className="container mx-auto px-6 py-24 md:py-32">
           <div className="max-w-4xl">
             <h1 className="text-6xl md:text-8xl font-bold mb-8 leading-none text-gold-300">
-              ZERDINALS
+              ZATOSHI
               <br />
               MARKETPLACE
               <br />
