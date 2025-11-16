@@ -14,12 +14,17 @@ export default function ZmapsPage() {
   const [selectedCell, setSelectedCell] = useState<{
     x: number;
     y: number;
-    blockNumber: number;
+    mapNumber: number;
+    blockStart: number;
+    blockEnd: number;
     isInscribed: boolean;
   } | null>(null);
+  const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number } | null>(null);
   const [blockCount, setBlockCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
-  const BLOCK_PRICE = 0.10; // $0.10 per block for ZORE mining
+  const BLOCKS_PER_MAP = 100; // Each ZMAP square represents 100 Zcash blocks
+  const ZMAP_PRICE = 0.0015; // 0.0015 ZEC per ZMAP
+  const ZORE_PER_MAP = 10000; // 10,000 ZORE per ZMAP
   const COLS = 100; // Grid columns
 
   // Fetch real Zcash block count
@@ -49,11 +54,15 @@ export default function ZmapsPage() {
 
     // --- Grid Configuration (Dynamic based on block count) ---
     const numCols = 100;
-    // Calculate rows based on actual block count, minimum 300 for padding
-    const numRows = Math.max(300, Math.ceil(blockCount / numCols) + 50);
+    // Each cell represents 100 blocks, so total cells = blockCount / 100
+    const totalMaps = Math.ceil(blockCount / BLOCKS_PER_MAP);
+    // Add 100 more cells for loading next batch
+    const numRows = Math.ceil((totalMaps + 100) / numCols);
     const cellSize = 30;
     const gridColor = '#7c6c3c'; // gold-700 darkened for grid lines
     const goldColor = '#ffc837'; // gold-500
+    const mintedColor = '#ffc837'; // gold-500 for inscribed
+    const loadingColor = '#4b5563'; // gray-600 for loading next 100
     const gridWidth = numCols * cellSize;
     const gridHeight = numRows * cellSize;
 
@@ -142,8 +151,8 @@ export default function ZmapsPage() {
       }
       ctx.stroke();
 
-      // Draw gold cubes
-      ctx.fillStyle = goldColor;
+      // Draw minted ZMAPs (gold cubes)
+      ctx.fillStyle = mintedColor;
       for (const cube of goldCubes) {
         if (
           cube.x >= cellXStart &&
@@ -155,7 +164,48 @@ export default function ZmapsPage() {
         }
       }
 
+      // Draw loading indicator for next 100 ZMAPs
+      ctx.fillStyle = loadingColor;
+      for (let i = 0; i < 100; i++) {
+        const cellIndex = totalMaps + i;
+        const cellX = cellIndex % numCols;
+        const cellY = Math.floor(cellIndex / numCols);
+
+        if (
+          cellX >= cellXStart &&
+          cellX <= cellXEnd &&
+          cellY >= cellYStart &&
+          cellY <= cellYEnd
+        ) {
+          ctx.fillRect(cellX * cellSize, cellY * cellSize, cellSize, cellSize);
+        }
+      }
+
       ctx.restore();
+    }
+
+    // --- Draw Cursor Highlight ---
+    function drawCursorHighlight(cursorX: number, cursorY: number) {
+      if (!canvas || !ctx) return;
+
+      const worldX = (cursorX - panX) / scale;
+      const worldY = (cursorY - panY) / scale;
+
+      const gridCol = Math.floor(worldX / cellSize);
+      const gridRow = Math.floor(worldY / cellSize);
+
+      if (gridCol >= 0 && gridCol < numCols && gridRow >= 0 && gridRow < numRows) {
+        ctx.save();
+        ctx.translate(panX, panY);
+        ctx.scale(scale, scale);
+
+        // Draw highlight square
+        ctx.strokeStyle = '#ffd95b'; // gold-400
+        ctx.lineWidth = 2 / scale;
+        ctx.strokeRect(gridCol * cellSize, gridRow * cellSize, cellSize, cellSize);
+
+        ctx.restore();
+      }
     }
 
     // --- Zoom Function ---
@@ -183,16 +233,22 @@ export default function ZmapsPage() {
 
       // Check if click is within grid bounds
       if (gridCol >= 0 && gridCol < numCols && gridRow >= 0 && gridRow < numRows) {
-        // Calculate block number (row * columns + column)
-        const blockNumber = gridRow * numCols + gridCol;
+        // Calculate ZMAP number (each cell = 1 ZMAP = 100 blocks)
+        const mapNumber = gridRow * numCols + gridCol;
 
-        // Check if this block is inscribed (has a gold cube)
+        // Calculate block range this ZMAP represents
+        const blockStart = mapNumber * BLOCKS_PER_MAP + 1;
+        const blockEnd = (mapNumber + 1) * BLOCKS_PER_MAP;
+
+        // Check if this ZMAP is inscribed (has a gold cube)
         const isInscribed = goldCubes.some((cube) => cube.x === gridCol && cube.y === gridRow);
 
         setSelectedCell({
           x: gridCol,
           y: gridRow,
-          blockNumber,
+          mapNumber,
+          blockStart,
+          blockEnd,
           isInscribed,
         });
       }
@@ -238,17 +294,25 @@ export default function ZmapsPage() {
     };
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isPanning) return;
-      const dx = e.clientX - lastMouseX;
-      const dy = e.clientY - lastMouseY;
+      const redraw = () => {
+        draw();
+        drawCursorHighlight(e.clientX, e.clientY);
+      };
 
-      panX += dx;
-      panY += dy;
+      if (isPanning) {
+        const dx = e.clientX - lastMouseX;
+        const dy = e.clientY - lastMouseY;
 
-      lastMouseX = e.clientX;
-      lastMouseY = e.clientY;
+        panX += dx;
+        panY += dy;
 
-      requestAnimationFrame(draw);
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+
+        requestAnimationFrame(redraw);
+      } else {
+        requestAnimationFrame(redraw);
+      }
     };
 
     // Touch helpers
@@ -418,20 +482,17 @@ export default function ZmapsPage() {
       </div>
 
       {/* Header */}
-      <header className="fixed top-0 left-0 w-full flex items-center justify-between px-6 py-4 bg-black/90 z-20">
+      <header className="fixed top-0 left-0 w-full flex items-center justify-between px-6 py-4 bg-black z-20 border-b border-gold-700/30">
         <div className="flex items-center gap-6">
-          <Link href="/" className="text-3xl text-gold-400 animate-glow hover:text-gold-300 transition-colors">
+          <Link href="/" className="text-2xl text-gold-400">
             ZATOSHI.MARKET
           </Link>
-          <span className="text-3xl text-gold-400 animate-glow">ZMAPS</span>
-          <span className="text-xl text-gold-300/60">
+          <span className="text-2xl text-gold-400">ZMAPS</span>
+          <span className="text-lg text-gold-300/60">
             / {blockCount > 0 ? `${blockCount.toLocaleString()} Blocks` : 'Loading...'}
           </span>
         </div>
-        <Link
-          href="/token/zore"
-          className="px-6 py-2 text-gold-400 hover:text-gold-300 transition-all"
-        >
+        <Link href="/token/zore" className="px-6 py-2 text-gold-400">
           ZORE TOKEN
         </Link>
       </header>
@@ -448,7 +509,7 @@ export default function ZmapsPage() {
         <button
           id="zoom-in-btn"
           title="Zoom In"
-          className="size-12 bg-black/70 text-gold-300 rounded-full flex items-center justify-center transition-all hover:bg-gold-500/20 hover:text-gold-400 hover:scale-105 active:scale-95 animate-glow"
+          className="size-12 bg-black border border-gold-700 text-gold-400 flex items-center justify-center"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -468,7 +529,7 @@ export default function ZmapsPage() {
         <button
           id="zoom-out-btn"
           title="Zoom Out"
-          className="size-12 bg-black/70 text-gold-300 rounded-full flex items-center justify-center transition-all hover:bg-gold-500/20 hover:text-gold-400 hover:scale-105 active:scale-95 animate-glow"
+          className="size-12 bg-black border border-gold-700 text-gold-400 flex items-center justify-center"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -487,7 +548,7 @@ export default function ZmapsPage() {
         <button
           id="reset-btn"
           title="Reset View"
-          className="size-12 bg-black/70 text-gold-300 rounded-full flex items-center justify-center transition-all hover:bg-gold-500/20 hover:text-gold-400 hover:scale-105 active:scale-95 animate-glow"
+          className="size-12 bg-black border border-gold-700 text-gold-400 flex items-center justify-center"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -534,27 +595,27 @@ export default function ZmapsPage() {
                 ✕
               </button>
 
-              {/* Block Number Badge */}
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-gold-500/10 rounded-full mb-6">
-                <span className="text-gold-400 text-sm tracking-wider">BLOCK</span>
+              {/* ZMAP Number Badge */}
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-gold-500/10 mb-6">
+                <span className="text-gold-400 text-sm tracking-wider">ZMAP</span>
                 <span className="text-gold-300 text-lg font-bold">
-                  #{selectedCell.blockNumber.toLocaleString()}
+                  #{selectedCell.mapNumber.toLocaleString()}
                 </span>
               </div>
 
               {/* Status Badge */}
               <div className="mb-8">
                 <div
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${
+                  className={`inline-flex items-center gap-2 px-4 py-2 ${
                     selectedCell.isInscribed
                       ? 'bg-gold-500/20 text-gold-400'
                       : 'bg-emerald-500/20 text-emerald-400'
                   }`}
                 >
                   <div
-                    className={`size-2 rounded-full ${
+                    className={`size-2 ${
                       selectedCell.isInscribed ? 'bg-gold-400' : 'bg-emerald-400'
-                    } animate-pulse`}
+                    }`}
                   ></div>
                   <span className="text-sm font-medium tracking-wide">
                     {selectedCell.isInscribed ? 'INSCRIBED' : 'AVAILABLE'}
@@ -565,25 +626,25 @@ export default function ZmapsPage() {
               {/* Block Info Grid */}
               <div className="grid grid-cols-2 gap-6 mb-8">
                 <div className="space-y-2">
-                  <div className="text-gold-400/60 text-sm tracking-wider">COORDINATES</div>
-                  <div className="text-3xl text-gold-300 font-bold tracking-tight">
-                    {selectedCell.x}, {selectedCell.y}
+                  <div className="text-gold-400/60 text-sm tracking-wider">ZCASH BLOCKS</div>
+                  <div className="text-2xl text-gold-300 font-bold tracking-tight">
+                    {selectedCell.blockStart.toLocaleString()} - {selectedCell.blockEnd.toLocaleString()}
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <div className="text-gold-400/60 text-sm tracking-wider">ZORE MINING</div>
-                  <div className="text-3xl text-gold-300 font-bold tracking-tight">
-                    ${BLOCK_PRICE.toFixed(2)}
+                  <div className="text-gold-400/60 text-sm tracking-wider">ZORE QUANTITY</div>
+                  <div className="text-2xl text-gold-300 font-bold tracking-tight">
+                    {ZORE_PER_MAP.toLocaleString()}
                   </div>
                 </div>
               </div>
 
               {/* Description */}
-              <div className="mb-8 p-6 bg-black/30 rounded-xl">
-                <p className="text-gold-200/80 text-lg leading-relaxed">
+              <div className="mb-8 p-6 bg-black/30">
+                <p className="text-gold-200/80 text-base leading-relaxed">
                   {selectedCell.isInscribed
-                    ? 'This block has already been inscribed on the Zcash blockchain. View inscription details or transfer ownership.'
-                    : `Claim this block and mine ZORE tokens. Each block represents a unique position on the Zcash blockchain. Total supply limited to ${blockCount.toLocaleString()} blocks.`}
+                    ? 'This ZMAP has already been inscribed on the Zcash blockchain. View inscription details or transfer ownership.'
+                    : `Inscribe this ZMAP to claim ownership over the land parcel, enabling you to mine the ZORE available on the land. Each ZMAP represents ${BLOCKS_PER_MAP} Zcash blocks.`}
                 </p>
               </div>
 
@@ -591,27 +652,24 @@ export default function ZmapsPage() {
               <div className="flex gap-4">
                 {selectedCell.isInscribed ? (
                   <>
-                    <button className="flex-1 px-6 py-4 bg-gold-500/10 hover:bg-gold-500/20 text-gold-400 rounded-xl transition-all font-medium tracking-wide">
+                    <button className="flex-1 px-6 py-4 bg-gold-500/10 text-gold-400 font-medium tracking-wide">
                       VIEW DETAILS
                     </button>
-                    <button className="flex-1 px-6 py-4 bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-400 hover:to-gold-500 text-black rounded-xl transition-all font-bold tracking-wide shadow-[0_0_20px_rgba(255,200,55,0.3)]">
+                    <button className="flex-1 px-6 py-4 bg-gold-500 text-black font-bold tracking-wide">
                       TRANSFER
                     </button>
                   </>
                 ) : (
-                  <button className="w-full px-6 py-4 bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-400 hover:to-gold-500 text-black rounded-xl transition-all font-bold text-lg tracking-wide shadow-[0_0_30px_rgba(255,200,55,0.4)] hover:shadow-[0_0_40px_rgba(255,200,55,0.6)]">
-                    MINT BLOCK FOR ${BLOCK_PRICE.toFixed(2)}
+                  <button className="w-full px-6 py-4 bg-gold-500 text-black font-bold text-lg tracking-wide">
+                    Inscribe ZMAP for {ZMAP_PRICE} ZEC
                   </button>
                 )}
               </div>
 
               {/* Footer Link */}
               <div className="mt-6 text-center">
-                <Link
-                  href="/token/zore"
-                  className="text-gold-400/60 hover:text-gold-300 text-sm transition-colors inline-flex items-center gap-2"
-                >
-                  Learn more about ZORE token
+                <Link href="/token/zore" className="text-gold-400/60 text-sm inline-flex items-center gap-2">
+                  Learn more about ZMAP
                   <span className="text-xs">→</span>
                 </Link>
               </div>
