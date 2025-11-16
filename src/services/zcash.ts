@@ -47,8 +47,8 @@ class ZcashRPCService {
   private apiUrl: string;
 
   constructor() {
-    // These can be set via environment variables or directly
-    this.apiUrl = process.env.NEXT_PUBLIC_ZCASH_RPC_URL || 'https://api.blockchair.com/zcash';
+    // Use Next.js API route as proxy to avoid CORS issues
+    this.apiUrl = '/api/zcash';
   }
 
   /**
@@ -77,11 +77,11 @@ class ZcashRPCService {
 
   /**
    * Get the current block count (height)
-   * Uses Blockchair API: /stats
+   * Uses proxy API: /api/zcash/stats
    */
   async getBlockCount(): Promise<number> {
     const data: any = await this.apiCall('/stats');
-    return data.data.blocks;
+    return data.blocks;
   }
 
   /**

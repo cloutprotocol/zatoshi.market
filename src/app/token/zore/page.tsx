@@ -46,7 +46,7 @@ export default function ZORETokenPage() {
   };
 
   return (
-    <main className="relative min-h-screen bg-black text-gold-100 pt-20">
+    <main className="relative min-h-screen text-gold-100 pt-20">
       {/* Dither Background */}
       <div className="fixed inset-0 w-full h-full opacity-20 -z-10">
         {mounted && (
@@ -56,9 +56,9 @@ export default function ZORETokenPage() {
             enableMouseInteraction={true}
             mouseRadius={0.3}
             colorNum={4}
-            waveAmplitude={0.3}
-            waveFrequency={3}
-            waveSpeed={0.05}
+            waveAmplitude={0.15}
+            waveFrequency={2}
+            waveSpeed={0.03}
           />
         )}
       </div>
@@ -66,7 +66,7 @@ export default function ZORETokenPage() {
       {/* Content */}
       <div className="relative z-10">
         {/* Navigation */}
-        <nav className="px-6 py-8 flex justify-between items-center bg-black/90">
+        <nav className="px-6 py-3 flex justify-between items-center backdrop-blur-xl bg-black/30 border-b border-gold-500/20">
           <Link href="/" className="text-2xl font-bold tracking-tight text-gold-400 animate-glow hover:text-gold-300 transition-colors">
             ZATOSHI.MARKET
           </Link>
