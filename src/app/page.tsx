@@ -28,7 +28,7 @@ export default function Home() {
         {/* Navigation */}
         <nav className="px-6 py-8 flex justify-between items-center">
           <div className="text-2xl font-bold tracking-tight">
-            ZORDINALS.MARKET
+            ZATOSHI.MARKET
           </div>
           <div className="flex gap-6">
             <button className="px-6 py-2 border-2 border-current hover:bg-white hover:text-black transition-all">
@@ -121,7 +121,7 @@ export default function Home() {
         {/* Footer */}
         <footer className="container mx-auto px-6 py-12 border-t-2 border-current">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="text-2xl font-bold">ZORDINALS.MARKET</div>
+            <div className="text-2xl font-bold">ZATOSHI.MARKET</div>
             <div className="flex gap-6 opacity-80">
               <a href="#" className="hover:opacity-100 transition-opacity">DOCS</a>
               <a href="#" className="hover:opacity-100 transition-opacity">GITHUB</a>

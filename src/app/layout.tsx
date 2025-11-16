@@ -5,7 +5,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Zordinals.market - Zerdinals & ZRC20 Marketplace",
+  title: "Zatoshi.market - Zerdinals & ZRC20 Marketplace",
   description: "The premiere marketplace for Zerdinals & ZRC20 on Zcash",
 };
 

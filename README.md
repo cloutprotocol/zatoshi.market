@@ -1,4 +1,4 @@
-# Zordinals.market
+# Zatoshi.market
 
 **The premiere marketplace for Zerdinals & ZRC20 on Zcash**
 
@@ -47,7 +47,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ## Project Structure
 
 ```
-zordinals.market/
+zatoshi.market/
 ├── src/
 │   ├── app/              # Next.js app directory
 │   │   ├── layout.tsx    # Root layout
