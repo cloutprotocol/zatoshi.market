@@ -49,8 +49,9 @@ export default function WalletPage() {
       connectWallet(newWallet);
       setShowMnemonic(true);
     } catch (e) {
-      alert('Failed to generate wallet: WebAssembly not supported in this environment.');
-      console.error(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`Failed to generate wallet: ${msg}`);
+      console.error('Wallet generation error:', e);
     } finally {
       setLoading(false);
     }

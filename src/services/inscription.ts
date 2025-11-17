@@ -5,14 +5,9 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
-import { ECPairFactory } from 'ecpair';
 
-// Lazy-load ECC using noble adapter (pure JS) at runtime only
-async function getECPair() {
-  const noble = await import('@/lib/nobleECC');
-  const ecc = await (noble as any).loadECC();
-  return ECPairFactory(ecc);
-}
+// Note: Zcash signing (ZIP-243/244) requires a dedicated signer.
+// We do not use ECPair here to avoid tiny-secp256k1 interface issues in browser.
 
 // Zcash network parameters (similar to Bitcoin mainnet)
 const ZCASH_NETWORK = {
@@ -40,11 +35,27 @@ export interface InscriptionData {
 }
 
 /**
+ * Fetch raw transaction hex (for signing inputs)
+ */
+export async function getRawTransaction(txid: string): Promise<string> {
+  const res = await fetch(`/api/zcash/tx/${txid}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch raw tx for ${txid}: ${res.status} ${res.statusText}`);
+  }
+  const json = await res.json();
+  if (!json?.raw || typeof json.raw !== 'string') {
+    throw new Error('Provider did not return raw tx');
+  }
+  return json.raw as string;
+}
+
+/**
  * Fetch UTXOs for a given address from Zerdinals API
  */
 export async function getUTXOs(address: string): Promise<UTXO[]> {
   try {
-    const response = await fetch(`https://utxos.zerdinals.com/api/utxos/${address}`);
+    // Use Next.js API proxy to avoid CORS
+    const response = await fetch(`/api/zerdinals-utxos/utxos/${address}`);
 
     if (!response.ok) {
       throw new Error(`Failed to fetch UTXOs: ${response.statusText}`);
@@ -115,7 +126,6 @@ export async function createInscriptionTransaction(
   address: string,
   inscriptionData: InscriptionData
 ): Promise<string> {
-  const ECPair = await getECPair();
   // Constants
   const INSCRIPTION_OUTPUT_VALUE = BigInt(10000); // 10,000 zatoshis for inscription
   const TRANSACTION_FEE = BigInt(10000); // 10,000 zatoshis fee
@@ -132,19 +142,24 @@ export async function createInscriptionTransaction(
   const selectedUTXOs = selectUTXOs(utxos, Number(REQUIRED_AMOUNT));
   const totalInput = BigInt(selectedUTXOs.reduce((sum, utxo) => sum + utxo.value, 0));
 
-  // 3. Create key pair from WIF
-  const keyPair = ECPair.fromWIF(privateKeyWIF);
+  // 3. Parse WIF (signing not implemented in this function yet)
 
   // 4. Build transaction
   const psbt = new bitcoin.Psbt({ network: ZCASH_NETWORK as any });
+
+  // 4.1 Fetch previous transactions for inputs (required for non-witness signing)
+  const prevMap = new Map<string, Buffer>();
+  for (const utxo of selectedUTXOs) {
+    const raw = await getRawTransaction(utxo.txid);
+    prevMap.set(utxo.txid, Buffer.from(raw, 'hex'));
+  }
 
   // 5. Add inputs
   for (const utxo of selectedUTXOs) {
     psbt.addInput({
       hash: utxo.txid,
       index: utxo.vout,
-      // For P2PKH inputs, we need the previous output script
-      nonWitnessUtxo: Buffer.from(''), // This would need the full previous tx
+      nonWitnessUtxo: prevMap.get(utxo.txid)!,
     });
   }
 
@@ -152,7 +167,7 @@ export async function createInscriptionTransaction(
   const inscriptionScript = createInscriptionScript(inscriptionData);
   psbt.addOutput({
     script: inscriptionScript,
-    value: INSCRIPTION_OUTPUT_VALUE,
+    value: Number(INSCRIPTION_OUTPUT_VALUE),
   });
 
   // 7. Calculate change and add change output
@@ -170,21 +185,17 @@ export async function createInscriptionTransaction(
 
     psbt.addOutput({
       script: changeScript,
-      value: change,
+      value: Number(change),
     });
   }
 
-  // 8. Sign all inputs
-  for (let i = 0; i < selectedUTXOs.length; i++) {
-    psbt.signInput(i, keyPair);
-  }
+  // 8. Sign all inputs (Zcash ZIP-243/244 signing required)
+  throw new Error('Zcash transaction signing not yet implemented in client.');
 
   // 9. Finalize and extract
-  psbt.finalizeAllInputs();
-  const tx = psbt.extractTransaction();
-
-  // 10. Return hex
-  return tx.toHex();
+  // Unreachable for now
+  // const tx = psbt.extractTransaction();
+  // return tx.toHex();
 }
 
 /**
@@ -192,7 +203,8 @@ export async function createInscriptionTransaction(
  */
 export async function broadcastTransaction(rawTx: string): Promise<string> {
   try {
-    const response = await fetch('https://utxos.zerdinals.com/api/send-transaction', {
+    // Use Next.js API proxy to avoid CORS
+    const response = await fetch('/api/zerdinals-utxos/send-transaction', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

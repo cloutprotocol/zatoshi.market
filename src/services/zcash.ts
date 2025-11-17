@@ -91,10 +91,10 @@ class ZcashRPCService {
     const data: any = await this.apiCall('/stats');
     return {
       chain: 'main',
-      blocks: data.data.blocks,
-      headers: data.data.blocks,
-      bestblockhash: data.data.best_block_hash,
-      difficulty: data.data.difficulty,
+      blocks: data.blocks,
+      headers: data.blocks,
+      bestblockhash: data.best_block_hash,
+      difficulty: data.difficulty,
       verificationprogress: 1,
       chainwork: '',
       pruned: false,

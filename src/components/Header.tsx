@@ -16,20 +16,12 @@ export default function Header() {
   return (
     <>
       <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-3 flex justify-between items-center backdrop-blur-xl bg-black/30 border-b border-gold-500/20">
-        <Link href="/" className="text-2xl text-gold-400">
-          zatoshi.market
+        <Link href="/" className="h-10 w-10 border-2 border-gold-500 text-gold-400 flex items-center justify-center text-2xl font-bold hover:border-gold-400 transition-colors">
+          Z
         </Link>
 
         {/* Desktop Navigation */}
         <div className="hidden lg:flex gap-6 items-center">
-          <a
-            href="https://zerdinals.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-4 py-2 text-gold-400 hover:text-gold-300"
-          >
-            EXPLORER
-          </a>
           <Link href="/zmaps" className="px-4 py-2 text-gold-400 hover:text-gold-300">
             ZMAPS
           </Link>
@@ -103,15 +95,6 @@ export default function Header() {
           />
           <div className="fixed top-20 left-0 right-0 z-40 lg:hidden backdrop-blur-xl bg-black/90 border-b border-gold-500/20">
             <div className="px-6 py-4 space-y-3">
-            <a
-              href="https://zerdinals.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              EXPLORER
-            </a>
             <Link
               href="/zmaps"
               className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"

@@ -1,5 +1,6 @@
 'use client';
 
+import '@/polyfills';
 import { WalletProvider } from '@/contexts/WalletContext';
 // Convex temporarily disabled until npx convex dev is run in interactive terminal
 // import { ConvexProvider, ConvexReactClient } from "convex/react";
