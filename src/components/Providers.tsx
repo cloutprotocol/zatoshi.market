@@ -2,12 +2,18 @@
 
 import '@/polyfills';
 import { WalletProvider } from '@/contexts/WalletContext';
-// Convex temporarily disabled until npx convex dev is run in interactive terminal
-// import { ConvexProvider, ConvexReactClient } from "convex/react";
-// const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL || "");
+import { ConvexProvider, ConvexReactClient } from 'convex/react';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!url) {
+    // Fallback: work without Convex if not configured
+    return <WalletProvider>{children}</WalletProvider>;
+  }
+  const convex = new ConvexReactClient(url);
   return (
-    <WalletProvider>{children}</WalletProvider>
+    <ConvexProvider client={convex}>
+      <WalletProvider>{children}</WalletProvider>
+    </ConvexProvider>
   );
 }

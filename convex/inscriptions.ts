@@ -7,19 +7,7 @@ import { v } from "convex/values";
  */
 
 // Create a new inscription record (called when user submits)
-export const createInscription = mutation({
-  args: {
-    txid: v.string(),
-    address: v.string(),
-    contentType: v.string(),
-    contentPreview: v.string(),
-    contentSize: v.number(),
-    type: v.string(),
-    zrc20Tick: v.optional(v.string()),
-    zrc20Op: v.optional(v.string()),
-    zrc20Amount: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
+export const createInscription = mutation(async (ctx, args) => {
     const inscriptionId = `${args.txid}i0`; // Assume offset 0
 
     const id = await ctx.db.insert("inscriptions", {
@@ -35,6 +23,8 @@ export const createInscription = mutation({
       zrc20Tick: args.zrc20Tick,
       zrc20Op: args.zrc20Op,
       zrc20Amount: args.zrc20Amount,
+      platformFeeZat: args.platformFeeZat,
+      treasuryAddress: args.treasuryAddress,
     });
 
     // Also add to activity feed
@@ -50,7 +40,6 @@ export const createInscription = mutation({
     });
 
     return id;
-  },
 });
 
 // Update inscription status (called by indexer or manual verification)

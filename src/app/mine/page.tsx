@@ -66,7 +66,7 @@ export default function MinePage() {
               </div>
 
               <p className="text-lg text-gold-200/80">
-                Inscribe ZMAPs and earn <span className="text-gold-400 font-bold">UP TO 10,000 ZORE</span> per ZMAP.
+                Inscribe ZMAPs and mine ZORE tokens on your land plots.
               </p>
             </div>
 

@@ -90,6 +90,9 @@ export default defineSchema({
     zrc20Tick: v.optional(v.string()),
     zrc20Op: v.optional(v.string()), // "mint" | "deploy" | "transfer"
     zrc20Amount: v.optional(v.string()),
+    // Platform fee metadata
+    platformFeeZat: v.optional(v.number()),
+    treasuryAddress: v.optional(v.string()),
   })
     .index("by_inscription_id", ["inscriptionId"])
     .index("by_txid", ["txid"])

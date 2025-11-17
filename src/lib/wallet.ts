@@ -57,7 +57,7 @@ function createZcashAddress(publicKey: Buffer): string {
  */
 export async function generateWallet(): Promise<Wallet> {
   // Generate 12-word mnemonic (128 bits entropy) using pure-JS libs
-  const mnemonic = generateMnemonic(wordlist, 128, (n) => randomBytes(n));
+  const mnemonic = generateMnemonic(wordlist, 128);
 
   // Convert mnemonic to seed (Uint8Array)
   const seed = mnemonicToSeedSync(mnemonic);

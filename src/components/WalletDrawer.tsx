@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
-import { generateWallet, importFromMnemonic } from '@/lib/wallet';
+import { generateWallet, importFromMnemonic, importFromPrivateKey } from '@/lib/wallet';
 import { zcashRPC } from '@/services/zcash';
 import QRCode from 'qrcode';
 
@@ -12,7 +12,7 @@ interface WalletDrawerProps {
 }
 
 export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
-  const { wallet, connectWallet, disconnectWallet, mounted } = useWallet();
+  const { wallet, connectWallet, disconnectWallet, mounted, hasStoredKeystore, unlockWallet, saveEncrypted, lockWallet } = useWallet();
   const [balance, setBalance] = useState({ confirmed: 0, unconfirmed: 0 });
   const [usdPrice, setUsdPrice] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -73,6 +73,13 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
     setLoading(true);
     try {
       const newWallet = await generateWallet();
+      // Require password to encrypt keystore
+      const password = prompt('Set a password to encrypt your wallet (required):');
+      if (!password || password.length < 8) {
+        alert('Password required (min 8 chars). Wallet not saved.');
+        return;
+      }
+      await saveEncrypted(newWallet, password);
       connectWallet(newWallet);
       setShowMnemonic(true);
     } catch (e) {
@@ -85,16 +92,39 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   };
 
   const handleImportWallet = async () => {
-    const mnemonic = prompt('Enter your 12-word mnemonic phrase:');
-    if (!mnemonic) return;
-
+    const input = prompt('Enter your 12-word mnemonic OR WIF private key:');
+    if (!input) return;
+    const value = input.trim();
     try {
       setLoading(true);
-      const imported = await importFromMnemonic(mnemonic.trim());
-      connectWallet(imported);
+      let imported;
+      if (value.split(/\s+/).length >= 12) {
+        imported = await importFromMnemonic(value);
+      } else {
+        imported = await importFromPrivateKey(value);
+      }
+      const password = prompt('Set a password to encrypt your wallet (required):');
+      if (!password || password.length < 8) {
+        alert('Password required (min 8 chars). Wallet not saved.');
+        return;
+      }
+      await saveEncrypted(imported as any, password);
+      connectWallet(imported as any);
       alert(`Wallet imported! ${imported.address}`);
     } catch (error) {
-      alert(`Failed: ${error instanceof Error ? error.message : 'Invalid mnemonic'}`);
+      alert(`Failed: ${error instanceof Error ? error.message : 'Invalid input'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnlock = async () => {
+    const password = prompt('Enter your wallet password:');
+    if (!password) return;
+    setLoading(true);
+    try {
+      const ok = await unlockWallet(password);
+      if (!ok) alert('Incorrect password');
     } finally {
       setLoading(false);
     }
@@ -227,10 +257,19 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
               <h2 className="text-2xl font-bold text-gold-300">WALLET</h2>
               <div className="p-4 bg-gold-500/10 border border-gold-500/30 rounded">
                 <p className="text-sm text-gold-300">
-                  Client-side wallet. Your keys stay in your browser.
+                  Client-side wallet. Your keys stay in your browser. Encrypted at rest with your password.
                 </p>
               </div>
               <div className="space-y-3">
+                {hasStoredKeystore && (
+                  <button
+                    onClick={handleUnlock}
+                    disabled={loading}
+                    className="w-full px-6 py-3 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-all disabled:opacity-50"
+                  >
+                    {loading ? 'UNLOCKING...' : 'UNLOCK WALLET'}
+                  </button>
+                )}
                 <button
                   onClick={handleCreateWallet}
                   disabled={loading}
@@ -333,6 +372,12 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
               {/* Bottom Actions */}
               <div className="space-y-2">
                 <button
+                  onClick={lockWallet}
+                  className="w-full px-6 py-2 bg-gold-500/10 text-gold-400 text-sm border border-gold-500/30 rounded hover:bg-gold-500/20 transition-all"
+                >
+                  Lock Wallet
+                </button>
+                <button
                   onClick={handleExport}
                   className="w-full px-6 py-2 bg-gold-500/10 text-gold-400 text-sm border border-gold-500/30 rounded hover:bg-gold-500/20 transition-all"
                 >
@@ -342,7 +387,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                   onClick={handleDisconnect}
                   className="w-full px-6 py-2 text-gold-400/60 text-sm hover:text-gold-400 transition-all"
                 >
-                  Disconnect Wallet
+                  Disconnect (Forget) Wallet
                 </button>
               </div>
             </div>

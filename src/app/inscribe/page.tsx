@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { inscribe, mintZRC20Token, registerZcashName } from '@/services/inscription';
 import {
   PLATFORM_FEES,
+  TREASURY_WALLET,
   calculateTotalCost,
   formatZEC,
   formatUSD,
@@ -108,7 +109,9 @@ export default function InscribePage() {
         wallet.privateKey,
         wallet.address,
         contentType,
-        textContent
+        textContent,
+        PLATFORM_FEES.INSCRIPTION,
+        TREASURY_WALLET.address
       );
 
       setResult(result);

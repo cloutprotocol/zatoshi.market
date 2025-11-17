@@ -8,16 +8,22 @@ import { zcashRPC } from '@/services/zcash';
 // Client-only Dither to avoid SSR/hydration mismatch
 const Dither = dynamic(() => import('@/components/Dither'), { ssr: false, loading: () => null });
 
+type ZMapCell = {
+  x: number;
+  y: number;
+  mapNumber: number;
+  blockStart: number;
+  blockEnd: number;
+  isInscribed: boolean;
+};
+
 export default function ZmapsPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [selectedCell, setSelectedCell] = useState<{
-    x: number;
-    y: number;
-    mapNumber: number;
-    blockStart: number;
-    blockEnd: number;
-    isInscribed: boolean;
-  } | null>(null);
+  const [cartItems, setCartItems] = useState<ZMapCell[]>([]);
+  const cartItemsRef = useRef<ZMapCell[]>([]); // Ref to access current cart items in draw function
+  const drawFnRef = useRef<(() => void) | null>(null); // Ref to draw function
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [showCart, setShowCart] = useState(false);
   const [hoveredCell, setHoveredCell] = useState<{ x: number; y: number } | null>(null);
   const [blockCount, setBlockCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -25,6 +31,15 @@ export default function ZmapsPage() {
   const [showIntro, setShowIntro] = useState(true);
   const [introStep, setIntroStep] = useState(1);
   const [showInfoButton, setShowInfoButton] = useState(false);
+
+  // Keep ref in sync with state and trigger redraw
+  useEffect(() => {
+    cartItemsRef.current = cartItems;
+    // Trigger redraw when cart items change
+    if (drawFnRef.current) {
+      drawFnRef.current();
+    }
+  }, [cartItems]);
 
   useEffect(() => {
     setMounted(true);
@@ -37,7 +52,6 @@ export default function ZmapsPage() {
   }, []);
   const BLOCKS_PER_MAP = 100; // Each ZMAP square represents 100 Zcash blocks
   const ZMAP_PRICE = 0.0015; // 0.0015 ZEC per ZMAP
-  const ZORE_PER_MAP = 10000; // 10,000 ZORE per ZMAP
   const COLS = 100; // Grid columns
 
   // Fetch real Zcash block count
@@ -195,8 +209,25 @@ export default function ZmapsPage() {
         }
       }
 
+      // Draw selected items in cart with border highlight
+      ctx.strokeStyle = '#ffc837'; // gold-500
+      ctx.lineWidth = 3 / scale;
+      for (const item of cartItemsRef.current) {
+        if (
+          item.x >= cellXStart &&
+          item.x <= cellXEnd &&
+          item.y >= cellYStart &&
+          item.y <= cellYEnd
+        ) {
+          ctx.strokeRect(item.x * cellSize, item.y * cellSize, cellSize, cellSize);
+        }
+      }
+
       ctx.restore();
     }
+
+    // Store draw function ref for external calls
+    drawFnRef.current = draw;
 
     // --- Draw Cursor Highlight ---
     function drawCursorHighlight(cursorX: number, cursorY: number) {
@@ -222,7 +253,43 @@ export default function ZmapsPage() {
       }
     }
 
-    // --- Zoom Function ---
+    // --- Smooth Zoom to World Coordinates ---
+    function smoothZoomToWorld(worldX: number, worldY: number, targetScale: number, duration = 400) {
+      if (!canvas) return;
+
+      targetScale = Math.max(minScale, Math.min(maxScale, targetScale));
+
+      const startScale = scale;
+      const startPanX = panX;
+      const startPanY = panY;
+      const startTime = performance.now();
+
+      // Calculate target pan to center the world coordinates on screen
+      const targetPanX = canvas.width / 2 - worldX * targetScale;
+      const targetPanY = canvas.height / 2 - worldY * targetScale;
+
+      function animate(currentTime: number) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        // Ease out cubic for smooth deceleration
+        const eased = 1 - Math.pow(1 - progress, 3);
+
+        scale = startScale + (targetScale - startScale) * eased;
+        panX = startPanX + (targetPanX - startPanX) * eased;
+        panY = startPanY + (targetPanY - startPanY) * eased;
+
+        requestAnimationFrame(draw);
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        }
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    // --- Zoom Function (instant) ---
     function zoomAt(mouseX: number, mouseY: number, newScale: number) {
       newScale = Math.max(minScale, Math.min(maxScale, newScale));
 
@@ -257,14 +324,43 @@ export default function ZmapsPage() {
         // Check if this ZMAP is inscribed (has a gold cube)
         const isInscribed = goldCubes.some((cube) => cube.x === gridCol && cube.y === gridRow);
 
-        setSelectedCell({
+        // Don't allow adding inscribed maps to cart
+        if (isInscribed) return;
+
+        const cellData: ZMapCell = {
           x: gridCol,
           y: gridRow,
           mapNumber,
           blockStart,
           blockEnd,
           isInscribed,
-        });
+        };
+
+        // Check if item is already in cart
+        const existingIndex = cartItemsRef.current.findIndex(
+          (item) => item.x === gridCol && item.y === gridRow
+        );
+
+        if (existingIndex >= 0) {
+          // Remove from cart
+          setCartItems((prev) => prev.filter((_, i) => i !== existingIndex));
+        } else {
+          // Add to cart
+          setCartItems((prev) => [...prev, cellData]);
+
+          // Zoom into this cell - do this AFTER state update to avoid conflicts
+          if (canvas) {
+            // Calculate the center of the clicked cell in world coordinates
+            const cellCenterWorldX = (gridCol + 0.5) * cellSize;
+            const cellCenterWorldY = (gridRow + 0.5) * cellSize;
+
+            // Zoom in to show the cell nicely (scale 2.5 shows good detail)
+            const targetScale = 2.5;
+
+            // Use smooth zoom animation to center on this cell
+            smoothZoomToWorld(cellCenterWorldX, cellCenterWorldY, targetScale, 400);
+          }
+        }
       }
     }
 
@@ -298,7 +394,17 @@ export default function ZmapsPage() {
     const handleMouseUp = (e: MouseEvent) => {
       if (!canvas) return;
       isPanning = false;
-      canvas.style.cursor = 'grab';
+
+      // Update cursor based on current position
+      const worldX = (e.clientX - panX) / scale;
+      const worldY = (e.clientY - panY) / scale;
+      const gridCol = Math.floor(worldX / cellSize);
+      const gridRow = Math.floor(worldY / cellSize);
+
+      const isOverGrid = gridCol >= 0 && gridCol < numCols && gridRow >= 0 && gridRow < numRows;
+      const isInscribed = goldCubes.some((cube) => cube.x === gridCol && cube.y === gridRow);
+
+      canvas.style.cursor = (isOverGrid && !isInscribed) ? 'pointer' : 'grab';
 
       // Only trigger click if mouse didn't move much (not a drag)
       const dx = e.clientX - clickStartX;
@@ -313,10 +419,12 @@ export default function ZmapsPage() {
     const handleMouseLeave = () => {
       if (!canvas) return;
       isPanning = false;
-      canvas.style.cursor = 'grab';
+      canvas.style.cursor = 'default';
     };
 
     const handleMouseMove = (e: MouseEvent) => {
+      if (!canvas) return;
+
       const redraw = () => {
         draw();
         drawCursorHighlight(e.clientX, e.clientY);
@@ -334,6 +442,22 @@ export default function ZmapsPage() {
 
         requestAnimationFrame(redraw);
       } else {
+        // Update cursor based on hover state
+        const worldX = (e.clientX - panX) / scale;
+        const worldY = (e.clientY - panY) / scale;
+        const gridCol = Math.floor(worldX / cellSize);
+        const gridRow = Math.floor(worldY / cellSize);
+
+        // Check if hovering over a valid, available cell
+        const isOverGrid = gridCol >= 0 && gridCol < numCols && gridRow >= 0 && gridRow < numRows;
+        const isInscribed = goldCubes.some((cube) => cube.x === gridCol && cube.y === gridRow);
+
+        if (isOverGrid && !isInscribed) {
+          canvas.style.cursor = 'pointer';
+        } else {
+          canvas.style.cursor = 'grab';
+        }
+
         requestAnimationFrame(redraw);
       }
     };
@@ -437,25 +561,36 @@ export default function ZmapsPage() {
       }
     };
 
-    // Zoom button handlers
+    // Zoom button handlers with smooth animation
     const handleZoomIn = () => {
       if (!canvas) return;
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
-      zoomAt(centerX, centerY, scale * buttonZoomFactor);
+
+      // Get current world center
+      const worldCenterX = (centerX - panX) / scale;
+      const worldCenterY = (centerY - panY) / scale;
+
+      smoothZoomToWorld(worldCenterX, worldCenterY, scale * buttonZoomFactor, 250);
     };
 
     const handleZoomOut = () => {
       if (!canvas) return;
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
-      zoomAt(centerX, centerY, scale / buttonZoomFactor);
+
+      // Get current world center
+      const worldCenterX = (centerX - panX) / scale;
+      const worldCenterY = (centerY - panY) / scale;
+
+      smoothZoomToWorld(worldCenterX, worldCenterY, scale / buttonZoomFactor, 250);
     };
 
     const handleReset = () => {
-      scale = 0.3; // Reset to zoomed out view
-      resizeCanvas();
-      requestAnimationFrame(draw);
+      if (!canvas) return;
+      const centerWorldX = gridWidth / 2;
+      const centerWorldY = gridHeight / 2;
+      smoothZoomToWorld(centerWorldX, centerWorldY, 0.3, 400);
     };
 
     const handleFitToScreen = () => {
@@ -465,11 +600,10 @@ export default function ZmapsPage() {
       const scaleY = canvas.height / gridHeight;
       const newScale = Math.min(scaleX, scaleY) * 0.9; // 90% to add some padding
 
-      scale = Math.max(minScale, Math.min(maxScale, newScale));
-      panX = canvas.width / 2 - (gridWidth * scale) / 2;
-      panY = canvas.height / 2 - (gridHeight * scale) / 2;
+      const centerWorldX = gridWidth / 2;
+      const centerWorldY = gridHeight / 2;
 
-      requestAnimationFrame(draw);
+      smoothZoomToWorld(centerWorldX, centerWorldY, Math.max(minScale, Math.min(maxScale, newScale)), 400);
     };
 
     // Attach zoom button listeners
@@ -496,6 +630,9 @@ export default function ZmapsPage() {
     canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
     canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
 
+    // Set initial cursor
+    canvas.style.cursor = 'grab';
+
     resizeCanvas();
     requestAnimationFrame(draw);
 
@@ -514,7 +651,7 @@ export default function ZmapsPage() {
       resetBtn?.removeEventListener('click', handleReset);
       fitBtn?.removeEventListener('click', handleFitToScreen);
     };
-  }, [blockCount, loading]);
+  }, [blockCount, loading]); // Removed cartItems - canvas doesn't need to reinitialize when cart changes
 
   const handleCompleteIntro = () => {
     localStorage.setItem('zmaps_intro_seen', 'true');
@@ -564,8 +701,11 @@ export default function ZmapsPage() {
       {/* Canvas */}
       <canvas
         ref={canvasRef}
-        className="absolute top-0 left-0 cursor-grab active:cursor-grabbing"
-        style={{ imageRendering: 'crisp-edges' }}
+        className="absolute top-0 left-0"
+        style={{
+          imageRendering: 'crisp-edges',
+          touchAction: 'none' // Prevent default touch behaviors for smooth panning
+        }}
       />
 
       {/* Manual Controls */}
@@ -663,105 +803,178 @@ export default function ZmapsPage() {
         </button>
       </div>
 
-      {/* High-End Liquid Glass Modal */}
-      {selectedCell && (
+      {/* Mobile Cart Toggle Button */}
+      <button
+        onClick={() => setShowCart(!showCart)}
+        className="fixed bottom-20 left-4 z-40 lg:hidden size-14 backdrop-blur-xl bg-gold-500 text-black flex items-center justify-center font-bold shadow-lg shadow-gold-500/50 transition-transform active:scale-95"
+      >
+        <div className="relative">
+          🛒
+          {cartItems.length > 0 && (
+            <div className="absolute -top-2 -right-2 size-5 bg-black text-gold-400 text-xs flex items-center justify-center rounded-full">
+              {cartItems.length}
+            </div>
+          )}
+        </div>
+      </button>
+
+      {/* Mobile Cart Backdrop */}
+      {showCart && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80"
-          onClick={() => setSelectedCell(null)}
+          className="fixed inset-0 bg-black/60 z-30 lg:hidden top-20"
+          onClick={() => setShowCart(false)}
+        />
+      )}
+
+      {/* Left Sidebar Cart */}
+      <div className={`fixed top-20 left-0 bottom-0 w-full sm:w-96 lg:w-[400px] backdrop-blur-xl bg-black/90 border-r border-gold-700/30 z-40 flex flex-col transition-transform duration-300 ${showCart ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+        {/* Cart Header */}
+        <div className="p-4 sm:p-6 border-b border-gold-700/30 flex justify-between items-start">
+          <div className="flex-1">
+            <h3 className="text-xl sm:text-2xl font-bold text-gold-300 mb-2">Cart</h3>
+            <p className="text-gold-400/60 text-sm">
+              {cartItems.length === 0
+                ? 'Click on available squares to add to cart'
+                : `${cartItems.length} ZMAP${cartItems.length > 1 ? 's' : ''} selected`}
+            </p>
+          </div>
+          <button
+            onClick={() => setShowCart(false)}
+            className="lg:hidden text-gold-400/60 hover:text-gold-300 text-2xl transition-colors ml-4"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Cart Items */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
+          {cartItems.length === 0 ? (
+            <div className="text-center py-12 text-gold-400/40">
+              <div className="text-4xl mb-3">□</div>
+              <p>No ZMAPs selected</p>
+            </div>
+          ) : (
+            cartItems.map((item) => (
+              <div
+                key={`${item.x}-${item.y}`}
+                className="bg-black/40 border border-gold-500/20 rounded-lg p-4 group hover:border-gold-500/40 transition-colors"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-gold-400 text-xs tracking-wider">ZMAP</span>
+                    <span className="text-gold-300 font-bold">#{item.mapNumber.toLocaleString()}</span>
+                  </div>
+                  <button
+                    onClick={() => setCartItems((prev) => prev.filter((i) => i.mapNumber !== item.mapNumber))}
+                    className="text-gold-400/40 hover:text-red-400 transition-colors text-lg leading-none"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <div className="text-gold-400/60 text-xs">Blocks</div>
+                    <div className="text-gold-300 font-mono text-xs">
+                      {item.blockStart.toLocaleString()} - {item.blockEnd.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="flex justify-end items-end">
+                    <div className="text-gold-300 font-bold">{ZMAP_PRICE} ZEC</div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Cart Footer */}
+        {cartItems.length > 0 && (
+          <div className="p-4 sm:p-6 border-t border-gold-700/30 bg-black/60 space-y-4">
+            <div className="flex justify-between items-center text-lg">
+              <span className="text-gold-400">Total</span>
+              <span className="text-gold-300 font-bold">{(cartItems.length * ZMAP_PRICE).toFixed(4)} ZEC</span>
+            </div>
+            <button
+              onClick={() => {
+                setShowCheckoutModal(true);
+                setShowCart(false);
+              }}
+              className="w-full px-6 py-4 bg-gold-500 text-black font-bold text-lg tracking-wide hover:bg-gold-400 transition-colors"
+            >
+              Checkout ({cartItems.length})
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Checkout Modal */}
+      {showCheckoutModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
+          onClick={() => setShowCheckoutModal(false)}
         >
           <div
-            className="bg-gradient-to-br from-gold-900/20 via-black/40 to-gold-900/20 rounded-2xl shadow-[0_8px_32px_0_rgba(255,200,55,0.2)] w-full max-w-2xl relative overflow-hidden"
+            className="bg-gradient-to-br from-gold-900/10 via-black/100 to-gold-900/10 rounded-2xl w-full max-w-2xl relative overflow-hidden max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Ambient glow effect */}
-            <div className="absolute inset-0 bg-liquid-glass opacity-30"></div>
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-400 to-transparent opacity-50"></div>
+            <div className="absolute inset-0 bg-liquid-glass opacity-50"></div>
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-400 to-transparent opacity-60"></div>
 
             {/* Content */}
-            <div className="relative p-8">
+            <div className="relative p-6 sm:p-8 flex-1 overflow-y-auto">
               {/* Close button */}
               <button
-                onClick={() => setSelectedCell(null)}
-                className="absolute top-6 right-6 text-gold-400/60 hover:text-gold-300 text-2xl transition-colors"
+                onClick={() => setShowCheckoutModal(false)}
+                className="absolute top-4 sm:top-6 right-4 sm:right-6 text-gold-400/60 hover:text-gold-300 text-2xl transition-colors"
               >
                 ✕
               </button>
 
-              {/* ZMAP Number Badge */}
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-gold-500/10 mb-6">
-                <span className="text-gold-400 text-sm tracking-wider">ZMAP</span>
-                <span className="text-gold-300 text-lg font-bold">
-                  #{selectedCell.mapNumber.toLocaleString()}
-                </span>
-              </div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-gold-300 mb-6">Order Review</h2>
 
-              {/* Status Badge */}
-              <div className="mb-8">
-                <div
-                  className={`inline-flex items-center gap-2 px-4 py-2 ${
-                    selectedCell.isInscribed
-                      ? 'bg-gold-500/20 text-gold-400'
-                      : 'bg-emerald-500/20 text-emerald-400'
-                  }`}
-                >
-                  <div
-                    className={`size-2 ${
-                      selectedCell.isInscribed ? 'bg-gold-400' : 'bg-emerald-400'
-                    }`}
-                  ></div>
-                  <span className="text-sm font-medium tracking-wide">
-                    {selectedCell.isInscribed ? 'INSCRIBED' : 'AVAILABLE'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Block Info Grid */}
-              <div className="grid grid-cols-2 gap-6 mb-8">
-                <div className="space-y-2">
-                  <div className="text-gold-400/60 text-sm tracking-wider">ZCASH BLOCKS</div>
-                  <div className="text-2xl text-gold-300 font-bold tracking-tight">
-                    {selectedCell.blockStart.toLocaleString()} - {selectedCell.blockEnd.toLocaleString()}
+              {/* Order Summary */}
+              <div className="space-y-3 mb-6">
+                {cartItems.map((item, index) => (
+                  <div key={item.mapNumber} className="bg-black/30 p-4 rounded-lg flex justify-between items-center">
+                    <div>
+                      <div className="text-gold-300 font-bold">ZMAP #{item.mapNumber.toLocaleString()}</div>
+                      <div className="text-gold-400/60 text-sm font-mono">
+                        Blocks {item.blockStart.toLocaleString()} - {item.blockEnd.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-gold-300 font-bold">{ZMAP_PRICE} ZEC</div>
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="text-gold-400/60 text-sm tracking-wider">ZORE QUANTITY</div>
-                  <div className="text-2xl text-gold-300 font-bold tracking-tight">
-                    {ZORE_PER_MAP.toLocaleString()}
-                  </div>
-                </div>
+                ))}
               </div>
 
-              {/* Description */}
-              <div className="mb-8 p-6 bg-black/30">
-                <p className="text-gold-200/80 text-base leading-relaxed">
-                  {selectedCell.isInscribed
-                    ? 'This ZMAP has already been inscribed on the Zcash blockchain. View inscription details or transfer ownership.'
-                    : `Inscribe this ZMAP to claim ownership over the land parcel, enabling you to mine the ZORE available on the land. Each ZMAP represents ${BLOCKS_PER_MAP} Zcash blocks.`}
-                </p>
+              {/* Totals */}
+              <div className="bg-gold-500/10 p-6 rounded-lg mb-6 space-y-3">
+                <div className="flex justify-between text-xl">
+                  <span className="text-gold-300 font-bold">Total</span>
+                  <span className="text-gold-300 font-bold">{(cartItems.length * ZMAP_PRICE).toFixed(4)} ZEC</span>
+                </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-4">
-                {selectedCell.isInscribed ? (
-                  <>
-                    <button className="flex-1 px-6 py-4 bg-gold-500/10 text-gold-400 font-medium tracking-wide">
-                      VIEW DETAILS
-                    </button>
-                    <button className="flex-1 px-6 py-4 bg-gold-500 text-black font-bold tracking-wide">
-                      TRANSFER
-                    </button>
-                  </>
-                ) : (
-                  <button className="w-full px-6 py-4 bg-gold-500 text-black font-bold text-lg tracking-wide">
-                    Inscribe ZMAP for {ZMAP_PRICE} ZEC
-                  </button>
-                )}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={() => setShowCheckoutModal(false)}
+                  className="flex-1 px-6 py-4 bg-gold-500/10 text-gold-400 font-bold tracking-wide border border-gold-500/30 hover:bg-gold-500/20 transition-colors"
+                >
+                  Continue Shopping
+                </button>
+                <button className="flex-1 px-6 py-4 bg-gold-500 text-black font-bold text-lg tracking-wide hover:bg-gold-400 transition-colors">
+                  Inscribe All for {(cartItems.length * ZMAP_PRICE).toFixed(4)} ZEC
+                </button>
               </div>
 
-              {/* Footer Link */}
+              {/* Footer */}
               <div className="mt-6 text-center">
-                <Link href="/token/zore" className="text-gold-400/60 text-sm inline-flex items-center gap-2">
-                  Learn more about ZMAP
+                <Link href="/token/zore" className="text-gold-400/60 text-sm inline-flex items-center gap-2 hover:text-gold-400 transition-colors">
+                  Learn more about ZMAP & ZORE
                   <span className="text-xs">→</span>
                 </Link>
               </div>
@@ -773,7 +986,7 @@ export default function ZmapsPage() {
       {/* Intro Explainer Overlays */}
       {showIntro && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
-          <div className="bg-gradient-to-br from-gold-900/20 via-black/40 to-gold-900/20 rounded-2xl shadow-[0_8px_32px_0_rgba(255,200,55,0.2)] max-w-2xl w-full p-8">
+          <div className="bg-gradient-to-br from-gold-900/20 via-black/40 to-gold-900/20 rounded-2xl  max-w-2xl w-full p-8">
             <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-400 to-transparent opacity-50"></div>
 
             {/* Step Indicator */}
@@ -793,13 +1006,14 @@ export default function ZmapsPage() {
                 <h2 className="text-3xl font-bold text-gold-300 mb-4">Welcome to ZMAPS</h2>
                 <p className="text-gold-200/80 text-lg mb-6">
                   ZMAPS is a digital land registry on Zcash. Each square represents 100 Zcash blocks.
-                  Inscribe a ZMAP to claim ownership and receive 10,000 ZORE tokens.
+                  Inscribe ZMAPs and mine ZORE tokens on your land plots.
                 </p>
                 <div className="bg-gold-500/10 p-4 rounded mb-6">
                   <p className="text-gold-300 text-sm">
                     <strong>Gold squares</strong> = Already inscribed<br />
                     <strong>Empty squares</strong> = Available to inscribe<br />
-                    <strong>Gray squares</strong> = Loading next 100
+                    <strong>Gray squares</strong> = Loading next 100<br />
+                    <strong>Click squares</strong> = Add to cart for bulk purchase
                   </p>
                 </div>
               </div>
@@ -822,7 +1036,11 @@ export default function ZmapsPage() {
                   </div>
                   <div className="flex items-start gap-3">
                     <span className="text-gold-400 font-bold">•</span>
-                    <span className="text-gold-200/80"><strong>Click</strong> any square to see details and inscribe</span>
+                    <span className="text-gold-200/80"><strong>Click</strong> squares to add them to your cart</span>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="text-gold-400 font-bold">•</span>
+                    <span className="text-gold-200/80"><strong>Use cart</strong> on the left to review and checkout</span>
                   </div>
                   <div className="flex items-start gap-3">
                     <span className="text-gold-400 font-bold">•</span>
@@ -836,8 +1054,9 @@ export default function ZmapsPage() {
               <div>
                 <h2 className="text-3xl font-bold text-gold-300 mb-4">Start Exploring</h2>
                 <p className="text-gold-200/80 text-lg mb-6">
-                  You&apos;re all set! Click on any available square to inscribe your first ZMAP.
-                  Each ZMAP costs 0.0015 ZEC and rewards you with 10,000 ZORE tokens.
+                  You&apos;re all set! Click on available squares to add them to your cart.
+                  Each ZMAP costs 0.0015 ZEC. Inscribe ZMAPs and mine ZORE tokens on your land plots.
+                  You can select multiple ZMAPs and inscribe them all at once!
                 </p>
                 <div className="bg-gold-500/10 p-4 rounded mb-6">
                   <p className="text-gold-300 text-sm">
@@ -878,31 +1097,6 @@ export default function ZmapsPage() {
         </div>
       )}
 
-      {/* Left Sidebar for Reserved Parcel (placeholder for future implementation) */}
-      {selectedCell && selectedCell.isInscribed === false && (
-        <div className="fixed top-20 left-0 bottom-0 w-[400px] backdrop-blur-xl bg-black/30 border-r border-gold-700/30 z-30 p-6 hidden lg:block">
-          <h3 className="text-xl font-bold text-gold-300 mb-4">ZMAP #{selectedCell.mapNumber}</h3>
-          <div className="space-y-4">
-            <div className="p-4 bg-black/40 rounded">
-              <div className="text-gold-400/60 text-sm mb-1">Block Range</div>
-              <div className="text-gold-300 font-mono">
-                {selectedCell.blockStart.toLocaleString()} - {selectedCell.blockEnd.toLocaleString()}
-              </div>
-            </div>
-            <div className="p-4 bg-black/40 rounded">
-              <div className="text-gold-400/60 text-sm mb-1">ZORE Reward</div>
-              <div className="text-gold-300 text-2xl font-bold">{ZORE_PER_MAP.toLocaleString()}</div>
-            </div>
-            <div className="p-4 bg-black/40 rounded">
-              <div className="text-gold-400/60 text-sm mb-1">Price</div>
-              <div className="text-gold-300 text-2xl font-bold">{ZMAP_PRICE} ZEC</div>
-            </div>
-            <button className="w-full px-6 py-4 bg-gold-500 text-black font-bold text-lg tracking-wide">
-              Reserve & Inscribe
-            </button>
-          </div>
-        </div>
-      )}
     </main>
   );
 }

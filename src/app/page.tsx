@@ -94,7 +94,7 @@ export default function Home() {
             <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
               <h3 className="text-2xl font-bold mb-4 text-gold-400">ZMAPS</h3>
               <p className="text-gold-100/80">
-                Each ZMAP represents 100 Zcash blocks. Inscribe ZMAPs for 0.0015 ZEC and receive 10,000 ZORE tokens.
+                Each ZMAP represents 100 Zcash blocks. Inscribe ZMAPs for 0.0015 ZEC and mine ZORE tokens on your land plots.
               </p>
             </div>
 
@@ -110,7 +110,7 @@ export default function Home() {
         {/* Stats Section - Live Data */}
         <div className="container mx-auto px-6 py-24">
           <div className="p-12 bg-black/40 relative overflow-hidden">
-            <div className="absolute inset-0 bg-liquid-glass opacity-30"></div>
+            <div className="absolute inset-0 bg-liquid-glass opacity-60"></div>
             <div className="grid md:grid-cols-4 gap-8 text-center relative z-10">
               <div>
                 <div className="text-5xl font-bold mb-2 text-gold-400">
@@ -129,8 +129,8 @@ export default function Home() {
                 <div className="text-gold-200/80 text-sm">INSCRIBED ZMAPS</div>
               </div>
               <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">10K</div>
-                <div className="text-gold-200/80 text-sm">ZORE PER ZMAP</div>
+                <div className="text-5xl font-bold mb-2 text-gold-400">0.0015</div>
+                <div className="text-gold-200/80 text-sm">ZEC PER ZMAP</div>
               </div>
             </div>
           </div>

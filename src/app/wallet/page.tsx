@@ -2,12 +2,12 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
-import { generateWallet, importFromMnemonic } from '@/lib/wallet';
+import { generateWallet, importFromMnemonic, importFromPrivateKey } from '@/lib/wallet';
 import { zcashRPC } from '@/services/zcash';
 import QRCode from 'qrcode';
 
 export default function WalletPage() {
-  const { wallet, connectWallet, disconnectWallet } = useWallet();
+  const { wallet, connectWallet, disconnectWallet, hasStoredKeystore, unlockWallet, saveEncrypted } = useWallet();
   const [balance, setBalance] = useState({ confirmed: 0, unconfirmed: 0 });
   const [usdPrice, setUsdPrice] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -46,6 +46,12 @@ export default function WalletPage() {
     setLoading(true);
     try {
       const newWallet = await generateWallet();
+      const password = prompt('Set a password to encrypt your wallet (required):');
+      if (!password || password.length < 8) {
+        alert('Password required (min 8 chars). Wallet not saved.');
+        return;
+      }
+      await saveEncrypted(newWallet, password);
       connectWallet(newWallet);
       setShowMnemonic(true);
     } catch (e) {
@@ -58,17 +64,40 @@ export default function WalletPage() {
   };
 
   const handleImportWallet = async () => {
-    const mnemonic = prompt('Enter your 12-word mnemonic phrase:');
-    if (!mnemonic) return;
-
+    const input = prompt('Enter your 12-word mnemonic OR WIF private key:');
+    if (!input) return;
+    const value = input.trim();
     try {
       setLoading(true);
-      const imported = await importFromMnemonic(mnemonic.trim());
-      connectWallet(imported);
+      let imported;
+      if (value.split(/\s+/).length >= 12) {
+        imported = await importFromMnemonic(value);
+      } else {
+        imported = await importFromPrivateKey(value);
+      }
+      const password = prompt('Set a password to encrypt your wallet (required):');
+      if (!password || password.length < 8) {
+        alert('Password required (min 8 chars). Wallet not saved.');
+        return;
+      }
+      await saveEncrypted(imported as any, password);
+      connectWallet(imported as any);
       alert(`Wallet imported successfully! Address: ${imported.address}`);
     } catch (error) {
       console.error('Import error:', error);
-      alert(`Failed to import wallet: ${error instanceof Error ? error.message : 'Invalid mnemonic phrase'}`);
+      alert(`Failed to import wallet: ${error instanceof Error ? error.message : 'Invalid input'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnlock = async () => {
+    const password = prompt('Enter your wallet password:');
+    if (!password) return;
+    setLoading(true);
+    try {
+      const ok = await unlockWallet(password);
+      if (!ok) alert('Incorrect password');
     } finally {
       setLoading(false);
     }
@@ -138,6 +167,15 @@ export default function WalletPage() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                {hasStoredKeystore && (
+                  <button
+                    onClick={handleUnlock}
+                    disabled={loading}
+                    className="px-8 py-4 bg-gold-500 text-black font-bold rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50"
+                  >
+                    {loading ? 'UNLOCKING...' : 'UNLOCK WALLET'}
+                  </button>
+                )}
                 <button
                   onClick={handleCreateWallet}
                   disabled={loading}

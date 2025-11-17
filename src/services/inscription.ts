@@ -5,6 +5,8 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
+import { PLATFORM_FEES, TREASURY_WALLET } from '@/config/fees';
+import { buildAndSignInscriptionTx } from '@/services/zcashTx';
 
 // Note: Zcash signing (ZIP-243/244) requires a dedicated signer.
 // We do not use ECPair here to avoid tiny-secp256k1 interface issues in browser.
@@ -126,76 +128,53 @@ export async function createInscriptionTransaction(
   address: string,
   inscriptionData: InscriptionData
 ): Promise<string> {
-  // Constants
-  const INSCRIPTION_OUTPUT_VALUE = BigInt(10000); // 10,000 zatoshis for inscription
-  const TRANSACTION_FEE = BigInt(10000); // 10,000 zatoshis fee
-  const REQUIRED_AMOUNT = INSCRIPTION_OUTPUT_VALUE + TRANSACTION_FEE;
+  // Constants (zatoshis)
+  const INSCRIPTION_OUTPUT_VALUE = PLATFORM_FEES.INSCRIPTION_OUTPUT; // 10,000 zats
+  const TRANSACTION_FEE = PLATFORM_FEES.NETWORK_FEE_ESTIMATE; // est network fee
+
+  // Decide platform fee based on contentType/content
+  let platformFeeZat = PLATFORM_FEES.INSCRIPTION;
+  try {
+    if (inscriptionData.contentType === 'application/json') {
+      const parsed = JSON.parse(inscriptionData.content);
+      if (parsed?.p === 'zns' && parsed?.op === 'register') {
+        platformFeeZat = PLATFORM_FEES.NAME_REGISTRATION;
+      }
+    }
+  } catch {}
+
+  const treasuryAddress = TREASURY_WALLET.address;
+  if (!treasuryAddress || treasuryAddress === 't1YourTreasuryAddressHere') {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Treasury address not configured. Set NEXT_PUBLIC_TREASURY_ADDRESS');
+    } else {
+      console.warn('Treasury address is a placeholder. Set NEXT_PUBLIC_TREASURY_ADDRESS for production.');
+    }
+  }
+
+  const REQUIRED_AMOUNT = INSCRIPTION_OUTPUT_VALUE + TRANSACTION_FEE + platformFeeZat;
 
   // 1. Get UTXOs
   const utxos = await getUTXOs(address);
-
   if (utxos.length === 0) {
     throw new Error('No UTXOs found. Your wallet needs to have some ZEC.');
   }
 
   // 2. Select UTXOs
-  const selectedUTXOs = selectUTXOs(utxos, Number(REQUIRED_AMOUNT));
-  const totalInput = BigInt(selectedUTXOs.reduce((sum, utxo) => sum + utxo.value, 0));
+  const selectedUTXOs = selectUTXOs(utxos, REQUIRED_AMOUNT);
 
-  // 3. Parse WIF (signing not implemented in this function yet)
-
-  // 4. Build transaction
-  const psbt = new bitcoin.Psbt({ network: ZCASH_NETWORK as any });
-
-  // 4.1 Fetch previous transactions for inputs (required for non-witness signing)
-  const prevMap = new Map<string, Buffer>();
-  for (const utxo of selectedUTXOs) {
-    const raw = await getRawTransaction(utxo.txid);
-    prevMap.set(utxo.txid, Buffer.from(raw, 'hex'));
-  }
-
-  // 5. Add inputs
-  for (const utxo of selectedUTXOs) {
-    psbt.addInput({
-      hash: utxo.txid,
-      index: utxo.vout,
-      nonWitnessUtxo: prevMap.get(utxo.txid)!,
-    });
-  }
-
-  // 6. Create inscription script and add inscription output
-  const inscriptionScript = createInscriptionScript(inscriptionData);
-  psbt.addOutput({
-    script: inscriptionScript,
-    value: Number(INSCRIPTION_OUTPUT_VALUE),
-  });
-
-  // 7. Calculate change and add change output
-  const change = totalInput - INSCRIPTION_OUTPUT_VALUE - TRANSACTION_FEE;
-  if (change > BigInt(0)) {
-    // Decode address to get script
-    const decoded = bitcoin.address.fromBase58Check(address);
-    const changeScript = bitcoin.script.compile([
-      bitcoin.opcodes.OP_DUP,
-      bitcoin.opcodes.OP_HASH160,
-      decoded.hash,
-      bitcoin.opcodes.OP_EQUALVERIFY,
-      bitcoin.opcodes.OP_CHECKSIG,
-    ]);
-
-    psbt.addOutput({
-      script: changeScript,
-      value: Number(change),
-    });
-  }
-
-  // 8. Sign all inputs (Zcash ZIP-243/244 signing required)
-  throw new Error('Zcash transaction signing not yet implemented in client.');
-
-  // 9. Finalize and extract
-  // Unreachable for now
-  // const tx = psbt.extractTransaction();
-  // return tx.toHex();
+  // 3. Build and sign using bitcore-lib-zcash
+  const raw = await buildAndSignInscriptionTx(
+    privateKeyWIF,
+    address,
+    selectedUTXOs,
+    inscriptionData,
+    INSCRIPTION_OUTPUT_VALUE,
+    TRANSACTION_FEE,
+    platformFeeZat,
+    treasuryAddress
+  );
+  return raw;
 }
 
 /**
@@ -246,6 +225,61 @@ export async function inscribe(
   // 3. Return inscription ID (txid + output index)
   const inscriptionId = `${txid}i0`; // Inscription is in first output
 
+  // 4. Log to Convex if configured
+  try {
+    const { getConvexClient } = await import('@/lib/convexClient');
+    const convex = getConvexClient();
+    if (convex) {
+      const { api } = await import('../../convex/_generated/api');
+      // Determine type and optional ZRC-20 fields
+      let type = 'text';
+      let zrc20Tick: string | undefined;
+      let zrc20Op: string | undefined;
+      let zrc20Amount: string | undefined;
+      if (contentType === 'application/json') {
+        try {
+          const parsed = JSON.parse(content);
+          if (parsed?.p === 'zrc-20') {
+            type = 'zrc20';
+            zrc20Tick = parsed.tick?.toString()?.toUpperCase();
+            zrc20Op = parsed.op?.toString();
+            zrc20Amount = parsed.amt?.toString();
+          } else if (parsed?.p === 'zns') {
+            type = 'text';
+          }
+        } catch {}
+      }
+      // Content preview and size
+      const preview = content.slice(0, 200);
+      const size = new Blob([content]).size;
+      // Use configured fees
+      let platformFeeZat = PLATFORM_FEES.INSCRIPTION;
+      try {
+        if (contentType === 'application/json') {
+          const parsed = JSON.parse(content);
+          if (parsed?.p === 'zns' && parsed?.op === 'register') {
+            platformFeeZat = PLATFORM_FEES.NAME_REGISTRATION;
+          }
+        }
+      } catch {}
+      await (convex as any).mutation((api as any).inscriptions.createInscription, {
+        txid,
+        address,
+        contentType,
+        contentPreview: preview,
+        contentSize: size,
+        type,
+        zrc20Tick,
+        zrc20Op,
+        zrc20Amount,
+        platformFeeZat,
+        treasuryAddress: TREASURY_WALLET.address,
+      });
+    }
+  } catch (e) {
+    console.warn('Convex logging failed or not configured:', e);
+  }
+
   return { txid, inscriptionId };
 }
 
@@ -265,12 +299,7 @@ export async function mintZRC20Token(
     amt: amount,
   };
 
-  return inscribe(
-    privateKeyWIF,
-    address,
-    'application/json',
-    JSON.stringify(inscriptionData)
-  );
+  return inscribe(privateKeyWIF, address, 'application/json', JSON.stringify(inscriptionData));
 }
 
 /**
@@ -290,10 +319,5 @@ export async function registerZcashName(
     timestamp: Date.now(),
   };
 
-  return inscribe(
-    privateKeyWIF,
-    address,
-    'application/json',
-    JSON.stringify(inscriptionData)
-  );
+  return inscribe(privateKeyWIF, address, 'application/json', JSON.stringify(inscriptionData));
 }
