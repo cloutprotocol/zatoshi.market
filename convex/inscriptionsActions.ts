@@ -30,6 +30,9 @@ import {
   assembleCommitTxHex,
   buildRevealSighash,
   assembleRevealTxHex,
+  buildSplitSighash,
+  assembleSplitTxHex,
+  utf8,
 } from "./zcashHelpers";
 import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha256";
@@ -66,7 +69,12 @@ export const mintInscriptionAction = action({
 
       // UTXO selection (simple: pick first confirmed >= needed)
       currentStep = "fetching UTXOs";
-      const utxos = await fetchUtxos(args.address);
+      let utxos;
+      try {
+        utxos = await fetchUtxos(args.address);
+      } catch (_) {
+        throw new Error('Unable to check your spendable funds right now. Please try again in a few seconds.');
+      }
 
       currentStep = "selecting UTXO";
       const platformFeeZats = PLATFORM_FEE_ENABLED ? PLATFORM_FEE_ZATS : 0;
@@ -238,7 +246,9 @@ export const splitUtxosAction = action({
   handler: async (ctx, args) => {
     const { wif, address, splitCount, targetAmount, fee } = args;
     const tatumKey = process.env.TATUM_API_KEY || '';
-    const utxos = await fetchUtxos(address);
+    let utxos;
+    try { utxos = await fetchUtxos(address); }
+    catch (_) { throw new Error('Unable to check your spendable funds right now. Please try again in a few seconds.'); }
     const required = splitCount * targetAmount + fee;
     const src = utxos.find(u => u.value >= required);
     if (!src) {
@@ -283,6 +293,89 @@ export const splitUtxosAction = action({
     const nSS = new Uint8Array([0x00]), nSO = new Uint8Array([0x00]), nJS = new Uint8Array([0x00]);
     const raw = concatBytes([ version, vgid, inCount, prev, voutBuf, scriptLen, scriptSig, seq, outCount, outsBuf, lock, exp, valBal, nSS, nSO, nJS ]);
     const txid = await broadcastTransaction(bytesToHex(raw), tatumKey);
+    return { txid };
+  }
+});
+
+// Non-custodial split flow (client signing)
+export const buildUnsignedSplitAction = action({
+  args: {
+    address: v.string(),
+    pubKeyHex: v.string(),
+    splitCount: v.number(),
+    targetAmount: v.number(),
+    fee: v.number(),
+  },
+  handler: async (ctx, args) => {
+    let utxos;
+    try { utxos = await fetchUtxos(args.address); }
+    catch (_) { throw new Error('Unable to check your spendable funds right now. Please try again in a few seconds.'); }
+    const required = args.splitCount * args.targetAmount + args.fee;
+    const src = utxos.find(u => u.value >= required);
+    if (!src) throw new Error(`Not enough spendable funds. Need at least ${required} zats to proceed. Add funds and try again.`);
+    // lock
+    const lock = await ctx.runMutation(internal.utxoLocks.lockUtxo, { txid: src.txid, vout: src.vout, address: args.address });
+    if (!lock.locked) throw new Error('UTXO lock failed; retry later');
+
+    const pkh = addressToPkh(args.address);
+    const outputs: { value: number; scriptPubKey: Uint8Array }[] = [];
+    for (let i=0;i<args.splitCount;i++) outputs.push({ value: args.targetAmount, scriptPubKey: buildP2PKHScript(pkh) });
+    const change = src.value - required;
+    if (change > 546) outputs.push({ value: change, scriptPubKey: buildP2PKHScript(pkh) });
+    const consensusBranchId = await getConsensusBranchId();
+    const sigHash = buildSplitSighash({ utxo: src, address: args.address, outputs, consensusBranchId });
+
+    const contextId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    await ctx.runMutation(internal.txContexts.create, {
+      contextId,
+      status: 'split_prepared',
+      utxoTxid: src.txid,
+      utxoVout: src.vout,
+      utxoValue: src.value,
+      address: args.address,
+      consensusBranchId,
+      inscriptionAmount: 0,
+      fee: args.fee,
+      platformFeeZats: 0,
+      platformTreasuryAddress: undefined,
+      pubKeyHex: args.pubKeyHex,
+      redeemScriptHex: '',
+      p2shScriptHex: '',
+      inscriptionDataHex: bytesToHex(utf8(JSON.stringify({ splitCount: args.splitCount, targetAmount: args.targetAmount }))),
+      contentType: 'split',
+      contentStr: 'split',
+      type: 'split',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      commitTxid: undefined,
+    });
+    return { contextId, splitSigHashHex: bytesToHex(sigHash) };
+  }
+});
+
+export const broadcastSignedSplitAction = action({
+  args: { contextId: v.string(), splitSignatureRawHex: v.string() },
+  handler: async (ctx, args) => {
+    const rec = await ctx.runQuery(internal.txContexts.getByContextId, { contextId: args.contextId });
+    if (!rec) throw new Error('Context not found');
+    if (rec.status !== 'split_prepared') throw new Error(`Invalid context status: ${rec.status}`);
+    const splitParams = JSON.parse(new TextDecoder().decode(hexToBytes(rec.inscriptionDataHex)));
+    const pkh = addressToPkh(rec.address);
+    const outputs: { value: number; scriptPubKey: Uint8Array }[] = [];
+    for (let i=0;i<splitParams.splitCount;i++) outputs.push({ value: splitParams.targetAmount, scriptPubKey: buildP2PKHScript(pkh) });
+    const change = rec.utxoValue - (splitParams.splitCount * splitParams.targetAmount) - rec.fee;
+    if (change > 546) outputs.push({ value: change, scriptPubKey: buildP2PKHScript(pkh) });
+    const txHex = assembleSplitTxHex({
+      utxo: { txid: rec.utxoTxid, vout: rec.utxoVout, value: rec.utxoValue },
+      address: rec.address,
+      pubKey: hexToBytes(rec.pubKeyHex),
+      outputs,
+      signatureRaw64: hexToBytes(args.splitSignatureRawHex),
+      consensusBranchId: rec.consensusBranchId,
+    });
+    const txid = await broadcastTransaction(txHex);
+    await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: rec.utxoTxid, vout: rec.utxoVout });
+    await ctx.runMutation(internal.txContexts.patch, { _id: rec._id, status: 'completed', updatedAt: Date.now() });
     return { txid };
   }
 });

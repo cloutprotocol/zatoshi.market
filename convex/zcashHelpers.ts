@@ -360,3 +360,39 @@ export function assembleRevealTxHex(params: {
   const raw = concatBytes([ version, vgid, inCount, prev, vout, scriptLen, scriptSig, seq, outCount, outBuf, lock, exp, valBal, nSS, nSO, nJS ]);
   return bytesToHex(raw);
 }
+
+// Split UTXOs helpers (client-signing)
+export function buildSplitSighash(params: {
+  utxo: Utxo;
+  address: string;
+  outputs: { value: number; scriptPubKey: Uint8Array }[];
+  consensusBranchId: number;
+}): Uint8Array {
+  const pkh = addressToPkh(params.address);
+  const inputs = [{ txid: params.utxo.txid, vout: params.utxo.vout, sequence: 0xfffffffd, value: params.utxo.value, scriptPubKey: buildP2PKHScript(pkh) }];
+  const outputs = params.outputs;
+  const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId: params.consensusBranchId, lockTime:0, expiryHeight:0, inputs, outputs };
+  return zip243Sighash(txData, 0);
+}
+
+export function assembleSplitTxHex(params: {
+  utxo: Utxo;
+  address: string;
+  pubKey: Uint8Array;
+  outputs: { value: number; scriptPubKey: Uint8Array }[];
+  signatureRaw64: Uint8Array;
+  consensusBranchId: number;
+}): string {
+  const pkh = addressToPkh(params.address);
+  const der = signatureToDER(params.signatureRaw64);
+  const sigWithType = concatBytes([der, new Uint8Array([0x01])]);
+  const version = u32le(0x80000004), vgid = u32le(0x892f2085), inCount = varint(1);
+  const prev = reverseBytes(hexToBytes(params.utxo.txid)), vout = u32le(params.utxo.vout), seq = u32le(0xfffffffd);
+  const scriptSig = concatBytes([ new Uint8Array([sigWithType.length]), sigWithType, new Uint8Array([params.pubKey.length]), params.pubKey ]);
+  const scriptLen = varint(scriptSig.length);
+  const outCount = varint(params.outputs.length);
+  const outsBuf = concatBytes(params.outputs.map(o=>concatBytes([u64le(o.value), varint(o.scriptPubKey.length), o.scriptPubKey])));
+  const lock = u32le(0), exp = u32le(0), valBal = new Uint8Array(8), nSS=new Uint8Array([0x00]), nSO=new Uint8Array([0x00]), nJS=new Uint8Array([0x00]);
+  const raw = concatBytes([ version, vgid, inCount, prev, vout, scriptLen, scriptSig, seq, outCount, outsBuf, lock, exp, valBal, nSS, nSO, nJS ]);
+  return bytesToHex(raw);
+}

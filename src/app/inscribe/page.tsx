@@ -25,6 +25,7 @@ import {
 import { useZecPrice } from '@/hooks/useZecPrice';
 import { FeeBreakdown } from '@/components/FeeBreakdown';
 import { ConfirmTransaction } from '@/components/ConfirmTransaction';
+import { InscriptionHistory } from '@/components/InscriptionHistory';
 
 export default function InscribePage() {
   // Ensure noble-secp has HMAC in browser (for deterministic signing)
@@ -34,7 +35,7 @@ export default function InscribePage() {
   }
   const { wallet, isConnected } = useWallet();
   const { price: zecPrice, loading: priceLoading, error: priceError } = useZecPrice();
-  const [activeTab, setActiveTab] = useState<'names' | 'text' | 'zrc20' | 'utxo'>('names');
+  const [activeTab, setActiveTab] = useState<'names' | 'text' | 'zrc20' | 'utxo' | 'history'>('names');
 
   // Name registration form
   const [nameInput, setNameInput] = useState('');
@@ -51,7 +52,6 @@ export default function InscribePage() {
   const [amount, setAmount] = useState('');
   const [maxSupply, setMaxSupply] = useState('');
   const [mintLimit, setMintLimit] = useState('');
-  const [zrcSubTab, setZrcSubTab] = useState<'mint'|'batch'>('mint');
 
   // Status
   const [loading, setLoading] = useState(false);
@@ -207,30 +207,10 @@ export default function InscribePage() {
   }, []);
 
   const handleSplit = async () => {
-    if (!wallet?.privateKey || !wallet?.address) {
-      setError('Please connect your wallet first');
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    setSplitTxid(null);
-    try {
-      const convex = getConvexClient();
-      if (!convex) throw new Error('Convex client not available');
-      const res = await convex.action(api.inscriptionsActions.splitUtxosAction, {
-        wif: wallet.privateKey,
-        address: wallet.address,
-        splitCount,
-        targetAmount,
-        fee: splitFee,
-      });
-      setSplitTxid(res.txid);
-    } catch (err) {
-      console.error('Split error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to split UTXOs');
-    } finally {
-      setLoading(false);
-    }
+    if (!wallet?.privateKey || !wallet?.address) { setError('Please connect your wallet first'); return; }
+    setConfirmTitle('Confirm UTXO Split');
+    setPendingArgs({ contentType: 'split', inscriptionAmount: 0, fee: splitFee });
+    setConfirmOpen(true);
   };
 
   const runClientSigningDemo = async () => {
@@ -374,6 +354,18 @@ export default function InscribePage() {
               >
                 <div className="text-sm sm:text-base lg:text-lg whitespace-nowrap lg:whitespace-normal">UTXO</div>
                 <div className="text-xs opacity-75 hidden sm:block">UTXO MANAGEMENT</div>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`flex-shrink-0 lg:w-full text-left px-6 py-3 sm:px-6 sm:py-4 rounded-lg font-bold transition-all ${
+                  activeTab === 'history'
+                    ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
+                    : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
+                }`}
+              >
+                <div className="text-sm sm:text-base lg:text-lg whitespace-nowrap lg:whitespace-normal">History</div>
+                <div className="text-xs opacity-75 hidden sm:block">Inscription History</div>
               </button>
             </div>
 
@@ -544,20 +536,15 @@ export default function InscribePage() {
             {/* ZRC-20 TAB */}
             {activeTab === 'zrc20' && (
               <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
-                {/* Subnav + Safety */}
-                <div className="flex items-center justify-between mb-2 sm:mb-3 gap-2">
+                {/* Safety + Fee Status */}
+                <div className="flex items-center justify-end mb-2 sm:mb-3 gap-2">
                   <div className="text-gold-400/70 text-xs flex items-center gap-3 flex-shrink-0">
                     <span>Safety: {safety === 'on' ? <span className="text-green-400">ON</span> : safety === 'off' ? <span className="text-red-400">OFF</span> : '…'}</span>
                     <span>Fee: {(process.env.NEXT_PUBLIC_PLATFORM_FEE_ENABLED || '').toLowerCase()==='true' ? <span className="text-green-400">ON</span> : <span className="text-gold-400/60">OFF</span>} { (process.env.NEXT_PUBLIC_PLATFORM_FEE_ENABLED || '').toLowerCase()==='true' ? `(${(Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_ZATS||'100000')/1e8).toFixed(3)} ZEC)` : '' }</span>
                   </div>
-                  <div className="flex gap-1.5 sm:gap-2 text-xs">
-                    <button onClick={()=>setZrcSubTab('mint')} className={`px-2 py-1 sm:px-3 rounded ${zrcSubTab==='mint'?'bg-gold-500 text-black':'bg-black/40 border border-gold-500/30 text-gold-300'}`}>Mint</button>
-                    <button onClick={()=>setZrcSubTab('batch')} className={`px-2 py-1 sm:px-3 rounded ${zrcSubTab==='batch'?'bg-gold-500 text-black':'bg-black/40 border border-gold-500/30 text-gold-300'}`}>Batch</button>
-                  </div>
                 </div>
 
-                {zrcSubTab === 'mint' && (
-                <>
+
                 <div className="text-center mb-4 sm:mb-6">
                   <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">Mint ZRC-20 Token</h2>
                   <p className="text-gold-400/60 text-xs sm:text-sm lg:text-base">
@@ -651,75 +638,87 @@ export default function InscribePage() {
 
                 <button onClick={handleZRC20Mint} disabled={loading || !isConnected || !tick.trim() || (zrcOp !== 'deploy' && !amount.trim()) || (zrcOp === 'deploy' && (!maxSupply.trim() || !mintLimit.trim()))} className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Submitting...' : (zrcOp === 'deploy' ? 'Deploy Token' : zrcOp === 'transfer' ? 'Inscribe Transfer' : 'Mint ZRC-20')}</button>
 
-                {/* Batch Mint (glassmorphism highlight) */}
-                <div className="mt-6 p-4 sm:p-5 rounded-xl border border-gold-500/30 bg-white/5 backdrop-blur-xl space-y-3">
-                  <div className="text-gold-300 font-semibold">Batch Mint</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-gold-200/80 text-xs mb-1">Count</label>
-                      <input type="number" min={1} max={10} value={batchCount} onChange={e=>setBatchCount(Math.max(1, Math.min(10, parseInt(e.target.value||'0'))))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
-                      <input type="range" min={1} max={10} value={batchCount} onChange={e=>setBatchCount(parseInt(e.target.value))} className="w-full mt-2" />
-                    </div>
-                    <div className="sm:col-span-2 text-xs text-gold-400/70 flex items-end">Batch uses the same ticker/amount as Mint. Use UTXO Tools to prepare funding.</div>
+                {/* Batch Mint - Enhanced liquid glass design */}
+                <div className="mt-8 p-6 sm:p-8 rounded-2xl border-2 border-gold-500/40 bg-gradient-to-br from-gold-500/10 via-transparent to-gold-500/5 backdrop-blur-2xl shadow-xl shadow-gold-500/10 space-y-5">
+                  <div className="text-center">
+                    <h3 className="text-xl sm:text-2xl font-bold text-gold-300 mb-1">Batch Mint</h3>
                   </div>
+
+                  {/* Count Control - Centered */}
+                  <div className="max-w-md mx-auto">
+                    <label className="block text-gold-200/80 text-sm font-medium mb-3 text-center">Count</label>
+                    <div className="flex items-center justify-center mb-4">
+                      <div className="w-28 h-20 bg-black/60 border-2 border-gold-500/40 rounded-lg flex items-center justify-center focus-within:border-gold-500/60 transition-colors">
+                        <input
+                          type="number"
+                          min={1}
+                          max={10}
+                          value={batchCount}
+                          onChange={e=>setBatchCount(Math.max(1, Math.min(10, parseInt(e.target.value||'1'))))}
+                          className="w-full h-full bg-transparent text-4xl font-bold text-gold-300 text-center outline-none tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min={1}
+                      max={10}
+                      value={batchCount}
+                      onChange={e=>setBatchCount(parseInt(e.target.value))}
+                      className="w-full h-3 bg-gradient-to-r from-gold-500/30 via-gold-500/50 to-gold-500/30 border border-gold-500/40 rounded-full appearance-none cursor-pointer shadow-inner [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gradient-to-br [&::-webkit-slider-thumb]:from-gold-400 [&::-webkit-slider-thumb]:to-gold-600 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-gold-300 [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-gold-500/60 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-gradient-to-br [&::-moz-range-thumb]:from-gold-400 [&::-moz-range-thumb]:to-gold-600 [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-gold-300 [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <p className="text-xs sm:text-sm text-gold-400/70 text-center max-w-lg mx-auto">
+                    Batch uses the same ticker/amount as Mint. Use UTXO Tools to prepare funding.
+                  </p>
+
                   {/* Batch Fee Summary */}
-                  <div className="text-xs text-gold-400/80">
+                  <div className="text-sm text-gold-400/90 bg-black/30 rounded-lg p-4 border border-gold-500/20">
                     {(() => {
                       const singleTotal = zrc20Cost.total;
                       const batchTotal = singleTotal * Math.max(1, batchCount);
                       return (
-                        <div>
-                          <div>Single mint est. total: <span className="font-mono text-gold-300">{formatZEC(singleTotal)}</span></div>
-                          <div>Batch est. total: <span className="font-mono text-gold-300">{formatZEC(batchTotal)}</span> ({batchCount} × single)</div>
+                        <div className="space-y-1 text-center">
+                          <div>Single mint est. total: <span className="font-mono text-gold-300 font-semibold">{formatZEC(singleTotal)}</span></div>
+                          <div className="text-base">Batch est. total: <span className="font-mono text-gold-300 font-bold">{formatZEC(batchTotal)}</span> <span className="text-xs opacity-70">({batchCount} × single)</span></div>
                         </div>
                       );
                     })()}
                   </div>
-                  <button onClick={handleBatchMint} disabled={loading || !isConnected || !tick.trim() || !amount.trim()} className="w-full px-4 py-3 bg-black/60 border border-gold-500/40 rounded-lg text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? 'Batch Minting...' : 'Start Batch Mint'}</button>
+
+                  {/* Holographic Button */}
+                  <button
+                    onClick={handleBatchMint}
+                    disabled={loading || !isConnected || !tick.trim() || !amount.trim()}
+                    className="relative w-full px-6 py-4 bg-gradient-to-r from-gold-500 via-yellow-400 to-gold-500 text-black font-bold text-lg rounded-xl transition-all duration-300 shadow-lg shadow-gold-500/30 hover:shadow-2xl hover:shadow-gold-500/60 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-lg border-2 border-gold-400/50 overflow-hidden before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-white/30 before:to-transparent before:-translate-x-full hover:before:translate-x-full before:transition-transform before:duration-700"
+                  >
+                    <span className="relative z-10">{loading ? 'Batch Minting...' : 'Start Batch Mint'}</span>
+                  </button>
+
                   {batchJobId && (
-                    <div className="text-xs text-gold-400/80">Job ID: <span className="font-mono break-all">{batchJobId}</span></div>
+                    <div className="text-xs text-gold-400/80 text-center">Job ID: <span className="font-mono break-all">{batchJobId}</span></div>
                   )}
                   {batchStatus && (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-xs text-gold-300">
+                    <div className="space-y-3 bg-black/40 rounded-lg p-4 border border-gold-500/20">
+                      <div className="flex items-center justify-between text-sm text-gold-300 font-semibold">
                         <span>Status: {batchStatus.status}</span>
                         <span>{batchStatus.completed}/{batchStatus.total}</span>
                       </div>
-                      <div className="w-full h-2 bg-black/60 border border-gold-500/30 rounded">
-                        <div className="h-full bg-gold-500 rounded" style={{ width: `${Math.min(100, (batchStatus.completed / Math.max(1, batchStatus.total)) * 100)}%` }} />
+                      <div className="w-full h-3 bg-black/60 border border-gold-500/30 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-gold-500 to-yellow-400 rounded-full transition-all duration-300" style={{ width: `${Math.min(100, (batchStatus.completed / Math.max(1, batchStatus.total)) * 100)}%` }} />
                       </div>
-                      <div className="space-y-1 text-xs text-gold-300 max-h-40 overflow-auto">
+                      <div className="space-y-1.5 text-xs text-gold-300 max-h-40 overflow-auto">
                         {batchStatus.ids.map((id, idx)=>(
-                          <div key={idx} className="flex items-center gap-2"><span className="opacity-70">{idx+1}.</span> <a className="underline" href={`https://zerdinals.com/zerdinals/${id}`} target="_blank" rel="noreferrer">{id}</a></div>
+                          <div key={idx} className="flex items-center gap-2 hover:bg-gold-500/10 rounded px-2 py-1"><span className="opacity-70 font-mono">{idx+1}.</span> <a className="underline flex-1 truncate" href={`https://zerdinals.com/zerdinals/${id}`} target="_blank" rel="noreferrer">{id}</a></div>
                         ))}
                       </div>
                     </div>
                   )}
                 </div>
-
-                </>
-                )}
               </div>
             )}
-
-            {/* CLIENT-SIGNING DEMO */}
-            <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
-              <button onClick={()=>setDemoOpen(!demoOpen)} className="w-full px-4 py-2 bg-black/40 border border-gold-500/30 rounded hover:border-gold-500/50 text-left">
-                <span className="font-bold">Client-Signing Demo</span> <span className="text-xs text-gold-400/70">(non-custodial 3-step flow)</span>
-              </button>
-              {demoOpen && (
-                <div className="p-3 border border-gold-500/20 rounded bg-black/30">
-                  <label className="block text-gold-200/80 text-xs mb-2">Demo Content</label>
-                  <input value={demoContent} onChange={e=>setDemoContent(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-sm" />
-                  <div className="mt-3 flex gap-2">
-                    <button onClick={runClientSigningDemo} disabled={demoRunning || !isConnected} className="px-4 py-2 bg-gold-500 text-black font-bold rounded disabled:opacity-50">{demoRunning ? 'Running…' : 'Run Secure Mint'}</button>
-                  </div>
-                  {demoLog.length > 0 && (
-                    <pre className="mt-3 text-xs text-gold-300/90 bg-black/60 border border-gold-500/20 rounded p-3 overflow-auto max-h-48">{demoLog.join('\n')}</pre>
-                  )}
-                </div>
-              )}
-            </div>
 
             {/* UTXO TAB */}
             {activeTab === 'utxo' && (
@@ -727,7 +726,7 @@ export default function InscribePage() {
                 <div className="text-center mb-4 sm:mb-6">
                   <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">UTXO Management</h2>
                   <p className="text-gold-400/60 text-xs sm:text-sm lg:text-base">
-                    Split larger UTXOs into smaller ones to prepare funding for batch operations. This does not create inscriptions.
+                    Split larger UTXOs into smaller ones to prepare funding for batch operations
                   </p>
                 </div>
 
@@ -751,6 +750,28 @@ export default function InscribePage() {
                     {splitTxid && (<div className="text-xs text-gold-400/80">Split TXID: <span className="font-mono break-all">{splitTxid}</span></div>)}
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* HISTORY TAB */}
+            {activeTab === 'history' && (
+              <div className="max-w-5xl mx-auto">
+                <div className="text-center mb-4 sm:mb-6">
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">Inscription History</h2>
+                  <p className="text-gold-400/60 text-xs sm:text-sm lg:text-base">
+                    Audit trail of your inscriptions on Zcash
+                  </p>
+                </div>
+
+                {isConnected && wallet?.address ? (
+                  <InscriptionHistory address={wallet.address} />
+                ) : (
+                  <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                    <p className="text-yellow-400 text-sm text-center">
+                      ⚠️ Please connect your wallet to view history
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -803,6 +824,7 @@ export default function InscribePage() {
                 </div>
               </div>
             )}
+
             </div>
           </div>
         </div>
@@ -815,9 +837,9 @@ export default function InscribePage() {
           isOpen={confirmOpen}
           title={confirmTitle}
           items={[
-            { label: 'Inscription output', valueZats: pendingArgs.inscriptionAmount },
+            ...(pendingArgs.contentType === 'split' ? [] : [{ label: 'Inscription output', valueZats: pendingArgs.inscriptionAmount } as any]),
             { label: 'Network fee', valueZats: pendingArgs.fee },
-            { label: 'Platform fee', valueZats: Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_ZATS || '100000'), hidden: (process.env.NEXT_PUBLIC_PLATFORM_FEE_ENABLED || '').toLowerCase() !== 'true' },
+            ...(pendingArgs.contentType === 'split' ? [] : [{ label: 'Platform fee', valueZats: Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_ZATS || '100000'), hidden: (process.env.NEXT_PUBLIC_PLATFORM_FEE_ENABLED || '').toLowerCase() !== 'true' } as any]),
           ]}
           onCancel={()=>setConfirmOpen(false)}
           onConfirm={async ()=>{
@@ -833,14 +855,31 @@ export default function InscribePage() {
                 const raw = (sig as any).toCompactRawBytes ? (sig as any).toCompactRawBytes() : (sig as Uint8Array);
                 return Array.from(raw).map(b=>b.toString(16).padStart(2,'0')).join('');
               };
-              const { revealTxid, inscriptionId } = await safeMintInscription(
-                { address: wallet.address, pubKeyHex, ...pendingArgs },
-                walletSigner
-              );
-              setResult({ txid: revealTxid, inscriptionId });
-              if (pendingArgs.type === 'name') setNameInput('');
-              if (pendingArgs.type === 'text' || pendingArgs.type === 'json') setTextContent('');
-              if (pendingArgs.type?.startsWith('zrc20')) { setTick(''); setAmount(''); setMaxSupply(''); setMintLimit(''); }
+              if (pendingArgs.contentType === 'split') {
+                const convex = getConvexClient(); if (!convex) throw new Error('Convex client not available');
+                const step1 = await convex.action(api.inscriptionsActions.buildUnsignedSplitAction, {
+                  address: wallet.address,
+                  pubKeyHex,
+                  splitCount,
+                  targetAmount,
+                  fee: splitFee,
+                } as any);
+                const splitSignatureRawHex = await walletSigner(step1.splitSigHashHex);
+                const res = await convex.action(api.inscriptionsActions.broadcastSignedSplitAction, {
+                  contextId: step1.contextId,
+                  splitSignatureRawHex,
+                });
+                setSplitTxid(res.txid);
+              } else {
+                const { revealTxid, inscriptionId } = await safeMintInscription(
+                  { address: wallet.address, pubKeyHex, ...pendingArgs },
+                  walletSigner
+                );
+                setResult({ txid: revealTxid, inscriptionId });
+                if (pendingArgs.type === 'name') setNameInput('');
+                if (pendingArgs.type === 'text' || pendingArgs.type === 'json') setTextContent('');
+                if (pendingArgs.type?.startsWith('zrc20')) { setTick(''); setAmount(''); setMaxSupply(''); setMintLimit(''); }
+              }
             } catch (e:any) {
               setError(e?.message || String(e));
             } finally { setLoading(false); }
