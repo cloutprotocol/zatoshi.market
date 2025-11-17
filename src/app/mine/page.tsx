@@ -49,9 +49,9 @@ export default function MinePage() {
                 {/* Step 1: ZMAP */}
                 <div className="flex flex-col items-center">
                   <div className="w-20 h-20 bg-gold-500/20 border-2 border-gold-500 rounded-lg flex items-center justify-center mb-2">
-                    <span className="text-4xl font-bold text-gold-400">Z</span>
+                    <span className="text-xl font-bold text-gold-400">ZMAP</span>
                   </div>
-                  <span className="text-xs text-gold-300 font-bold">INSCRIBE ZMAP</span>
+                  <span className="text-sm text-gold-300 font-bold">INSCRIBE ZMAP</span>
                 </div>
 
                 {/* Arrow */}
