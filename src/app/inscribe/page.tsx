@@ -163,11 +163,11 @@ export default function InscribePage() {
   const zrc20Cost = calculateTotalCost(PLATFORM_FEES.INSCRIPTION);
 
   return (
-    <main className="min-h-screen bg-black text-gold-300 pt-20 pb-8">
-      <div className="container mx-auto px-4 sm:px-6 mt-8">
-        <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
+    <main className="h-screen bg-black text-gold-300 pt-20 pb-4 overflow-hidden">
+      <div className="container mx-auto px-4 sm:px-6 h-full flex flex-col">
+        <div className="flex flex-col lg:flex-row gap-4 h-full overflow-hidden">
           {/* Left Sidebar - Tabs */}
-          <div className="lg:w-64 flex-shrink-0">
+          <div className="lg:w-56 flex-shrink-0 flex flex-col">
             {/* Mobile: Horizontal Scrolling Tabs */}
             <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0 -mx-4 px-4 lg:mx-0 lg:px-0">
               <button
