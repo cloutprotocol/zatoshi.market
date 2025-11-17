@@ -22,7 +22,6 @@ import {
   isValidZcashName,
   zatoshisToZEC
 } from '@/config/fees';
-import { useZecPrice } from '@/hooks/useZecPrice';
 import { FeeBreakdown } from '@/components/FeeBreakdown';
 import { ConfirmTransaction } from '@/components/ConfirmTransaction';
 import { InscriptionHistory } from '@/components/InscriptionHistory';
@@ -34,7 +33,6 @@ export default function InscribePage() {
       hmac(sha256, key, (secp as any).etc.concatBytes(...msgs));
   }
   const { wallet, isConnected } = useWallet();
-  const { price: zecPrice, loading: priceLoading, error: priceError } = useZecPrice();
   const [activeTab, setActiveTab] = useState<'names' | 'text' | 'zrc20' | 'utxo' | 'history'>('names');
 
   // Name registration form
@@ -416,7 +414,7 @@ export default function InscribePage() {
                           setNameExtension(e.target.value as 'zec' | 'zcash');
                           validateName(nameInput);
                         }}
-                        className="bg-black/60 border-t sm:border-t-0 sm:border-l border-gold-500/30 px-4 py-3 sm:px-6 sm:py-4 text-lg sm:text-xl font-mono text-gold-300 outline-none cursor-pointer"
+                        className="bg-black/60 border-t sm:border-t-0 sm:border-l border-gold-500/30 pl-4 pr-10 py-3 sm:pl-6 sm:pr-12 sm:py-4 text-lg sm:text-xl font-mono text-gold-300 outline-none cursor-pointer"
                         disabled={loading}
                       >
                         <option value="zec">.zec</option>
@@ -456,9 +454,6 @@ export default function InscribePage() {
                     networkFee={nameCost.networkFee}
                     inscriptionOutput={nameCost.inscriptionOutput}
                     total={nameCost.total}
-                    zecPrice={zecPrice}
-                    priceLoading={priceLoading}
-                    priceError={priceError}
                   />
                 </div>
 
@@ -487,7 +482,7 @@ export default function InscribePage() {
                   <select
                     value={contentType}
                     onChange={(e) => setContentType(e.target.value)}
-                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-4 py-3 text-gold-300 outline-none focus:border-gold-500/50"
+                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg pl-4 pr-10 py-3 text-gold-300 outline-none focus:border-gold-500/50"
                     disabled={loading}
                   >
                     <option value="text/plain">Text (text/plain)</option>
@@ -518,9 +513,6 @@ export default function InscribePage() {
                   networkFee={textCost.networkFee}
                   inscriptionOutput={textCost.inscriptionOutput}
                   total={textCost.total}
-                  zecPrice={zecPrice}
-                  priceLoading={priceLoading}
-                  priceError={priceError}
                 />
 
                 <button
@@ -572,7 +564,7 @@ export default function InscribePage() {
                   <select
                     value={zrcOp}
                     onChange={(e)=>setZrcOp(e.target.value as any)}
-                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50"
+                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg pl-3 pr-10 py-2 sm:pl-4 sm:pr-10 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50"
                     disabled={loading}
                   >
                     <option value="mint">Mint</option>
@@ -633,7 +625,6 @@ export default function InscribePage() {
                   networkFee={zrc20Cost.networkFee}
                   inscriptionOutput={zrc20Cost.inscriptionOutput}
                   total={zrc20Cost.total}
-                  zecPrice={zecPrice}
                 />
 
                 <button onClick={handleZRC20Mint} disabled={loading || !isConnected || !tick.trim() || (zrcOp !== 'deploy' && !amount.trim()) || (zrcOp === 'deploy' && (!maxSupply.trim() || !mintLimit.trim()))} className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Submitting...' : (zrcOp === 'deploy' ? 'Deploy Token' : zrcOp === 'transfer' ? 'Inscribe Transfer' : 'Mint ZRC-20')}</button>
@@ -795,7 +786,16 @@ export default function InscribePage() {
 
             {/* Success Display */}
             {result && (
-              <div className="max-w-2xl m-auto mt-6 p-4 sm:p-6 bg-gold-500/10 border border-gold-500/30 rounded-lg">
+              <div className="max-w-2xl m-auto mt-6 p-4 sm:p-6 bg-gold-500/10 border border-gold-500/30 rounded-lg relative">
+                <button
+                  onClick={() => setResult(null)}
+                  className="absolute top-3 right-3 text-gold-400/60 hover:text-gold-300 transition-colors"
+                  aria-label="Close"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
                 <h3 className="text-gold-300 font-bold mb-4 text-base sm:text-lg">✓ Success!</h3>
                 <div className="space-y-3">
                   <div>
