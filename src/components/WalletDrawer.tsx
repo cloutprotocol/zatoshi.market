@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
 import { generateWallet, importFromMnemonic, importFromPrivateKey } from '@/lib/wallet';
 import { zcashRPC } from '@/services/zcash';
+import { sendZEC } from '@/services/transaction';
 import QRCode from 'qrcode';
+import { calculateZRC20Balances, formatZRC20Amount, type ZRC20Token } from '@/utils/zrc20';
 
 interface WalletDrawerProps {
   isOpen: boolean;
@@ -23,13 +25,20 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   const [showExport, setShowExport] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [sendForm, setSendForm] = useState({ to: '', amount: '' });
+  const [sendingTx, setSendingTx] = useState(false);
   const [dragStart, setDragStart] = useState(0);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [inscriptions, setInscriptions] = useState<any[]>([]);
+  const [loadingInscriptions, setLoadingInscriptions] = useState(false);
+  const [inscriptionContents, setInscriptionContents] = useState<Record<string, string>>({});
+  const [zrc20Tokens, setZrc20Tokens] = useState<ZRC20Token[]>([]);
 
   const fetchBalance = useCallback(async () => {
     if (!wallet?.address) return;
+    console.log('📊 Fetching balance for:', wallet.address);
     const bal = await zcashRPC.getBalance(wallet.address);
+    console.log('📊 Balance:', bal);
     setBalance(bal);
   }, [wallet?.address]);
 
@@ -37,6 +46,48 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
     const price = await zcashRPC.getPrice();
     setUsdPrice(price);
   }, []);
+
+  const fetchInscriptions = useCallback(async () => {
+    if (!wallet?.address) return;
+    setLoadingInscriptions(true);
+    console.log('🎨 Fetching inscriptions for:', wallet.address);
+    try {
+      const data = await zcashRPC.getInscriptions(wallet.address);
+      const inscriptionList = data.inscriptions || [];
+      console.log(`🎨 Found ${inscriptionList.length} inscriptions`);
+      setInscriptions(inscriptionList);
+
+      // Fetch content for each inscription (limit to first 20 to avoid too many requests)
+      const contentsToFetch = inscriptionList.slice(0, 20);
+      const contents: Record<string, string> = {};
+
+      await Promise.all(
+        contentsToFetch.map(async (insc) => {
+          try {
+            const response = await fetch(`/api/zcash/inscription-content/${insc.id}`);
+            if (response.ok) {
+              contents[insc.id] = await response.text();
+            }
+          } catch (err) {
+            console.error(`Failed to fetch content for ${insc.id}:`, err);
+          }
+        })
+      );
+
+      setInscriptionContents(contents);
+
+      // Calculate ZRC-20 balances from inscriptions
+      const tokens = calculateZRC20Balances(inscriptionList, contents);
+      setZrc20Tokens(tokens);
+      console.log(`💰 Found ${tokens.length} ZRC-20 tokens`);
+    } catch (error) {
+      console.error('Failed to fetch inscriptions:', error);
+      setInscriptions([]);
+      setZrc20Tokens([]);
+    } finally {
+      setLoadingInscriptions(false);
+    }
+  }, [wallet?.address]);
 
   // Lock body scroll when drawer is open (mobile only)
   useEffect(() => {
@@ -57,19 +108,21 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
     }
   }, [isOpen]);
 
-  // Auto-refresh balance and price when drawer is open
+  // Auto-refresh balance, price, and inscriptions when drawer is open
   // Polling interval matches balance cache duration (60s) to minimize API calls
   useEffect(() => {
     if (wallet?.address && isOpen) {
       fetchBalance();
       fetchPrice();
+      fetchInscriptions();
       const interval = setInterval(() => {
         fetchBalance();
         fetchPrice();
+        // Don't auto-refresh inscriptions (they don't change often)
       }, 60000); // 60 seconds - matches balance API cache
       return () => clearInterval(interval);
     }
-  }, [wallet?.address, isOpen, fetchBalance, fetchPrice]);
+  }, [wallet?.address, isOpen, fetchBalance, fetchPrice, fetchInscriptions]);
 
   const handleCreateWallet = async () => {
     setLoading(true);
@@ -94,27 +147,27 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   };
 
   const handleImportWallet = async () => {
-    const input = prompt('Enter your 12-word mnemonic OR WIF private key:');
+    const input = prompt('Enter your private key:');
     if (!input) return;
     const value = input.trim();
     try {
       setLoading(true);
-      let imported;
-      if (value.split(/\s+/).length >= 12) {
-        imported = await importFromMnemonic(value);
-      } else {
-        imported = await importFromPrivateKey(value);
-      }
+      console.log('🔑 Attempting private key import...');
+      const imported = await importFromPrivateKey(value);
+      console.log('✅ Private key import successful:', imported.address);
+
       const password = prompt('Set a password to encrypt your wallet (required):');
       if (!password || password.length < 8) {
         alert('Password required (min 8 chars). Wallet not saved.');
         return;
       }
+
       await saveEncrypted(imported as any, password);
       connectWallet(imported as any);
-      alert(`Wallet imported! ${imported.address}`);
+      alert(`Wallet imported successfully! Address: ${imported.address}`);
     } catch (error) {
-      alert(`Failed: ${error instanceof Error ? error.message : 'Invalid input'}`);
+      console.error('❌ Import error:', error);
+      alert('Invalid private key. Please enter a valid Zcash private key (starts with L or K).');
     } finally {
       setLoading(false);
     }
@@ -172,6 +225,56 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
     if (confirm('Disconnect wallet?')) {
       disconnectWallet();
       onClose();
+    }
+  };
+
+  const handleSend = async () => {
+    if (!wallet?.address || !wallet.privateKey) {
+      alert('Wallet not available');
+      return;
+    }
+
+    const toAddress = sendForm.to.trim();
+    const amount = parseFloat(sendForm.amount);
+
+    // Validation
+    if (!toAddress || !toAddress.startsWith('t1')) {
+      alert('Invalid recipient address. Must be a Zcash t-address (starts with t1)');
+      return;
+    }
+
+    if (isNaN(amount) || amount <= 0) {
+      alert('Invalid amount. Must be greater than 0');
+      return;
+    }
+
+    if (amount > totalBalance) {
+      alert(`Insufficient balance. You have ${totalBalance.toFixed(4)} ZEC`);
+      return;
+    }
+
+    // Confirm send
+    const confirmed = confirm(
+      `Send ${amount} ZEC to:\n${toAddress}\n\nThis action cannot be undone. Continue?`
+    );
+    if (!confirmed) return;
+
+    setSendingTx(true);
+    try {
+      const result = await sendZEC(wallet.address, toAddress, amount, wallet.privateKey);
+      alert(
+        `✅ Transaction sent!\n\nTXID: ${result.txid}\n\nAmount: ${result.sentAmount} ZEC\nFee: ${result.fee} ZEC\n\nView on explorer: https://zerdinals.com/tx/${result.txid}`
+      );
+      setSendForm({ to: '', amount: '' });
+      setShowSend(false);
+      // Refresh balance
+      fetchBalance();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      alert(`❌ Transaction failed:\n${msg}`);
+      console.error('Send transaction error:', error);
+    } finally {
+      setSendingTx(false);
     }
   };
 
@@ -322,8 +425,9 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                   Receive
                 </button>
                 <button
-                  onClick={() => setShowSend(true)}
-                  className="px-6 py-3 bg-gold-400 text-black font-bold rounded hover:bg-gold-300 transition-all"
+                  disabled
+                  className="px-6 py-3 bg-gold-400/30 text-black/50 font-bold rounded cursor-not-allowed opacity-50"
+                  title="Send feature temporarily disabled"
                 >
                   Send
                 </button>
@@ -351,23 +455,123 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
 
               {/* Tab Content */}
               {activeTab === 'zrc20' && (
-                <div className="p-4 bg-black/40 rounded">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gold-500 rounded-full flex items-center justify-center text-black font-bold">
-                      Z
+                <div className="space-y-2">
+                  {/* Platform token ZORE always at top */}
+                  <div className="p-4 bg-black/40 rounded border border-gold-500/30">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gold-500 rounded-full flex items-center justify-center text-black font-bold">
+                        Z
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-gold-300 font-bold">ZORE</div>
+                        <div className="text-gold-200/60 text-sm">Platform Token</div>
+                      </div>
+                      <div className="text-gold-400 font-bold">0</div>
                     </div>
-                    <div className="flex-1">
-                      <div className="text-gold-300 font-bold">ZORE</div>
-                      <div className="text-gold-200/60 text-sm">Available: 0</div>
-                    </div>
-                    <div className="text-gold-400 font-bold">0</div>
                   </div>
+
+                  {/* Other ZRC-20 tokens */}
+                  {loadingInscriptions ? (
+                    <div className="p-4 text-center text-gold-200/60 text-sm">
+                      Loading tokens...
+                    </div>
+                  ) : zrc20Tokens.length > 0 ? (
+                    zrc20Tokens.map((token) => (
+                      <div key={token.tick} className="p-4 bg-black/40 rounded hover:bg-black/50 transition-all">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                            {token.tick.slice(0, 2)}
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-gold-300 font-bold">{token.tick}</div>
+                            <div className="text-gold-200/60 text-xs">
+                              {token.transferableCount} transfer inscription{token.transferableCount !== 1 ? 's' : ''}
+                            </div>
+                          </div>
+                          <div className="text-gold-400 font-bold">{formatZRC20Amount(token.balance)}</div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-4 text-center text-gold-200/60 text-sm">
+                      No ZRC-20 tokens
+                    </div>
+                  )}
                 </div>
               )}
 
               {activeTab === 'inscriptions' && (
-                <div className="p-8 text-center text-gold-200/60 text-sm">
-                  No inscriptions
+                <div>
+                  {loadingInscriptions ? (
+                    <div className="p-8 text-center text-gold-200/60 text-sm">
+                      Loading inscriptions...
+                    </div>
+                  ) : inscriptions.length === 0 ? (
+                    <div className="p-8 text-center text-gold-200/60 text-sm">
+                      No inscriptions
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-[50vh] overflow-y-auto">
+                      {inscriptions.map((insc) => {
+                        // Get content from fetched data
+                        const content = inscriptionContents[insc.id] || '';
+                        let contentPreview = '';
+                        let isJSON = false;
+
+                        if (content) {
+                          if (insc.contentType === 'application/json' || insc.contentType?.includes('json')) {
+                            isJSON = true;
+                            try {
+                              const parsed = JSON.parse(content);
+                              contentPreview = JSON.stringify(parsed, null, 2);
+                            } catch {
+                              contentPreview = content;
+                            }
+                          } else if (insc.contentType?.includes('text')) {
+                            contentPreview = content;
+                          } else {
+                            contentPreview = content;
+                          }
+                        } else {
+                          contentPreview = 'Loading...';
+                        }
+
+                        return (
+                          <div
+                            key={insc.id}
+                            className="bg-black/40 border border-gold-500/20 rounded p-3 hover:border-gold-500/40 transition-all cursor-pointer"
+                            onClick={() => window.open(`https://zerdinals.com/zerdinals/${insc.inscriptionNumber}`, '_blank')}
+                          >
+                            {/* Content Preview */}
+                            <div className="bg-black/60 rounded p-3 mb-2 min-h-[80px] max-h-[100px] overflow-hidden">
+                              <pre className="text-gold-300 text-xs font-mono whitespace-pre-wrap break-all line-clamp-4">
+                                {contentPreview}
+                              </pre>
+                            </div>
+
+                            {/* Footer */}
+                            <div className="flex items-center justify-between text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="text-gold-400/60">
+                                  #{insc.inscriptionNumber || '?'}
+                                </span>
+                                <span className="text-gold-400/40 font-mono">
+                                  {insc.id?.slice(0, 8)}...{insc.id?.slice(-8)}
+                                </span>
+                              </div>
+                              <div className={`px-2 py-1 rounded text-[10px] font-bold ${
+                                isJSON
+                                  ? 'bg-blue-500/20 text-blue-300'
+                                  : 'bg-gold-500/20 text-gold-300'
+                              }`}>
+                                {isJSON ? 'JSON' : 'TXT'}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -466,11 +670,6 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
           <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded-lg max-w-md w-full p-8">
             <h3 className="text-2xl font-bold text-gold-300 mb-6">SEND ZEC</h3>
-            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-4 mb-6">
-              <p className="text-sm text-yellow-400">
-                Transaction broadcasting requires RPC endpoint. View-only for now.
-              </p>
-            </div>
             <div className="space-y-4 mb-6">
               <div>
                 <label className="block text-gold-200/80 text-sm mb-2">To Address</label>
@@ -478,7 +677,8 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                   type="text"
                   value={sendForm.to}
                   onChange={(e) => setSendForm({ ...sendForm, to: e.target.value })}
-                  className="w-full bg-black/40 border border-gold-500/30 rounded px-4 py-3 text-gold-300 font-mono text-sm"
+                  disabled={sendingTx}
+                  className="w-full bg-black/40 border border-gold-500/30 rounded px-4 py-3 text-gold-300 font-mono text-sm disabled:opacity-50"
                   placeholder="t1..."
                 />
               </div>
@@ -489,21 +689,27 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                   step="0.0001"
                   value={sendForm.amount}
                   onChange={(e) => setSendForm({ ...sendForm, amount: e.target.value })}
-                  className="w-full bg-black/40 border border-gold-500/30 rounded px-4 py-3 text-gold-300"
+                  disabled={sendingTx}
+                  className="w-full bg-black/40 border border-gold-500/30 rounded px-4 py-3 text-gold-300 disabled:opacity-50"
                   placeholder="0.0000"
                 />
+              </div>
+              <div className="text-sm text-gold-200/60">
+                Available: {totalBalance.toFixed(4)} ZEC
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <button
-                disabled
-                className="px-6 py-3 bg-gold-500/50 text-black font-bold rounded cursor-not-allowed opacity-50"
+                onClick={handleSend}
+                disabled={sendingTx || !sendForm.to || !sendForm.amount}
+                className="px-6 py-3 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                SEND
+                {sendingTx ? 'SENDING...' : 'SEND'}
               </button>
               <button
                 onClick={() => setShowSend(false)}
-                className="px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded border border-gold-500/30 hover:bg-gold-500/30 transition-all"
+                disabled={sendingTx}
+                className="px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded border border-gold-500/30 hover:bg-gold-500/30 transition-all disabled:opacity-50"
               >
                 CANCEL
               </button>

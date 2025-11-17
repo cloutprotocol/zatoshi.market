@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
 import { generateWallet, importFromMnemonic, importFromPrivateKey } from '@/lib/wallet';
 import { zcashRPC } from '@/services/zcash';
+import { sendZEC } from '@/services/transaction';
 import QRCode from 'qrcode';
 
 export default function WalletPage() {
@@ -18,6 +19,7 @@ export default function WalletPage() {
   const [showExport, setShowExport] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [sendForm, setSendForm] = useState({ to: '', amount: '' });
+  const [isSending, setIsSending] = useState(false);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -72,28 +74,27 @@ export default function WalletPage() {
   };
 
   const handleImportWallet = async () => {
-    const input = prompt('Enter your 12-word mnemonic OR WIF private key:');
+    const input = prompt('Enter your private key:');
     if (!input) return;
     const value = input.trim();
     try {
       setLoading(true);
-      let imported;
-      if (value.split(/\s+/).length >= 12) {
-        imported = await importFromMnemonic(value);
-      } else {
-        imported = await importFromPrivateKey(value);
-      }
+      console.log('🔑 Attempting private key import...');
+      const imported = await importFromPrivateKey(value);
+      console.log('✅ Private key import successful:', imported.address);
+
       const password = prompt('Set a password to encrypt your wallet (required):');
       if (!password || password.length < 8) {
         alert('Password required (min 8 chars). Wallet not saved.');
         return;
       }
+
       await saveEncrypted(imported as any, password);
       connectWallet(imported as any);
       alert(`Wallet imported successfully! Address: ${imported.address}`);
     } catch (error) {
-      console.error('Import error:', error);
-      alert(`Failed to import wallet: ${error instanceof Error ? error.message : 'Invalid input'}`);
+      console.error('❌ Import error:', error);
+      alert('Invalid private key. Please enter a valid Zcash private key (starts with L or K).');
     } finally {
       setLoading(false);
     }
@@ -146,6 +147,74 @@ export default function WalletPage() {
       navigator.clipboard.writeText(wallet.privateKey);
       alert('Private key copied to clipboard! Keep it safe and never share it.');
       setShowExport(false);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!wallet?.address || !wallet?.privateKey) {
+      alert('Wallet not available');
+      return;
+    }
+
+    // Validate inputs
+    if (!sendForm.to || !sendForm.amount) {
+      alert('Please enter recipient address and amount');
+      return;
+    }
+
+    const amount = parseFloat(sendForm.amount);
+    if (isNaN(amount) || amount <= 0) {
+      alert('Please enter a valid amount');
+      return;
+    }
+
+    if (amount > totalBalance) {
+      alert(`Insufficient balance. You have ${totalBalance.toFixed(8)} ZEC`);
+      return;
+    }
+
+    // Confirm transaction
+    const confirmed = confirm(
+      `Send ${amount} ZEC to ${sendForm.to}?\n\n` +
+      `This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setIsSending(true);
+
+    try {
+      const result = await sendZEC(
+        wallet.address,
+        sendForm.to,
+        amount,
+        wallet.privateKey
+      );
+
+      alert(
+        `✅ Transaction sent successfully!\n\n` +
+        `TXID: ${result.txid}\n` +
+        `Amount: ${result.sentAmount} ZEC\n` +
+        `Fee: ${result.fee} ZEC\n\n` +
+        `View on explorer: https://blockchair.com/zcash/transaction/${result.txid}`
+      );
+
+      // Reset form and close modal
+      setSendForm({ to: '', amount: '' });
+      setShowSend(false);
+
+      // Refresh balance after a short delay
+      setTimeout(() => {
+        fetchBalance();
+      }, 2000);
+
+    } catch (error) {
+      console.error('Send error:', error);
+      alert(
+        `❌ Failed to send transaction:\n\n${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -269,8 +338,9 @@ export default function WalletPage() {
                 Receive
               </button>
               <button
-                onClick={() => setShowSend(true)}
-                className="px-8 py-3 bg-gold-400 text-black font-bold rounded-lg hover:bg-gold-300 transition-all"
+                disabled
+                className="px-8 py-3 bg-gold-400/30 text-black/50 font-bold rounded-lg cursor-not-allowed opacity-50"
+                title="Send feature temporarily disabled"
               >
                 Send
               </button>
@@ -412,11 +482,6 @@ export default function WalletPage() {
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-6">
           <div className="glass-modal max-w-md w-full p-8">
             <h3 className="text-2xl font-bold text-gold-300 mb-6">SEND ZEC</h3>
-            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-4 mb-6">
-              <p className="text-sm text-yellow-400">
-                Transaction broadcasting requires a dedicated RPC endpoint. This feature is currently view-only.
-              </p>
-            </div>
             <div className="space-y-4 mb-6">
               <div>
                 <label className="block text-gold-200/80 text-sm mb-2">To Address</label>
@@ -424,32 +489,56 @@ export default function WalletPage() {
                   type="text"
                   value={sendForm.to}
                   onChange={(e) => setSendForm({ ...sendForm, to: e.target.value })}
-                  className="w-full bg-black/40 border border-gold-500/30 rounded px-4 py-3 text-gold-300 font-mono text-sm"
+                  disabled={isSending}
+                  className="w-full bg-black/40 border border-gold-500/30 rounded px-4 py-3 text-gold-300 font-mono text-sm disabled:opacity-50"
                   placeholder="t1..."
                 />
               </div>
               <div>
-                <label className="block text-gold-200/80 text-sm mb-2">Amount (ZEC)</label>
+                <label className="block text-gold-200/80 text-sm mb-2">
+                  Amount (ZEC)
+                  <span className="float-right text-gold-400/60 text-xs">
+                    Available: {totalBalance.toFixed(8)} ZEC
+                  </span>
+                </label>
                 <input
                   type="number"
                   step="0.0001"
                   value={sendForm.amount}
                   onChange={(e) => setSendForm({ ...sendForm, amount: e.target.value })}
-                  className="w-full bg-black/40 border border-gold-500/30 rounded px-4 py-3 text-gold-300"
+                  disabled={isSending}
+                  className="w-full bg-black/40 border border-gold-500/30 rounded px-4 py-3 text-gold-300 disabled:opacity-50"
                   placeholder="0.0000"
                 />
+                <button
+                  onClick={() => setSendForm({ ...sendForm, amount: totalBalance.toString() })}
+                  disabled={isSending}
+                  className="mt-2 text-xs text-gold-400 hover:text-gold-300 disabled:opacity-50"
+                >
+                  Send Max
+                </button>
               </div>
+            </div>
+            <div className="bg-gold-500/10 border border-gold-500/30 rounded p-3 mb-6">
+              <p className="text-xs text-gold-300">
+                Network fees will be deducted automatically. Transaction cannot be reversed once broadcast.
+              </p>
             </div>
             <div className="flex gap-4">
               <button
-                disabled
-                className="flex-1 px-6 py-3 bg-gold-500/50 text-black font-bold rounded-lg cursor-not-allowed opacity-50"
+                onClick={handleSend}
+                disabled={isSending || !sendForm.to || !sendForm.amount}
+                className="flex-1 px-6 py-3 bg-gold-500 text-black font-bold rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                SEND
+                {isSending ? 'SENDING...' : 'SEND'}
               </button>
               <button
-                onClick={() => setShowSend(false)}
-                className="flex-1 px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded-lg border border-gold-500/30 hover:bg-gold-500/30 transition-all"
+                onClick={() => {
+                  setSendForm({ to: '', amount: '' });
+                  setShowSend(false);
+                }}
+                disabled={isSending}
+                className="flex-1 px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded-lg border border-gold-500/30 hover:bg-gold-500/30 transition-all disabled:opacity-50"
               >
                 CANCEL
               </button>

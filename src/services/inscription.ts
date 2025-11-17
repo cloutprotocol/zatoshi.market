@@ -7,6 +7,7 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import { PLATFORM_FEES, TREASURY_WALLET } from '@/config/fees';
 import { buildAndSignInscriptionTx } from '@/services/zcashTx';
+import { getSafeUTXOs } from '@/utils/utxoProtection';
 
 // Note: Zcash signing (ZIP-243/244) requires a dedicated signer.
 // We do not use ECPair here to avoid tiny-secp256k1 interface issues in browser.
@@ -155,15 +156,19 @@ export async function createInscriptionTransaction(
   const REQUIRED_AMOUNT = INSCRIPTION_OUTPUT_VALUE + TRANSACTION_FEE + platformFeeZat;
 
   // 1. Get UTXOs
-  const utxos = await getUTXOs(address);
-  if (utxos.length === 0) {
+  const allUtxos = await getUTXOs(address);
+  if (allUtxos.length === 0) {
     throw new Error('No UTXOs found. Your wallet needs to have some ZEC.');
   }
 
-  // 2. Select UTXOs
-  const selectedUTXOs = selectUTXOs(utxos, REQUIRED_AMOUNT);
+  // 2. Filter out inscribed UTXOs (protection against losing existing inscriptions)
+  console.log('⚠️  Checking for inscribed UTXOs...');
+  const safeUtxos = await getSafeUTXOs(address, allUtxos, 'inscription');
 
-  // 3. Build and sign using bitcore-lib-zcash
+  // 3. Select UTXOs from safe pool only
+  const selectedUTXOs = selectUTXOs(safeUtxos, REQUIRED_AMOUNT);
+
+  // 4. Build and sign using bitcore-lib-zcash
   const raw = await buildAndSignInscriptionTx(
     privateKeyWIF,
     address,

@@ -284,6 +284,26 @@ class ZcashRPCService {
       return [];
     }
   }
+
+  /**
+   * Get inscriptions for an address
+   * Returns inscribed UTXO locations to prevent accidental spending
+   * and full inscription data for display
+   */
+  async getInscriptions(address: string): Promise<{ inscribedLocations: string[]; count: number; inscriptions: any[] }> {
+    try {
+      const response = await fetch(`/api/zcash/inscriptions/${address}`);
+      const data = await response.json();
+      return {
+        inscribedLocations: data.inscribedLocations || [],
+        count: data.count || 0,
+        inscriptions: data.inscriptions || []
+      };
+    } catch (error) {
+      console.error('Failed to fetch inscriptions:', error);
+      return { inscribedLocations: [], count: 0, inscriptions: [] };
+    }
+  }
 }
 
 // Export singleton instance
