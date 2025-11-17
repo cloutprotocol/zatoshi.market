@@ -101,6 +101,17 @@ export default defineSchema({
     .index("by_type", ["type"])
     .index("by_created_at", ["createdAt"]),
 
+  // UTXO Locks for safe concurrency
+  utxoLocks: defineTable({
+    txid: v.string(),
+    vout: v.number(),
+    address: v.string(),
+    lockedBy: v.optional(v.string()), // job id or request id
+    lockedAt: v.number(),
+  })
+    .index("by_txid_vout", ["txid", "vout"]) 
+    .index("by_address", ["address"]) ,
+
   // Sales tracking for marketplace
   sales: defineTable({
     inscriptionId: v.string(), // What was sold
