@@ -15,6 +15,7 @@
     "@react-three/fiber": "^8.16.6",
     "@react-three/postprocessing": "^2.16.2",
     "@scure/bip39": "^1.6.0",
+    "@tatumio/tatum": "^4.2.58",
     "bip32": "^5.0.0",
     "bip39": "^3.1.0",
     "bitcoinjs-lib": "^7.0.0",

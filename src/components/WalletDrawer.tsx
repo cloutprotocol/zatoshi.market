@@ -57,6 +57,8 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
     }
   }, [isOpen]);
 
+  // Auto-refresh balance and price when drawer is open
+  // Polling interval matches balance cache duration (60s) to minimize API calls
   useEffect(() => {
     if (wallet?.address && isOpen) {
       fetchBalance();
@@ -64,7 +66,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       const interval = setInterval(() => {
         fetchBalance();
         fetchPrice();
-      }, 30000);
+      }, 60000); // 60 seconds - matches balance API cache
       return () => clearInterval(interval);
     }
   }, [wallet?.address, isOpen, fetchBalance, fetchPrice]);

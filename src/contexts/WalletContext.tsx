@@ -30,6 +30,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setMounted(true);
     if (typeof window !== 'undefined') {
       setHasStoredKeystore(hasKeystore());
+
+      // Try to restore unlocked wallet from session
+      try {
+        const sessionWallet = sessionStorage.getItem('zatoshi_session_wallet');
+        if (sessionWallet) {
+          const parsed = JSON.parse(sessionWallet);
+          setWallet(parsed);
+          setIsConnected(true);
+        }
+      } catch (e) {
+        console.error('Session wallet restore error:', e);
+      }
+
       // Migrate legacy plaintext wallet if present
       try {
         const legacy = localStorage.getItem('zatoshi_wallet');
@@ -61,6 +74,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const connectWallet = (newWallet: Wallet) => {
     setWallet(newWallet);
     setIsConnected(true);
+    // Save to session storage to persist across page refreshes
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('zatoshi_session_wallet', JSON.stringify(newWallet));
+    }
   };
 
   const saveEncrypted = async (newWallet: Wallet, password: string) => {
@@ -73,6 +90,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const unlocked = await loadKeystore(password);
       setWallet(unlocked);
       setIsConnected(true);
+      // Save to session storage to persist across page refreshes
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('zatoshi_session_wallet', JSON.stringify(unlocked));
+      }
       return true;
     } catch (e) {
       console.error('Unlock failed:', e);
@@ -83,6 +104,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const lockWallet = () => {
     setWallet(null);
     setIsConnected(false);
+    // Clear session storage
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('zatoshi_session_wallet');
+    }
   };
 
   const disconnectWallet = () => {
@@ -90,6 +115,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsConnected(false);
     deleteKeystore();
     setHasStoredKeystore(false);
+    // Clear session storage
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('zatoshi_session_wallet');
+    }
   };
 
   const updateBalance = (_confirmed: number, _unconfirmed: number) => {

@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
 
+// Cache raw transactions for 5 minutes (transactions are immutable once confirmed)
+// Used during inscription building to fetch UTXOs for signing
+const txCache = new Map<string, { raw: string; timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 async function fetchFromBlockchair(txid: string): Promise<string | null> {
   try {
     const url = `https://api.blockchair.com/zcash/raw/transaction/${txid}`;
@@ -33,13 +38,37 @@ export async function GET(_request: Request, { params }: { params: { txid: strin
     return NextResponse.json({ error: 'Invalid txid' }, { status: 400 });
   }
 
+  // Check cache first
+  const cached = txCache.get(txid);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return NextResponse.json({ raw: cached.raw });
+  }
+
   const rawFromBlockchair = await fetchFromBlockchair(txid);
   if (rawFromBlockchair) {
+    // Update cache
+    txCache.set(txid, { raw: rawFromBlockchair, timestamp: Date.now() });
+
+    // Clean old cache entries (keep last 100 transactions)
+    if (txCache.size > 100) {
+      const firstKey = txCache.keys().next().value;
+      txCache.delete(firstKey);
+    }
+
     return NextResponse.json({ raw: rawFromBlockchair });
   }
 
   const rawFromSoChain = await fetchFromSoChain(txid);
   if (rawFromSoChain) {
+    // Update cache
+    txCache.set(txid, { raw: rawFromSoChain, timestamp: Date.now() });
+
+    // Clean old cache entries (keep last 100 transactions)
+    if (txCache.size > 100) {
+      const firstKey = txCache.keys().next().value;
+      txCache.delete(firstKey);
+    }
+
     return NextResponse.json({ raw: rawFromSoChain });
   }
 

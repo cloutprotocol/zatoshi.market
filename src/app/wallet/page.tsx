@@ -7,7 +7,7 @@ import { zcashRPC } from '@/services/zcash';
 import QRCode from 'qrcode';
 
 export default function WalletPage() {
-  const { wallet, connectWallet, disconnectWallet, hasStoredKeystore, unlockWallet, saveEncrypted } = useWallet();
+  const { wallet, connectWallet, disconnectWallet, hasStoredKeystore, unlockWallet, saveEncrypted, lockWallet } = useWallet();
   const [balance, setBalance] = useState({ confirmed: 0, unconfirmed: 0 });
   const [usdPrice, setUsdPrice] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -18,6 +18,8 @@ export default function WalletPage() {
   const [showExport, setShowExport] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [sendForm, setSendForm] = useState({ to: '', amount: '' });
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fetchBalance = useCallback(async () => {
     if (!wallet?.address) return;
@@ -30,15 +32,21 @@ export default function WalletPage() {
     setUsdPrice(price);
   }, []);
 
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshing) return; // Prevent multiple simultaneous refreshes
+    setIsRefreshing(true);
+    try {
+      await Promise.all([fetchBalance(), fetchPrice()]);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 2000); // 2 second cooldown
+    }
+  }, [isRefreshing, fetchBalance, fetchPrice]);
+
+  // Load balance and price only once on mount
   useEffect(() => {
     if (wallet?.address) {
       fetchBalance();
       fetchPrice();
-      const interval = setInterval(() => {
-        fetchBalance();
-        fetchPrice();
-      }, 30000); // Refresh every 30 seconds
-      return () => clearInterval(interval);
     }
   }, [wallet?.address, fetchBalance, fetchPrice]);
 
@@ -209,10 +217,17 @@ export default function WalletPage() {
               <h2 className="text-xl text-gold-400 font-bold">WALLET</h2>
               <div className="flex gap-4">
                 <button
+                  onClick={lockWallet}
+                  className="px-4 py-2 text-gold-400 text-sm hover:text-gold-300"
+                  title="Lock wallet (requires password to unlock again)"
+                >
+                  Lock Wallet
+                </button>
+                <button
                   onClick={handleExport}
                   className="px-4 py-2 text-gold-400 text-sm hover:text-gold-300"
                 >
-                  Export
+                  Export Private Key
                 </button>
                 <button
                   onClick={handleCopyAddress}
@@ -225,7 +240,19 @@ export default function WalletPage() {
 
             {/* Balance Display */}
             <div className="text-center py-8">
-              <div className="text-sm text-gold-200/60 mb-2">TOTAL BALANCE</div>
+              <div className="flex items-center justify-center gap-2 text-sm text-gold-200/60 mb-2">
+                <span>BALANCE</span>
+                <button
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className={`text-gold-400 hover:text-gold-300 transition-all ${isRefreshing ? 'animate-spin opacity-50' : ''}`}
+                  title="Refresh balance"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                  </svg>
+                </button>
+              </div>
               <div className="text-6xl font-bold mb-2">
                 <span className="text-white">{totalBalance.toFixed(4)}</span>
                 <span className="text-gold-400 ml-2">ZEC</span>
@@ -295,6 +322,20 @@ export default function WalletPage() {
               <div className="text-gold-200/60">No inscriptions yet</div>
             </div>
           )}
+
+          {/* Disconnect Button */}
+          <div className="mt-8 text-center">
+            <button
+              onClick={() => {
+                if (confirm('This will delete your encrypted wallet from this device. Make sure you have backed up your seed phrase or private key!')) {
+                  disconnectWallet();
+                }
+              }}
+              className="text-gold-400/60 text-sm hover:text-red-400 transition-colors"
+            >
+              Disconnect (Forget) Wallet
+            </button>
+          </div>
         </div>
       </div>
 
