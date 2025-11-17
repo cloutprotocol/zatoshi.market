@@ -49,9 +49,8 @@ export default function MinePage() {
                 {/* Step 1: ZMAP */}
                 <div className="flex flex-col items-center">
                   <div className="w-20 h-20 bg-gold-500/20 border-2 border-gold-500 rounded-lg flex items-center justify-center mb-2">
-                    <svg className="w-12 h-12 text-gold-400" fill="currentColor" viewBox="0 0 24 24">
-                      <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2" fill="none"/>
-                      <path d="M7 8 L17 8 L12 16 L17 16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                    <svg className="w-12 h-12 text-gold-400" fill="none" viewBox="0 0 24 24">
+                      <path d="M7 8 L17 8 L12 16 L17 16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
                   </div>
                   <span className="text-sm text-gold-300 font-bold">INSCRIBE ZMAP</span>
