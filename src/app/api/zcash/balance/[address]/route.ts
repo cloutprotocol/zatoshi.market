@@ -8,7 +8,9 @@ import { NextRequest, NextResponse } from 'next/server';
  *
  * Architecture:
  * - Uses Blockchair for balance lookups (dashboards/address endpoint)
- * - Server-side caching per address (1 minute) to minimize external API calls
+ * - Server-side caching per address (30 seconds) to minimize external API calls
+ * - Client-side has additional localStorage cache layer
+ * - Retry logic for resilient fetching
  * - Handles API errors gracefully with informative error messages
  *
  * Rate Limits:
@@ -20,9 +22,34 @@ import { NextRequest, NextResponse } from 'next/server';
  * - unconfirmed: Unconfirmed balance in ZEC
  */
 
-// Cache balances per address for 1 minute to reduce API calls
+/**
+ * Simple retry helper for external API calls
+ */
+async function fetchWithRetry(url: string, maxRetries = 2): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url);
+      if (response.ok || response.status === 404) {
+        return response;
+      }
+      lastError = new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+
+    if (attempt < maxRetries) {
+      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+    }
+  }
+
+  throw lastError || new Error('Request failed');
+}
+
+// Cache balances per address for 30 seconds (client has additional localStorage cache)
 const balanceCache = new Map<string, { balance: any; timestamp: number }>();
-const CACHE_DURATION = 60 * 1000; // 1 minute
+const CACHE_DURATION = 30 * 1000; // 30 seconds
 
 export async function GET(
   request: NextRequest,
@@ -56,7 +83,8 @@ export async function GET(
       ? `https://api.blockchair.com/zcash/dashboards/address/${address}?key=${apiKey}${cacheBuster}`
       : `https://api.blockchair.com/zcash/dashboards/address/${address}${forceRefresh ? `?_t=${Date.now()}` : ''}`;
 
-    const response = await fetch(url);
+    // Use retry logic for resilient fetching
+    const response = await fetchWithRetry(url);
     const data = await response.json();
 
     // Check for API errors

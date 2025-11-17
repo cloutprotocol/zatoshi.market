@@ -7,6 +7,20 @@ import { zcashRPC } from '@/services/zcash';
 import { sendZEC } from '@/services/transaction';
 import QRCode from 'qrcode';
 import { calculateZRC20Balances, formatZRC20Amount, type ZRC20Token } from '@/utils/zrc20';
+import {
+  getCachedInscriptions,
+  setCachedInscriptions,
+  isCacheFresh,
+  cleanupOldCache,
+  getCacheStatus
+} from '@/utils/inscriptionCache';
+import {
+  getCachedBalance,
+  setCachedBalance,
+  isBalanceCacheFresh,
+  cleanupOldBalanceCache
+} from '@/utils/balanceCache';
+import { fetchTextWithRetry } from '@/utils/fetchWithRetry';
 
 interface WalletDrawerProps {
   isOpen: boolean;
@@ -36,14 +50,52 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   const [inscriptionContents, setInscriptionContents] = useState<Record<string, string>>({});
   const [zrc20Tokens, setZrc20Tokens] = useState<ZRC20Token[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [hasFetchedFresh, setHasFetchedFresh] = useState(false);
+  const [cacheAge, setCacheAge] = useState<string>('');
+  const [dataSource, setDataSource] = useState<'cache' | 'fresh' | 'none'>('none');
 
   const fetchBalance = useCallback(async (forceRefresh: boolean = false) => {
     if (!wallet?.address) return;
-    console.log('📊 Fetching balance for:', wallet.address, forceRefresh ? '(force refresh)' : '(cached ok)');
-    const bal = await zcashRPC.getBalance(wallet.address, forceRefresh);
-    console.log('📊 Balance:', bal);
-    setBalance(bal);
+
+    // Step 1: Load from cache immediately (prevents balance "snapping back")
+    const cached = getCachedBalance(wallet.address);
+
+    if (cached && !forceRefresh) {
+      console.log('📊 Loading balance from cache:', cached);
+      setBalance({
+        confirmed: cached.confirmed,
+        unconfirmed: cached.unconfirmed
+      });
+
+      // If cache is fresh, we're done
+      if (isBalanceCacheFresh(cached)) {
+        console.log('✅ Balance cache is fresh, skipping API call');
+        return;
+      }
+
+      console.log('⏳ Balance cache is stale, fetching fresh data...');
+    }
+
+    // Step 2: Fetch fresh balance
+    console.log('📊 Fetching fresh balance for:', wallet.address, forceRefresh ? '(force refresh)' : '(cache stale)');
+    try {
+      const bal = await zcashRPC.getBalance(wallet.address, forceRefresh);
+      console.log('📊 Fresh balance:', bal);
+
+      // Update state
+      setBalance(bal);
+
+      // Save to cache
+      setCachedBalance(wallet.address, bal.confirmed, bal.unconfirmed);
+
+      // Cleanup old entries
+      cleanupOldBalanceCache();
+    } catch (error) {
+      console.error('Failed to fetch balance:', error);
+      // Keep showing cached balance on error
+      if (!cached) {
+        setBalance({ confirmed: 0, unconfirmed: 0 });
+      }
+    }
   }, [wallet?.address]);
 
   const fetchPrice = useCallback(async () => {
@@ -53,41 +105,97 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
 
   const fetchInscriptions = useCallback(async (forceRefresh: boolean = false) => {
     if (!wallet?.address) return;
+
+    // Step 1: Load from cache immediately (stale-while-revalidate pattern)
+    const cached = getCachedInscriptions(wallet.address);
+    const cacheStatus = getCacheStatus(wallet.address);
+
+    if (cached && !forceRefresh) {
+      console.log('🎨 Loading inscriptions from cache:', cacheStatus.ageFormatted);
+      setInscriptions(cached.inscriptions);
+      setInscriptionContents(cached.inscriptionContents);
+
+      const tokens = calculateZRC20Balances(cached.inscriptions, cached.inscriptionContents);
+      setZrc20Tokens(tokens);
+
+      setCacheAge(cacheStatus.ageFormatted);
+      setDataSource('cache');
+
+      // If cache is fresh, we're done (no background refresh needed)
+      if (isCacheFresh(cached)) {
+        console.log('✅ Cache is fresh, skipping background refresh');
+        return;
+      }
+
+      console.log('⏳ Cache is stale, fetching fresh data in background...');
+    }
+
+    // Step 2: Fetch fresh data (either no cache, stale cache, or force refresh)
     setLoadingInscriptions(true);
-    console.log('🎨 Fetching inscriptions for:', wallet.address, forceRefresh ? '(force refresh)' : '(cached ok)');
+    console.log('🎨 Fetching fresh inscriptions for:', wallet.address, forceRefresh ? '(force refresh)' : '(background refresh)');
+
     try {
       const data = await zcashRPC.getInscriptions(wallet.address, forceRefresh);
       const inscriptionList = data.inscriptions || [];
       console.log(`🎨 Found ${inscriptionList.length} inscriptions`);
-      setInscriptions(inscriptionList);
 
-      // Fetch content for each inscription (limit to first 20 to avoid too many requests)
-      const contentsToFetch = inscriptionList.slice(0, 20);
+      // Fetch content for each inscription (limit to 50 with better batching)
+      const contentsToFetch = inscriptionList.slice(0, 50);
       const contents: Record<string, string> = {};
 
-      await Promise.all(
-        contentsToFetch.map(async (insc) => {
-          try {
-            const response = await fetch(`/api/zcash/inscription-content/${insc.id}`);
-            if (response.ok) {
-              contents[insc.id] = await response.text();
+      // Batch requests in groups of 10 to prevent rate limiting
+      // Use retry logic for resilient fetching
+      const batchSize = 10;
+      for (let i = 0; i < contentsToFetch.length; i += batchSize) {
+        const batch = contentsToFetch.slice(i, i + batchSize);
+        await Promise.all(
+          batch.map(async (insc) => {
+            try {
+              // Fetch with retry logic (max 2 retries for content)
+              const content = await fetchTextWithRetry(
+                `/api/zcash/inscription-content/${insc.id}`,
+                undefined,
+                { maxRetries: 2 }
+              );
+              contents[insc.id] = content;
+            } catch (err) {
+              console.error(`Failed to fetch content for ${insc.id} after retries:`, err);
+              // Continue with other inscriptions even if one fails
             }
-          } catch (err) {
-            console.error(`Failed to fetch content for ${insc.id}:`, err);
-          }
-        })
-      );
+          })
+        );
+        // Small delay between batches to prevent rate limiting
+        if (i + batchSize < contentsToFetch.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
 
+      // Update UI with fresh data
+      setInscriptions(inscriptionList);
       setInscriptionContents(contents);
 
-      // Calculate ZRC-20 balances from inscriptions
+      // Calculate ZRC-20 balances
       const tokens = calculateZRC20Balances(inscriptionList, contents);
       setZrc20Tokens(tokens);
       console.log(`💰 Found ${tokens.length} ZRC-20 tokens`);
+
+      // Save to cache
+      setCachedInscriptions(wallet.address, inscriptionList, contents);
+
+      setCacheAge('Just now');
+      setDataSource('fresh');
+
+      // Cleanup old cache entries
+      cleanupOldCache();
+
     } catch (error) {
       console.error('Failed to fetch inscriptions:', error);
-      setInscriptions([]);
-      setZrc20Tokens([]);
+
+      // If we had cached data, keep showing it despite the error
+      if (!cached) {
+        setInscriptions([]);
+        setZrc20Tokens([]);
+      }
     } finally {
       setLoadingInscriptions(false);
     }
@@ -127,23 +235,15 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   }, [isOpen]);
 
   // Load balance, price, and inscriptions when drawer opens
-  // First time: force refresh to bypass Blockchair cache
-  // Subsequent times: use server cache to minimize API calls
+  // Uses smart caching: loads from localStorage cache first, then refreshes in background if stale
   useEffect(() => {
     if (wallet?.address && isOpen) {
-      if (!hasFetchedFresh) {
-        // First load: bypass caches to get fresh data
-        fetchBalance(true);
-        fetchInscriptions(true);
-        setHasFetchedFresh(true);
-      } else {
-        // Subsequent loads: use cached data
-        fetchBalance();
-        fetchInscriptions();
-      }
+      // Smart caching: fetchInscriptions will handle cache/refresh logic internally
+      fetchBalance();
+      fetchInscriptions();
       fetchPrice();
     }
-  }, [wallet?.address, isOpen, hasFetchedFresh, fetchBalance, fetchPrice, fetchInscriptions]);
+  }, [wallet?.address, isOpen, fetchBalance, fetchPrice, fetchInscriptions]);
 
   const handleCreateWallet = async () => {
     setLoading(true);
@@ -435,12 +535,21 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                     onClick={handleRefresh}
                     disabled={isRefreshing}
                     className={`p-1 hover:bg-gold-500/20 rounded transition-all ${isRefreshing ? 'animate-spin' : ''}`}
-                    title="Refresh balance"
+                    title="Refresh balance and inscriptions"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
                   </button>
+                  {dataSource !== 'none' && cacheAge && (
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      dataSource === 'fresh'
+                        ? 'bg-green-500/20 text-green-300'
+                        : 'bg-blue-500/20 text-blue-300'
+                    }`} title={dataSource === 'fresh' ? 'Fresh data' : 'Cached data'}>
+                      {cacheAge}
+                    </span>
+                  )}
                 </div>
                 <div className="text-4xl font-bold mb-2">
                   <span className="text-white">{totalBalance.toFixed(4)}</span>
@@ -517,8 +626,19 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                           </div>
                           <div className="flex-1">
                             <div className="text-gold-300 font-bold">{token.tick}</div>
-                            <div className="text-gold-200/60 text-xs">
-                              {token.transferableCount} transfer inscription{token.transferableCount !== 1 ? 's' : ''}
+                            <div className="text-gold-200/60 text-xs flex items-center gap-2">
+                              {token.mintCount > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <span className="w-1 h-1 rounded-full bg-blue-400"></span>
+                                  {token.mintCount} mint{token.mintCount !== 1 ? 's' : ''}
+                                </span>
+                              )}
+                              {token.transferableCount > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <span className="w-1 h-1 rounded-full bg-purple-400"></span>
+                                  {token.transferableCount} transfer{token.transferableCount !== 1 ? 's' : ''}
+                                </span>
+                              )}
                             </div>
                           </div>
                           <div className="text-gold-400 font-bold">{formatZRC20Amount(token.balance)}</div>

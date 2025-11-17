@@ -5,9 +5,35 @@ import { NextRequest, NextResponse } from 'next/server';
  * Returns the raw content of an inscription
  */
 
-// Cache content for 5 minutes (inscriptions are immutable)
+/**
+ * Simple retry helper for external API calls
+ */
+async function fetchWithRetry(url: string, maxRetries = 2): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url);
+      if (response.ok || response.status === 404) {
+        return response;
+      }
+      lastError = new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+
+    if (attempt < maxRetries) {
+      await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+    }
+  }
+
+  throw lastError || new Error('Request failed');
+}
+
+// Enterprise-grade cache: 15 minutes (inscription content is immutable and never changes)
+// Aggressive caching is safe here since content cannot be modified after inscription
 const contentCache = new Map<string, { data: string; timestamp: number }>();
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
 
 export async function GET(
   request: NextRequest,
@@ -24,8 +50,8 @@ export async function GET(
       });
     }
 
-    // Fetch from zerdinals content endpoint
-    const response = await fetch(
+    // Fetch from zerdinals content endpoint with retry logic
+    const response = await fetchWithRetry(
       `https://indexer.zerdinals.com/content/${id}`
     );
 

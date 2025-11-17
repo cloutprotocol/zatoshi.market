@@ -1,6 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
+ * Simple retry helper for external API calls
+ */
+async function fetchWithRetry(url: string, maxRetries = 2): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url);
+      if (response.ok || response.status === 404) {
+        return response;
+      }
+      lastError = new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+
+    if (attempt < maxRetries) {
+      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+    }
+  }
+
+  throw lastError || new Error('Request failed');
+}
+
+/**
  * Zcash Inscriptions Lookup API
  *
  * Fetches all inscriptions owned by a Zcash address from zerdinals indexer
@@ -20,9 +45,10 @@ import { NextRequest, NextResponse } from 'next/server';
  * - count: Total number of inscriptions owned by address
  */
 
-// Cache inscriptions for 30 seconds (inscriptions don't change frequently)
+// Enterprise-grade cache: 5 minutes (inscriptions are immutable once created)
+// Client-side has additional localStorage cache layer for even better performance
 const inscriptionCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_DURATION = 30 * 1000; // 30 seconds
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 export async function GET(
   request: NextRequest,
@@ -43,10 +69,10 @@ export async function GET(
       }
     }
 
-    // Step 1: Fetch UTXOs for this address
+    // Step 1: Fetch UTXOs for this address with retry logic
     // Add cache-busting parameter when force refresh is requested
     const cacheBuster = forceRefresh ? `&_t=${Date.now()}` : '';
-    const utxoResponse = await fetch(
+    const utxoResponse = await fetchWithRetry(
       `https://api.blockchair.com/zcash/dashboards/address/${address}?key=A___e4MleX7tmjVk50SHfdfZR0pLqcOs${cacheBuster}`
     );
 
@@ -65,8 +91,10 @@ export async function GET(
       utxos.map(async (utxo: any) => {
         const location = `${utxo.transaction_hash}:${utxo.index}`;
         try {
-          const response = await fetch(
-            `https://indexer.zerdinals.com/location/${location}`
+          // Use retry logic for indexer calls
+          const response = await fetchWithRetry(
+            `https://indexer.zerdinals.com/location/${location}`,
+            1 // Max 1 retry for indexer (it's fast, so don't wait too long)
           );
 
           if (response.ok) {
@@ -80,8 +108,8 @@ export async function GET(
             }
           }
         } catch (err) {
-          // Silently ignore errors for individual UTXO checks
-          console.error(`Failed to check location ${location}:`, err);
+          // Silently ignore errors for individual UTXO checks after retries
+          console.error(`Failed to check location ${location} after retries:`, err);
         }
       })
     );
