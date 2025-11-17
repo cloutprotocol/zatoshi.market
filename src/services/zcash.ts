@@ -294,10 +294,15 @@ class ZcashRPCService {
    * Get inscriptions for an address
    * Returns inscribed UTXO locations to prevent accidental spending
    * and full inscription data for display
+   * @param address - Zcash address to check
+   * @param forceRefresh - If true, bypasses cache and fetches fresh data
    */
-  async getInscriptions(address: string): Promise<{ inscribedLocations: string[]; count: number; inscriptions: any[] }> {
+  async getInscriptions(address: string, forceRefresh: boolean = false): Promise<{ inscribedLocations: string[]; count: number; inscriptions: any[] }> {
     try {
-      const response = await fetch(`/api/zcash/inscriptions/${address}`);
+      const url = forceRefresh
+        ? `/api/zcash/inscriptions/${address}?refresh=true`
+        : `/api/zcash/inscriptions/${address}`;
+      const response = await fetch(url);
       const data = await response.json();
       return {
         inscribedLocations: data.inscribedLocations || [],

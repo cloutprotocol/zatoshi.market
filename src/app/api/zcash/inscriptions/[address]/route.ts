@@ -30,16 +30,24 @@ export async function GET(
 ) {
   const { address } = params;
 
+  // Check if refresh is requested (bypass cache)
+  const searchParams = request.nextUrl.searchParams;
+  const forceRefresh = searchParams.get('refresh') === 'true';
+
   try {
-    // Check cache first
-    const cached = inscriptionCache.get(address);
-    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-      return NextResponse.json(cached.data);
+    // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+      const cached = inscriptionCache.get(address);
+      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        return NextResponse.json(cached.data);
+      }
     }
 
     // Step 1: Fetch UTXOs for this address
+    // Add cache-busting parameter when force refresh is requested
+    const cacheBuster = forceRefresh ? `&_t=${Date.now()}` : '';
     const utxoResponse = await fetch(
-      `https://api.blockchair.com/zcash/dashboards/address/${address}?key=A___e4MleX7tmjVk50SHfdfZR0pLqcOs`
+      `https://api.blockchair.com/zcash/dashboards/address/${address}?key=A___e4MleX7tmjVk50SHfdfZR0pLqcOs${cacheBuster}`
     );
 
     if (!utxoResponse.ok) {

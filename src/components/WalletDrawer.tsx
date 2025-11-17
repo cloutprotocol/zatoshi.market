@@ -51,12 +51,12 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
     setUsdPrice(price);
   }, []);
 
-  const fetchInscriptions = useCallback(async () => {
+  const fetchInscriptions = useCallback(async (forceRefresh: boolean = false) => {
     if (!wallet?.address) return;
     setLoadingInscriptions(true);
-    console.log('🎨 Fetching inscriptions for:', wallet.address);
+    console.log('🎨 Fetching inscriptions for:', wallet.address, forceRefresh ? '(force refresh)' : '(cached ok)');
     try {
-      const data = await zcashRPC.getInscriptions(wallet.address);
+      const data = await zcashRPC.getInscriptions(wallet.address, forceRefresh);
       const inscriptionList = data.inscriptions || [];
       console.log(`🎨 Found ${inscriptionList.length} inscriptions`);
       setInscriptions(inscriptionList);
@@ -100,7 +100,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       await Promise.all([
         fetchBalance(true), // Force refresh to bypass cache
         fetchPrice(),
-        fetchInscriptions()
+        fetchInscriptions(true) // Force refresh to bypass cache
       ]);
     } finally {
       setTimeout(() => setIsRefreshing(false), 1000);
@@ -128,19 +128,20 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
 
   // Load balance, price, and inscriptions when drawer opens
   // First time: force refresh to bypass Blockchair cache
-  // Subsequent times: use server cache (1 min) to minimize API calls
+  // Subsequent times: use server cache to minimize API calls
   useEffect(() => {
     if (wallet?.address && isOpen) {
       if (!hasFetchedFresh) {
         // First load: bypass caches to get fresh data
         fetchBalance(true);
+        fetchInscriptions(true);
         setHasFetchedFresh(true);
       } else {
         // Subsequent loads: use cached data
         fetchBalance();
+        fetchInscriptions();
       }
       fetchPrice();
-      fetchInscriptions();
     }
   }, [wallet?.address, isOpen, hasFetchedFresh, fetchBalance, fetchPrice, fetchInscriptions]);
 
