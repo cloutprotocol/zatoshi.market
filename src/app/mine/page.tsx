@@ -45,7 +45,7 @@ export default function MinePage() {
 
             {/* Graphic Illustration */}
             <div className="p-8 bg-black/40 border border-gold-500/30 rounded-lg">
-              <div className="flex items-center justify-center gap-8 mb-6 flex-wrap">
+              <div className="flex items-center justify-center gap-4 mb-6 flex-wrap">
                 {/* Step 1: ZMAP */}
                 <div className="flex flex-col items-center">
                   <div className="w-20 h-20 bg-gold-500/20 border-2 border-gold-500 rounded-lg flex items-center justify-center mb-2">
@@ -54,9 +54,12 @@ export default function MinePage() {
                   <span className="text-sm text-gold-300 font-bold">INSCRIBE ZMAP</span>
                 </div>
 
+                {/* Arrow */}
+                <div className="text-3xl text-gold-500">→</div>
+
                 {/* Step 2: Reward */}
                 <div className="flex flex-col items-center">
-                  <div className="w-20 h-20 bg-gold-500 border-2 border-gold-400 rounded-lg flex items-center justify-center mb-2">
+                  <div className="w-20 h-20 bg-gold-500 border-2 border-gold-400 rounded-full flex items-center justify-center mb-2">
                     <span className="text-4xl font-bold text-black">Z</span>
                   </div>
                   <span className="text-sm text-gold-300 font-bold">EARN TOKENS</span>
