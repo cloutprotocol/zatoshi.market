@@ -64,10 +64,10 @@ export default function Home() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Link
-                href="/zmaps"
+                href="/inscribe"
                 className="px-8 py-4 bg-gold-500 text-black text-lg font-bold text-center"
               >
-                EXPLORE ZMAPS
+                INSCRIBE
               </Link>
               <a
                 href="https://zerdinals.com/"
