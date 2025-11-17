@@ -60,7 +60,7 @@ export default function Home() {
               ON <span className="text-gold-400">ZCASH</span>
             </h1>
             <p className="text-xl md:text-2xl mb-12 max-w-2xl text-gold-100/80">
-              Host and trade ZRC20 tokens, ZMAPS, and Zerdinal inscriptions on Zcash.
+              Deploy, mint & trade ZRC20 tokens, ZMAPS, and Zerdinal inscriptions on Zcash.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Link
@@ -87,21 +87,21 @@ export default function Home() {
             <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
               <h3 className="text-2xl font-bold mb-4 text-gold-400">ZRC20 TOKENS</h3>
               <p className="text-gold-100/80">
-                Host and trade ZRC20 tokens on Zcash. ZORE token mining through ZMAPS inscriptions.
+                Deploy, mint & trade ZRC20 tokens, the fungible token standard of Zerdinals.
               </p>
             </div>
 
             <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
               <h3 className="text-2xl font-bold mb-4 text-gold-400">ZMAPS</h3>
               <p className="text-gold-100/80">
-                Each ZMAP represents 100 Zcash blocks. Inscribe ZMAPs for 0.0015 ZEC and mine ZORE tokens on your land plots.
+                Each ZMAP represents 100 Zcash blocks and can be used to mine ZORE tokens.
               </p>
             </div>
 
             <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
               <h3 className="text-2xl font-bold mb-4 text-gold-400">ZERDINAL INSCRIPTIONS</h3>
               <p className="text-gold-100/80">
-                Browse and trade Zerdinal inscriptions. Digital artifacts permanently inscribed on Zcash blockchain.
+                Digital art inscriptions on Zcash coming soon.
               </p>
             </div>
           </div>
@@ -125,11 +125,11 @@ export default function Home() {
                 <div className="text-gold-200/80 text-sm">TOTAL ZMAPS</div>
               </div>
               <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">150</div>
+                <div className="text-5xl font-bold mb-2 text-gold-400">...</div>
                 <div className="text-gold-200/80 text-sm">INSCRIBED ZMAPS</div>
               </div>
               <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">0.0015</div>
+                <div className="text-5xl font-bold mb-2 text-gold-400">0.002</div>
                 <div className="text-gold-200/80 text-sm">ZEC PER ZMAP</div>
               </div>
             </div>
