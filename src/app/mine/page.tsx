@@ -59,9 +59,9 @@ export default function MinePage() {
 
                 {/* Step 2: Reward */}
                 <div className="flex flex-col items-center">
-                  <div className="w-20 h-20 bg-gold-500/20 border-2 border-gold-500 rounded-lg flex items-center justify-center mb-2">
+                  <div className="w-20 h-20 bg-black border-2 border-gold-500 rounded-lg flex items-center justify-center mb-2">
                     <div className="w-12 h-12 bg-gold-500 border-2 border-gold-400 rounded-full flex items-center justify-center">
-                      <span className="text-2xl font-bold text-black">Z</span>
+                      <span className="text-2xl font-bold text-gold-400">Z</span>
                     </div>
                   </div>
                   <span className="text-sm text-gold-300 font-bold">EARN TOKENS</span>
