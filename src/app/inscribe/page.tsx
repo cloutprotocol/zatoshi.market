@@ -227,7 +227,7 @@ export default function InscribePage() {
         const raw = (sig as any).toCompactRawBytes ? (sig as any).toCompactRawBytes() : (sig as Uint8Array);
         return Array.from(raw).map(b=>b.toString(16).padStart(2,'0')).join('');
       };
-      const convex = getConvexClient(); if (!convex) throw new Error('Convex client not available');
+      const convex = getConvexClient(); if (!convex) throw new Error('Service not available. Please try again in a moment.');
       // Step 1
       const step1 = await convex.action(api.inscriptionsActions.buildUnsignedCommitAction, {
         address: wallet.address,
@@ -252,7 +252,8 @@ export default function InscribePage() {
       });
       setDemoLog(l => [...l, `revealTxid: ${step3.revealTxid}`, `inscriptionId: ${step3.inscriptionId}`]);
     } catch (e: any) {
-      setDemoLog(l => [...l, `Error: ${e?.message || String(e)}`]);
+      logError(e, 'Demo Inscription');
+      setDemoLog(l => [...l, `Error: ${sanitizeError(e)}`]);
     } finally { setDemoRunning(false); }
   };
 
@@ -264,7 +265,7 @@ export default function InscribePage() {
     setBatchStatus(null);
     setBatchJobId(null);
     try {
-      const convex = getConvexClient(); if (!convex) throw new Error('Convex client not available');
+      const convex = getConvexClient(); if (!convex) throw new Error('Service not available. Please try again in a moment.');
       const payload = JSON.stringify({ p: 'zrc-20', op: 'mint', tick: tick.toUpperCase(), amt: amount });
       const res = await convex.action(api.inscriptionsActions.batchMintAction, {
         wif: wallet.privateKey,
@@ -857,7 +858,7 @@ export default function InscribePage() {
                 return Array.from(raw).map(b=>b.toString(16).padStart(2,'0')).join('');
               };
               if (pendingArgs.contentType === 'split') {
-                const convex = getConvexClient(); if (!convex) throw new Error('Convex client not available');
+                const convex = getConvexClient(); if (!convex) throw new Error('Service not available. Please try again in a moment.');
                 const step1 = await convex.action(api.inscriptionsActions.buildUnsignedSplitAction, {
                   address: wallet.address,
                   pubKeyHex,

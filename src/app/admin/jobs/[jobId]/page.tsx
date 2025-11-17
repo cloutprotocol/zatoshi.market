@@ -28,7 +28,7 @@ export default function JobDetailPage({ params }: { params: { jobId: string } })
     setLoading(true); setError(null);
     try {
       const convex = getConvexClient();
-      if (!convex) throw new Error('Convex client not available');
+      if (!convex) throw new Error('Service not available. Please try again in a moment.');
       const j = await convex.query(api.jobs.getJob, { jobId: jobId as any });
       setJob(j as any);
     } catch (e: any) {

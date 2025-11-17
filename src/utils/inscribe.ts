@@ -2,6 +2,7 @@
 
 import { getConvexClient } from "@/lib/convexClient";
 import { api } from "../../convex/_generated/api";
+import { sanitizeError } from "./errorMessages";
 
 export type InscribeArgs = {
   address: string;
@@ -16,48 +17,64 @@ export type InscribeArgs = {
 
 export type Signer = (sighashHex: string) => Promise<string>; // returns raw 64-byte sig hex
 
+/**
+ * Sanitize Convex action errors before re-throwing
+ * Removes all Convex-specific details, stack traces, request IDs
+ */
+function sanitizeConvexError(error: unknown): never {
+  const cleaned = sanitizeError(error);
+  throw new Error(cleaned);
+}
+
 export async function safeMintInscription(
   args: InscribeArgs,
   signer: Signer
 ) {
   const convex = getConvexClient();
-  if (!convex) throw new Error("Convex client not available");
+  if (!convex) throw new Error("Service not available. Please try again in a moment.");
 
-  // Step 1: server assembles and returns commit preimage
-  const { contextId, commitSigHashHex } = await convex.action(
-    api.inscriptionsActions.buildUnsignedCommitAction,
-    {
-      address: args.address,
-      pubKeyHex: args.pubKeyHex,
-      content: args.content,
-      contentJson: args.contentJson,
-      contentType: args.contentType,
-      type: args.type,
-      inscriptionAmount: args.inscriptionAmount,
-      fee: args.fee,
-    } as any
-  );
+  try {
+    // Step 1: server assembles and returns commit preimage
+    const { contextId, commitSigHashHex } = await convex.action(
+      api.inscriptionsActions.buildUnsignedCommitAction,
+      {
+        address: args.address,
+        pubKeyHex: args.pubKeyHex,
+        content: args.content,
+        contentJson: args.contentJson,
+        contentType: args.contentType,
+        type: args.type,
+        inscriptionAmount: args.inscriptionAmount,
+        fee: args.fee,
+      } as any
+    );
 
-  // Step 2: client signs commit locally
-  const commitSignatureRawHex = await signer(commitSigHashHex);
-  const { commitTxid, revealSigHashHex } = await convex.action(
-    api.inscriptionsActions.finalizeCommitAndGetRevealPreimageAction,
-    {
-      contextId,
-      commitSignatureRawHex,
-    }
-  );
+    // Step 2: client signs commit locally
+    const commitSignatureRawHex = await signer(commitSigHashHex);
 
-  // Step 3: client signs reveal and server broadcasts
-  const revealSignatureRawHex = await signer(revealSigHashHex);
-  const { revealTxid, inscriptionId } = await convex.action(
-    api.inscriptionsActions.broadcastSignedRevealAction,
-    {
-      contextId,
-      revealSignatureRawHex,
-    }
-  );
+    const { commitTxid, revealSigHashHex } = await convex.action(
+      api.inscriptionsActions.finalizeCommitAndGetRevealPreimageAction,
+      {
+        contextId,
+        commitSignatureRawHex,
+      }
+    );
 
-  return { commitTxid, revealTxid, inscriptionId };
+    // Step 3: client signs reveal and server broadcasts
+    const revealSignatureRawHex = await signer(revealSigHashHex);
+
+    const { revealTxid, inscriptionId } = await convex.action(
+      api.inscriptionsActions.broadcastSignedRevealAction,
+      {
+        contextId,
+        revealSignatureRawHex,
+      }
+    );
+
+    return { commitTxid, revealTxid, inscriptionId };
+  } catch (error) {
+    // Sanitize all Convex errors before re-throwing to user
+    sanitizeConvexError(error);
+  }
 }
 

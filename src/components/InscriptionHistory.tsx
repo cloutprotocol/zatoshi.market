@@ -27,7 +27,7 @@ export function InscriptionHistory({ address, limit = 50 }: { address: string; l
     setLoading(true); setError(null);
     try {
       const convex = getConvexClient();
-      if (!convex) throw new Error("Convex client not available");
+      if (!convex) throw new Error("Service not available. Please try again in a moment.");
       const res = await convex.query(api.inscriptions.getInscriptionsByAddress, { address, limit } as any);
       setData((res as any) || []);
     } catch (e: any) {

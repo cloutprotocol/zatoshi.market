@@ -27,7 +27,7 @@ export default function JobsPage() {
     setError(null);
     try {
       const convex = getConvexClient();
-      if (!convex) throw new Error('Convex client not available');
+      if (!convex) throw new Error('Service not available. Please try again in a moment.');
       const list = await convex.query(api.jobs.listJobs, {} as any);
       setJobs(list as any);
     } catch (e: any) {
