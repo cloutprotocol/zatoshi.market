@@ -488,7 +488,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
 
               {/* Tab Content */}
               {activeTab === 'zrc20' && (
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
                   {/* Platform token ZORE always at top */}
                   <div className="p-4 bg-black/40 rounded border border-gold-500/30">
                     <div className="flex items-center gap-3">
@@ -544,7 +544,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                       No inscriptions
                     </div>
                   ) : (
-                    <div className="space-y-3 max-h-[50vh] overflow-y-auto">
+                    <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto">
                       {inscriptions.map((insc) => {
                         // Get content from fetched data
                         const content = inscriptionContents[insc.id] || '';
@@ -572,27 +572,22 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                         return (
                           <div
                             key={insc.id}
-                            className="bg-black/40 border border-gold-500/20 rounded p-3 hover:border-gold-500/40 transition-all cursor-pointer"
+                            className="bg-black/40 border border-gold-500/20 rounded p-2 hover:border-gold-500/40 transition-all cursor-pointer"
                             onClick={() => window.open(`https://zerdinals.com/zerdinals/${insc.inscriptionNumber}`, '_blank')}
                           >
                             {/* Content Preview */}
-                            <div className="bg-black/60 rounded p-3 mb-2 min-h-[80px] max-h-[100px] overflow-hidden">
-                              <pre className="text-gold-300 text-xs font-mono whitespace-pre-wrap break-all line-clamp-4">
+                            <div className="bg-black/60 rounded p-2 mb-1.5 h-[60px] overflow-hidden">
+                              <pre className="text-gold-300 text-[10px] font-mono whitespace-pre-wrap break-all line-clamp-3">
                                 {contentPreview}
                               </pre>
                             </div>
 
                             {/* Footer */}
-                            <div className="flex items-center justify-between text-xs">
-                              <div className="flex items-center gap-2">
-                                <span className="text-gold-400/60">
-                                  #{insc.inscriptionNumber || '?'}
-                                </span>
-                                <span className="text-gold-400/40 font-mono">
-                                  {insc.id?.slice(0, 8)}...{insc.id?.slice(-8)}
-                                </span>
-                              </div>
-                              <div className={`px-2 py-1 rounded text-[10px] font-bold ${
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-gold-400/60">
+                                #{insc.inscriptionNumber || '?'}
+                              </span>
+                              <div className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
                                 isJSON
                                   ? 'bg-blue-500/20 text-blue-300'
                                   : 'bg-gold-500/20 text-gold-300'
