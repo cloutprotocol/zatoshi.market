@@ -45,7 +45,7 @@ export default function MinePage() {
 
             {/* Graphic Illustration */}
             <div className="p-8 bg-black/40 border border-gold-500/30 rounded-lg">
-              <div className="flex items-center justify-center gap-4 mb-6 flex-wrap">
+              <div className="flex items-center justify-center gap-8 mb-6 flex-wrap">
                 {/* Step 1: ZMAP */}
                 <div className="flex flex-col items-center">
                   <div className="w-20 h-20 bg-gold-500/20 border-2 border-gold-500 rounded-lg flex items-center justify-center mb-2">
@@ -54,29 +54,10 @@ export default function MinePage() {
                   <span className="text-sm text-gold-300 font-bold">INSCRIBE ZMAP</span>
                 </div>
 
-                {/* Arrow */}
-                <div className="text-3xl text-gold-500">→</div>
-
-                {/* Step 2: Mine */}
-                <div className="flex flex-col items-center">
-                  <div className="w-20 h-20 bg-gold-500/20 border-2 border-gold-500 rounded-lg flex items-center justify-center mb-2">
-                    <svg className="w-12 h-12 text-gold-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                    </svg>
-                  </div>
-                  <span className="text-sm text-gold-300 font-bold">MINE ZORE</span>
-                </div>
-
-                {/* Arrow */}
-                <div className="text-3xl text-gold-500">→</div>
-
-                {/* Step 3: Reward */}
+                {/* Step 2: Reward */}
                 <div className="flex flex-col items-center">
                   <div className="w-20 h-20 bg-gold-500 border-2 border-gold-400 rounded-lg flex items-center justify-center mb-2">
-                    <svg className="w-12 h-12 text-black" fill="currentColor" viewBox="0 0 24 24">
-                      <circle cx="12" cy="12" r="9" />
-                      <text x="12" y="16" textAnchor="middle" fontSize="10" fontWeight="bold" fill="black">Z</text>
-                    </svg>
+                    <span className="text-4xl font-bold text-black">Z</span>
                   </div>
                   <span className="text-sm text-gold-300 font-bold">EARN TOKENS</span>
                 </div>
