@@ -690,9 +690,6 @@ export default function ZmapsPage() {
             zatoshi.market
           </Link>
           <span className="text-2xl text-gold-400">ZMAPS</span>
-          <span className="text-lg text-gold-300/60">
-            / {blockCount > 0 ? `${blockCount.toLocaleString()} Blocks` : 'Loading...'}
-          </span>
         </div>
         <Link href="/token/zore" className="px-6 py-2 text-gold-400">
           ZORE TOKEN
@@ -830,21 +827,41 @@ export default function ZmapsPage() {
       {/* Left Sidebar Cart */}
       <div className={`fixed top-20 left-0 bottom-0 w-full sm:w-96 lg:w-[400px] backdrop-blur-xl bg-black/90 border-r border-gold-700/30 z-40 flex flex-col transition-transform duration-300 ${showCart ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         {/* Cart Header */}
-        <div className="p-4 sm:p-6 border-b border-gold-700/30 flex justify-between items-start">
-          <div className="flex-1">
-            <h3 className="text-xl sm:text-2xl font-bold text-gold-300 mb-2">PARCELS</h3>
-            <p className="text-gold-400/60 text-sm">
-              {cartItems.length === 0
-                ? 'Click on available squares to add to parcels'
-                : `${cartItems.length} ZMAP${cartItems.length > 1 ? 's' : ''} selected`}
-            </p>
+        <div className="p-4 sm:p-6 border-b border-gold-700/30">
+          <div className="flex justify-between items-start mb-4">
+            <h3 className="text-xl sm:text-2xl font-bold text-gold-300">PARCELS</h3>
+            <button
+              onClick={() => setShowCart(false)}
+              className="lg:hidden text-gold-400/60 hover:text-gold-300 text-2xl transition-colors"
+            >
+              ✕
+            </button>
           </div>
-          <button
-            onClick={() => setShowCart(false)}
-            className="lg:hidden text-gold-400/60 hover:text-gold-300 text-2xl transition-colors ml-4"
-          >
-            ✕
-          </button>
+
+          {/* Zcash Stats */}
+          <div className="bg-gold-500/10 p-3 rounded mb-3 space-y-1">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-gold-400/70">Zcash Blocks</span>
+              <span className="text-gold-300 font-mono font-bold">
+                {blockCount > 0 ? blockCount.toLocaleString() : 'Loading...'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-gold-400/70">Available ZMAPS</span>
+              <span className="text-gold-300 font-mono font-bold">
+                {blockCount > 0 ? Math.ceil(blockCount / BLOCKS_PER_MAP).toLocaleString() : '...'}
+              </span>
+            </div>
+            <div className="text-gold-400/60 text-xs pt-2 border-t border-gold-500/20">
+              1 ZMAP = 100 Zcash Blocks
+            </div>
+          </div>
+
+          <p className="text-gold-400/60 text-sm">
+            {cartItems.length === 0
+              ? 'Click on available squares to add to parcels'
+              : `${cartItems.length} ZMAP${cartItems.length > 1 ? 's' : ''} selected`}
+          </p>
         </div>
 
         {/* Cart Items */}
