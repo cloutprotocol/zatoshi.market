@@ -169,20 +169,26 @@ export function parseError(error: unknown): UserFriendlyError {
   const errorString = error instanceof Error ? error.message : String(error);
   const errorLower = errorString.toLowerCase();
 
-  // Check for exact matches first
-  for (const [pattern, message] of Object.entries(ERROR_MESSAGES)) {
-    if (errorLower.includes(pattern.toLowerCase())) {
-      return message;
-    }
+  // Check for specific error patterns with more context (order matters - most specific first)
+
+  // UTXO and balance errors (most common)
+  if (errorLower.includes('utxo fetch') || errorLower.includes('utxo') || errorLower.includes('no spendable')) {
+    return ERROR_MESSAGES['UTXO fetch failed'];
   }
 
-  // Check for specific error patterns with more context
   if (errorLower.includes('not enough') || errorLower.includes('insufficient')) {
     return ERROR_MESSAGES['Not enough spendable funds'];
   }
 
-  if (errorLower.includes('utxo') || errorLower.includes('no spendable')) {
-    return ERROR_MESSAGES['UTXO fetch failed'];
+  if (errorLower.includes('empty') && errorLower.includes('wallet')) {
+    return ERROR_MESSAGES['no utxos'];
+  }
+
+  // Check for exact matches
+  for (const [pattern, message] of Object.entries(ERROR_MESSAGES)) {
+    if (errorLower.includes(pattern.toLowerCase())) {
+      return message;
+    }
   }
 
   if (errorLower.includes('network') || errorLower.includes('fetch')) {
@@ -317,18 +323,39 @@ export function categorizeError(error: unknown): ErrorCategory {
 
 /**
  * Sanitize error for production (remove sensitive info)
+ * Returns user-friendly error message
  */
 export function sanitizeError(error: unknown): string {
   const errorString = error instanceof Error ? error.message : String(error);
 
-  // Remove patterns that expose internal details
-  const sanitized = errorString
-    .replace(/\[CONVEX.*?\]/g, '') // Remove Convex prefixes
-    .replace(/\[Request ID:.*?\]/g, '') // Remove request IDs
-    .replace(/at\s+\w+\s+\(.*?\)/g, '') // Remove stack traces
-    .replace(/Server Error/g, '') // Remove generic "Server Error"
-    .replace(/Uncaught Error:/g, '') // Remove "Uncaught Error:"
+  // Step 1: Remove patterns that expose internal details (comprehensive patterns)
+  const cleaned = errorString
+    // Remove Convex-specific patterns
+    .replace(/\[CONVEX.*?\]/gi, '')
+    .replace(/\[Request ID:.*?\]/gi, '')
+    // Remove ALL stack trace variations
+    .replace(/at\s+async\s+\w+\s+\(.*?\)/gi, '') // "at async handler (...)"
+    .replace(/at\s+\w+\s+\(.*?\)/gi, '')          // "at handler (...)"
+    .replace(/at\s+.*?\(\.\.\/.*?\)/gi, '')       // "at async handler (../convex/...)"
+    .replace(/at\s+.*?:\d+:\d+/gi, '')            // "at file.ts:424:20"
+    // Remove generic error prefixes
+    .replace(/Server Error:?/gi, '')
+    .replace(/Uncaught Error:?/gi, '')
+    .replace(/Error:?\s+/gi, '')
+    // Remove "Called by client"
+    .replace(/Called by client/gi, '')
+    // Remove file paths
+    .replace(/\.\.\/convex\/\S+/gi, '')
+    .replace(/\.\.\/\S+\.ts:\d+:\d+/gi, '')
+    // Clean up multiple spaces/newlines
+    .replace(/\s+/g, ' ')
     .trim();
 
-  return sanitized || 'An error occurred';
+  // Step 2: Parse the cleaned error to get user-friendly message
+  // Create a new error with the cleaned message for parsing
+  const cleanedError = new Error(cleaned);
+  const parsed = parseError(cleanedError);
+
+  // Return the user-friendly message
+  return parsed.message;
 }

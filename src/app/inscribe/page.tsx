@@ -781,7 +781,7 @@ export default function InscribePage() {
 
             {/* Error Display */}
             {error && (
-              <div className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <div className="max-w-2xl m-auto mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
                 <p className="text-red-400 text-sm">{error}</p>
               </div>
             )}
