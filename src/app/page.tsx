@@ -143,7 +143,7 @@ export default function Home() {
         {/* Footer */}
         <footer className="container mx-auto px-6 py-12">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="text-2xl text-gold-400">ZORDINALS.MARKET</div>
+            <div className="text-2xl text-gold-400">zatoshi.market</div>
             <div className="flex gap-6 text-gold-300/80">
               <Link href="/wallet" className="hover:text-gold-400 transition-all">
                 WALLET

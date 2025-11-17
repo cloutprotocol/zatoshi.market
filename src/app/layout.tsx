@@ -3,7 +3,7 @@ import "./globals.css";
 import { ClientLayout } from "@/components/ClientLayout";
 
 export const metadata: Metadata = {
-  title: "ZORDINALS.MARKET",
+  title: "zatoshi.market",
   description: "Host and trade ZRC20 tokens, ZMAPS, and Zerdinal inscriptions on Zcash.",
 };
 

@@ -505,7 +505,7 @@ export default function ZmapsPage() {
       <header className="fixed top-0 left-0 w-full flex items-center justify-between px-6 py-4 backdrop-blur-xl bg-black/30 z-20 border-b border-gold-700/30">
         <div className="flex items-center gap-6">
           <Link href="/" className="text-2xl text-gold-400">
-            ZORDINALS.MARKET
+            zatoshi.market
           </Link>
           <span className="text-2xl text-gold-400">ZMAPS</span>
           <span className="text-lg text-gold-300/60">
