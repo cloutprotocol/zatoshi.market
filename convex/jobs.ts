@@ -77,13 +77,17 @@ export const runNextMint = action({
     const p = job.params as any;
     const inscriptionAmount = p.inscriptionAmount ?? 60000;
     const fee = p.fee ?? 10000;
+    const PLATFORM_FEE_ENABLED = (process.env.PLATFORM_FEE_ENABLED || '').toLowerCase() === 'true';
+    const PLATFORM_FEE_ZATS = parseInt(process.env.PLATFORM_FEE_ZATS || '100000', 10);
+    const PLATFORM_TREASURY = process.env.PLATFORM_TREASURY_ADDRESS || 't1ZemSSmv1kcqapcCReZJGH4driYmbALX1x';
     const waitMs = p.waitMs ?? 8000;
     const contentStr: string = p.contentJson ?? p.content ?? "hello world";
     const contentType: string = p.contentType ?? (p.contentJson ? "application/json" : "text/plain");
 
     // Mint once
     const utxos = await fetchUtxos(p.address);
-    const required = inscriptionAmount + fee;
+    const platformFeeZats = PLATFORM_FEE_ENABLED ? PLATFORM_FEE_ZATS : 0;
+    const required = inscriptionAmount + fee + platformFeeZats;
     // Filter safe only
     const candidates = utxos.filter(u => u.value >= required);
     let utxo = undefined as undefined | typeof candidates[number];
@@ -124,6 +128,8 @@ export const runNextMint = action({
         consensusBranchId: branchId,
         redeemScript,
         p2shScript: p2shFixed.script,
+        platformFeeZats,
+        platformTreasuryAddress: PLATFORM_TREASURY,
       });
       const commitTxid = await broadcastTransaction(commit.hex);
       await new Promise((r)=>setTimeout(r, waitMs));
@@ -152,8 +158,8 @@ export const runNextMint = action({
         contentPreview: preview,
         contentSize: Buffer.byteLength(contentStr),
         type: p.type ?? (contentType.startsWith("application/json") ? "zrc20" : "text"),
-        platformFeeZat: 0,
-        treasuryAddress: p.address,
+        platformFeeZat: platformFeeZats,
+        treasuryAddress: PLATFORM_TREASURY,
         zrc20Tick,
         zrc20Op,
         zrc20Amount,

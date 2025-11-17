@@ -140,13 +140,24 @@ export async function buildCommitTxHex(params: {
   consensusBranchId: number;
   redeemScript: Buffer;
   p2shScript: Buffer;
+  platformFeeZats?: number;
+  platformTreasuryAddress?: string;
 }): Promise<{ hex: string; pubKey: Buffer }>{
   const priv = wifToPriv(params.wif);
   const pub = Buffer.from(await secp256k1.getPublicKey(priv, true));
   const pkh = addressToPkh(params.address);
   const inputs = [{ txid: params.utxo.txid, vout: params.utxo.vout, sequence: 0xfffffffd, value: params.utxo.value, scriptPubKey: buildP2PKHScript(pkh) }];
-  const outputs = [{ value: params.inscriptionAmount, scriptPubKey: params.p2shScript }];
-  const change = params.utxo.value - params.inscriptionAmount - params.fee;
+  const outputs: { value: number; scriptPubKey: Buffer }[] = [
+    { value: params.inscriptionAmount, scriptPubKey: params.p2shScript }
+  ];
+  const platformFee = Math.max(0, params.platformFeeZats || 0);
+  if (platformFee > 0) {
+    const treasuryAddr = params.platformTreasuryAddress || '';
+    const tPkh = treasuryAddr ? addressToPkh(treasuryAddr) : null;
+    if (!tPkh) throw new Error('Platform fee enabled but no treasury address provided');
+    outputs.push({ value: platformFee, scriptPubKey: buildP2PKHScript(tPkh) });
+  }
+  const change = params.utxo.value - params.inscriptionAmount - params.fee - platformFee;
   if (change > 546) outputs.push({ value: change, scriptPubKey: buildP2PKHScript(pkh) });
   const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId: params.consensusBranchId, lockTime:0, expiryHeight:0, inputs, outputs };
   const sigHash = zip243Sighash(txData, 0);
@@ -221,4 +232,3 @@ export function signatureToDER(sig64: Uint8Array): Buffer {
   const body = Buffer.concat([Buffer.from([0x02, rB.length]), rB, Buffer.from([0x02, sB.length]), sB]);
   return Buffer.concat([Buffer.from([0x30, body.length]), body]);
 }
-

@@ -1,5 +1,7 @@
 'use client';
 
+import React from 'react';
+
 import { useState, useEffect } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
 import Link from 'next/link';
@@ -248,7 +250,8 @@ export default function InscribePage() {
     if (!tick.trim() || !amount.trim()) { setError('Please enter ticker and amount'); return; }
     setLoading(true);
     setError(null);
-    setBatchResults(null);
+    setBatchStatus(null);
+    setBatchJobId(null);
     try {
       const convex = getConvexClient(); if (!convex) throw new Error('Convex client not available');
       const payload = JSON.stringify({ p: 'zrc-20', op: 'mint', tick: tick.toUpperCase(), amt: amount });
@@ -286,46 +289,46 @@ export default function InscribePage() {
   const zrc20Cost = calculateTotalCost(PLATFORM_FEES.INSCRIPTION);
 
   return (
-    <main className="h-screen bg-black text-gold-300 pt-20 pb-4">
-      <div className="container mx-auto px-4 sm:px-6 h-full flex flex-col">
-        <div className="flex flex-col lg:flex-row gap-4 h-full">
+    <main className="min-h-screen h-screen bg-black text-gold-300 pt-20 pb-4 overflow-hidden">
+      <div className="container mx-auto px-4 sm:px-6 h-full flex flex-col max-w-7xl">
+        <div className="flex flex-col lg:flex-row gap-4 h-full min-h-0">
           {/* Left Sidebar - Tabs */}
-          <div className="lg:w-56 flex-shrink-0 flex flex-col">
+          <div className="lg:w-56 flex-shrink-0 flex flex-col lg:overflow-y-auto">
             {/* Mobile: Horizontal Scrolling Tabs */}
-            <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0 -mx-4 px-4 lg:mx-0 lg:px-0">
+            <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0 -mx-4 px-4 lg:mx-0 lg:px-0 scrollbar-hide">
               <button
                 onClick={() => setActiveTab('names')}
-                className={`flex-shrink-0 lg:w-full text-left px-8 sm:px-6 sm:py-4 rounded-lg rounded-lg font-bold transition-all ${
+                className={`flex-shrink-0 lg:w-full text-left px-6 py-3 sm:px-6 sm:py-4 rounded-lg font-bold transition-all ${
                   activeTab === 'names'
                     ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
                     : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
                 }`}
               >
-                <div className="text-base sm:text-lg whitespace-nowrap lg:whitespace-normal">Names</div>
+                <div className="text-sm sm:text-base lg:text-lg whitespace-nowrap lg:whitespace-normal">Names</div>
                 <div className="text-xs opacity-75 hidden sm:block">.zec • .zcash</div>
               </button>
 
               <button
                 onClick={() => setActiveTab('text')}
-                className={`flex-shrink-0 lg:w-full text-left px-8 sm:px-6 sm:py-4 rounded-lg font-bold transition-all ${
+                className={`flex-shrink-0 lg:w-full text-left px-6 py-3 sm:px-6 sm:py-4 rounded-lg font-bold transition-all ${
                   activeTab === 'text'
                     ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
                     : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
                 }`}
               >
-                <div className="text-base sm:text-lg whitespace-nowrap lg:whitespace-normal">Text</div>
+                <div className="text-sm sm:text-base lg:text-lg whitespace-nowrap lg:whitespace-normal">Text</div>
                 <div className="text-xs opacity-75 hidden sm:block">Inscriptions</div>
               </button>
 
               <button
                 onClick={() => setActiveTab('zrc20')}
-                className={`flex-shrink-0 lg:w-full text-left px-8 sm:px-6 sm:py-4 rounded-lg rounded-lg font-bold transition-all ${
+                className={`flex-shrink-0 lg:w-full text-left px-6 py-3 sm:px-6 sm:py-4 rounded-lg font-bold transition-all ${
                   activeTab === 'zrc20'
                     ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
                     : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
                 }`}
               >
-                <div className="text-base sm:text-lg whitespace-nowrap lg:whitespace-normal">ZRC-20</div>
+                <div className="text-sm sm:text-base lg:text-lg whitespace-nowrap lg:whitespace-normal">ZRC-20</div>
                 <div className="text-xs opacity-75 hidden sm:block">Token Mint</div>
               </button>
             </div>
@@ -343,7 +346,8 @@ export default function InscribePage() {
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 bg-black/40 border border-none rounded-xl sm:rounded-2xl backdrop-blur-xl p-4 sm:p-4 lg:p-4">
+          <div className="flex-1 bg-black/40 border border-none rounded-xl sm:rounded-2xl backdrop-blur-xl overflow-y-auto min-h-0">
+            <div className="p-4 sm:p-6 lg:p-8">
             {/* NAME REGISTRATION TAB */}
             {activeTab === 'names' && (
               <div className="max-w-2xl mx-auto">
@@ -509,6 +513,7 @@ export default function InscribePage() {
                 </div>
 
                 {zrcSubTab === 'mint' && (
+                <>
                 <div className="text-center mb-6 sm:mb-8">
                   <h2 className="text-2xl sm:text-3xl font-bold mb-2">Mint ZRC-20 Token</h2>
                   <p className="text-gold-400/60 text-sm sm:text-base">
@@ -625,6 +630,7 @@ export default function InscribePage() {
                   )}
                 </div>
 
+                </>
                 )}
 
                 {zrcSubTab === 'batch' && (
@@ -734,6 +740,7 @@ export default function InscribePage() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>

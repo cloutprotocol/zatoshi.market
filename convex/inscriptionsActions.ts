@@ -37,12 +37,17 @@ export const mintInscriptionAction = action({
     const waitMs = args.waitMs ?? 10000;
     const contentStr = args.contentJson ?? args.content ?? "hello world";
     const contentType = args.contentType ?? (args.contentJson ? "application/json" : "text/plain");
+    // Platform fee config
+    const PLATFORM_FEE_ENABLED = (process.env.PLATFORM_FEE_ENABLED || '').toLowerCase() === 'true';
+    const PLATFORM_FEE_ZATS = parseInt(process.env.PLATFORM_FEE_ZATS || '100000', 10);
+    const PLATFORM_TREASURY = process.env.PLATFORM_TREASURY_ADDRESS || 't1ZemSSmv1kcqapcCReZJGH4driYmbALX1x';
 
     const pkh = addressToPkh(args.address);
 
     // UTXO selection (simple: pick first confirmed >= needed)
     const utxos = await fetchUtxos(args.address);
-    const required = inscriptionAmount + fee;
+    const platformFeeZats = PLATFORM_FEE_ENABLED ? PLATFORM_FEE_ZATS : 0;
+    const required = inscriptionAmount + fee + platformFeeZats;
     // Filter safe (non-inscribed) UTXOs first; if indexer fails, abort
     const candidates = utxos.filter(u => u.value >= required);
     const safe: typeof candidates = [];
@@ -100,6 +105,8 @@ export const mintInscriptionAction = action({
       consensusBranchId: branchId,
       redeemScript: redeemScriptFixed,
       p2shScript: p2shFixed.script,
+      platformFeeZats,
+      platformTreasuryAddress: PLATFORM_TREASURY,
     });
 
     let commitTxid: string | undefined;
@@ -152,8 +159,8 @@ export const mintInscriptionAction = action({
       contentPreview: preview,
       contentSize: Buffer.byteLength(contentStr),
       type: args.type ?? (contentType.startsWith("application/json") ? "zrc20" : "text"),
-      platformFeeZat: 0,
-      treasuryAddress: args.address,
+      platformFeeZat: platformFeeZats,
+      treasuryAddress: PLATFORM_TREASURY,
       zrc20Tick,
       zrc20Op,
       zrc20Amount,
