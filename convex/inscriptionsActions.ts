@@ -10,6 +10,7 @@ import {
   buildRevealTxHex,
   createRevealScript,
   fetchUtxos,
+  checkInscriptionAt,
   p2shFromRedeem,
   getConsensusBranchId,
   broadcastTransaction,
@@ -42,8 +43,15 @@ export const mintInscriptionAction = action({
     // UTXO selection (simple: pick first confirmed >= needed)
     const utxos = await fetchUtxos(args.address);
     const required = inscriptionAmount + fee;
-    // Attempt to lock a suitable UTXO to avoid races
-    let utxo = utxos.find(u => u.value >= required);
+    // Filter safe (non-inscribed) UTXOs first; if indexer fails, abort
+    const candidates = utxos.filter(u => u.value >= required);
+    const safe: typeof candidates = [];
+    for (const c of candidates) {
+      const hasInscription = await checkInscriptionAt(`${c.txid}:${c.vout}`);
+      if (!hasInscription) safe.push(c);
+    }
+    // Attempt to lock a suitable safe UTXO to avoid races
+    let utxo = safe[0];
     let locked = false;
     while (utxo) {
       const res = await ctx.runMutation(internal.utxoLocks.lockUtxo, {
@@ -54,7 +62,7 @@ export const mintInscriptionAction = action({
       });
       if (res.locked) { locked = true; break; }
       // pick next candidate if lock failed
-      utxo = utxos.find(u => u.value >= required && (u.txid !== utxo!.txid || u.vout !== utxo!.vout));
+      utxo = safe.find(u => (u.txid !== utxo!.txid || u.vout !== utxo!.vout));
     }
     if (!locked || !utxo) throw new Error(`No safe unlocked UTXO >= ${required}`);
 

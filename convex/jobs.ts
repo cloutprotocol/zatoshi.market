@@ -9,6 +9,7 @@ import {
   buildRevealTxHex,
   createRevealScript,
   fetchUtxos,
+  checkInscriptionAt,
   p2shFromRedeem,
   getConsensusBranchId,
   broadcastTransaction,
@@ -83,7 +84,13 @@ export const runNextMint = action({
     // Mint once
     const utxos = await fetchUtxos(p.address);
     const required = inscriptionAmount + fee;
-    let utxo = utxos.find((u) => u.value >= required);
+    // Filter safe only
+    const candidates = utxos.filter(u => u.value >= required);
+    let utxo = undefined as undefined | typeof candidates[number];
+    for (const c of candidates) {
+      const hasInsc = await checkInscriptionAt(`${c.txid}:${c.vout}`);
+      if (!hasInsc) { utxo = c; break; }
+    }
     if (!utxo) throw new Error(`No UTXO >= ${required}`);
     // Try lock
     const lockRes = await ctx.runMutation(internal.utxoLocks.lockUtxo, { txid: utxo.txid, vout: utxo.vout, address: p.address });
@@ -157,4 +164,3 @@ export const runNextMint = action({
     }
   }
 });
-

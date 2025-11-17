@@ -63,8 +63,16 @@ async function fetchZerdinalsId(revealTxid){ try{ const r=await fetch(`https://i
   const p2shScript = buildP2SHScriptFromRedeem(redeemScript);
   const consensusBranchId = await getConsensusBranchId();
   const utxos = await getUTXOs(WALLET.address);
-  const u = utxos.find(x=>x.value >= INSCRIPTION_AMOUNT + TX_FEE) || utxos[0];
-  if(!u) throw new Error('No suitable UTXO');
+  let u = undefined;
+  for (const x of utxos) {
+    if (x.value < INSCRIPTION_AMOUNT + TX_FEE) continue;
+    try {
+      const r = await fetch(`https://indexer.zerdinals.com/location/${x.txid}:${x.vout}`);
+      if (r.status === 404) { u = x; break; }
+      const j = await r.json(); if (j?.code === 404) { u = x; break; }
+    } catch (e) { throw new Error('Inscription check failed'); }
+  }
+  if(!u) throw new Error('No suitable safe UTXO');
 
   // Build commit (v4)
   const commitInputs = [{ txid: u.txid, vout: u.vout, sequence: 0xfffffffd, value: u.value, scriptPubKey: buildP2PKHScript(pkh) }];
@@ -119,4 +127,3 @@ async function fetchZerdinalsId(revealTxid){ try{ const r=await fetch(`https://i
     console.log('Zerdinals inscription URL:', `https://zerdinals.com/inscription/${inscriptionId}`);
   }
 })();
-

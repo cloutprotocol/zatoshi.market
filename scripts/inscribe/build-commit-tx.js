@@ -235,6 +235,17 @@ async function fetchUTXOs(address) {
   if (!res.ok) throw new Error(`UTXO fetch failed: ${res.status}`);
   return res.json();
 }
+async function isInscribed(txid, vout) {
+  try {
+    const r = await fetch(`https://indexer.zerdinals.com/location/${txid}:${vout}`);
+    if (r.status === 404) return false;
+    const j = await r.json();
+    if (j?.code === 404) return false;
+    return true;
+  } catch (e) {
+    throw new Error('Inscription check failed');
+  }
+}
 
 async function broadcast(txHex) {
   // Prefer Zerdinals
@@ -277,8 +288,14 @@ async function main() {
 
   const utxos = await fetchUTXOs(WALLET.address);
   const required = INSCRIPTION_AMOUNT + TX_FEE;
-  const selected = utxos.filter(u => u.confirmed !== false).find(u => u.value >= required);
-  if (!selected) throw new Error(`Insufficient funds: need ${required}`);
+  let selected = undefined;
+  for (const u of utxos) {
+    if (u.confirmed === false) continue;
+    if (u.value < required) continue;
+    const hasInsc = await isInscribed(u.txid, u.vout);
+    if (!hasInsc) { selected = u; break; }
+  }
+  if (!selected) throw new Error(`No safe UTXO available with sufficient value (${required})`);
 
   console.log('Selected UTXO:', `${selected.txid}:${selected.vout}`, 'value=', selected.value);
 

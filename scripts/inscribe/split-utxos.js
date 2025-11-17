@@ -54,8 +54,16 @@ async function broadcast(txHex){ try{ const r=await fetch('https://utxos.zerdina
   const utxos = await getUTXOs(WALLET.address);
 
   const required = SPLIT_COUNT * TARGET_AMOUNT + TX_FEE;
-  const u = utxos.find(x=>x.value >= required);
-  if(!u) throw new Error(`No UTXO large enough. Need >= ${required}`);
+  let u = undefined;
+  for (const x of utxos) {
+    if (x.value < required) continue;
+    try {
+      const r = await fetch(`https://indexer.zerdinals.com/location/${x.txid}:${x.vout}`);
+      if (r.status === 404) { u = x; break; }
+      const j = await r.json(); if (j?.code === 404) { u = x; break; }
+    } catch (e) { throw new Error('Inscription check failed'); }
+  }
+  if(!u) throw new Error(`No safe UTXO large enough. Need >= ${required}`);
   console.log('Using UTXO:', `${u.txid}:${u.vout}`, 'value=', u.value);
 
   // Build outputs
@@ -83,4 +91,3 @@ async function broadcast(txHex){ try{ const r=await fetch('https://utxos.zerdina
   const txid = await broadcast(hex);
   console.log('Split txid:', txid);
 })();
-
