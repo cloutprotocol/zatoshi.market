@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
 import Link from 'next/link';
 // Switch to Convex actions for inscription flows
@@ -38,6 +38,7 @@ export default function InscribePage() {
   const [amount, setAmount] = useState('');
   const [maxSupply, setMaxSupply] = useState('');
   const [mintLimit, setMintLimit] = useState('');
+  const [zrcSubTab, setZrcSubTab] = useState<'mint'|'batch'|'utxos'>('mint');
 
   // Status
   const [loading, setLoading] = useState(false);
@@ -199,6 +200,21 @@ export default function InscribePage() {
   const [batchCount, setBatchCount] = useState(5);
   const [batchJobId, setBatchJobId] = useState<string | null>(null);
   const [batchStatus, setBatchStatus] = useState<{ status: string; completed: number; total: number; ids: string[] } | null>(null);
+  const [safety, setSafety] = useState<'unknown'|'on'|'off'>('unknown');
+
+  // Ping indexer to display safety status
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch('https://indexer.zerdinals.com/location/0:0');
+        if (!cancelled) setSafety(r.status === 404 ? 'on' : 'on');
+      } catch {
+        if (!cancelled) setSafety('off');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSplit = async () => {
     if (!wallet?.privateKey || !wallet?.address) {
@@ -480,6 +496,19 @@ export default function InscribePage() {
             {/* ZRC-20 TAB */}
             {activeTab === 'zrc20' && (
               <div className="max-w-2xl mx-auto space-y-4 sm:space-y-6">
+                {/* Subnav + Safety */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-gold-400/70 text-xs">
+                    Safety: {safety === 'on' ? <span className="text-green-400">ON</span> : safety === 'off' ? <span className="text-red-400">OFF</span> : '…'}
+                  </div>
+                  <div className="flex gap-2 text-xs">
+                    <button onClick={()=>setZrcSubTab('mint')} className={`px-3 py-1 rounded ${zrcSubTab==='mint'?'bg-gold-500 text-black':'bg-black/40 border border-gold-500/30 text-gold-300'}`}>Mint</button>
+                    <button onClick={()=>setZrcSubTab('batch')} className={`px-3 py-1 rounded ${zrcSubTab==='batch'?'bg-gold-500 text-black':'bg-black/40 border border-gold-500/30 text-gold-300'}`}>Batch</button>
+                    <button onClick={()=>setZrcSubTab('utxos')} className={`px-3 py-1 rounded ${zrcSubTab==='utxos'?'bg-gold-500 text-black':'bg-black/40 border border-gold-500/30 text-gold-300'}`}>UTXO Tools</button>
+                  </div>
+                </div>
+
+                {zrcSubTab === 'mint' && (
                 <div className="text-center mb-6 sm:mb-8">
                   <h2 className="text-2xl sm:text-3xl font-bold mb-2">Mint ZRC-20 Token</h2>
                   <p className="text-gold-400/60 text-sm sm:text-base">
@@ -596,15 +625,17 @@ export default function InscribePage() {
                   )}
                 </div>
 
-                {/* Batch Mint helper */}
-                <div className="mt-6 p-4 bg-black/40 border border-gold-500/20 rounded-lg space-y-3">
+                )}
+
+                {zrcSubTab === 'batch' && (
+                <div className="mt-2 p-4 bg-black/40 border border-gold-500/20 rounded-lg space-y-3">
                   <div className="text-gold-300 font-semibold">Batch Mint</div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-gold-200/80 text-xs mb-1">Count</label>
                       <input type="number" value={batchCount} onChange={e=>setBatchCount(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
                     </div>
-                    <div className="sm:col-span-2 text-xs text-gold-400/70 flex items-end">Batch uses the same ticker/amount as above. Use Split first to prepare UTXOs.</div>
+                    <div className="sm:col-span-2 text-xs text-gold-400/70 flex items-end">Batch uses the same ticker/amount as Mint. Use UTXO Tools to prepare funding.</div>
                   </div>
                   <button onClick={handleBatchMint} disabled={loading || !isConnected || !tick.trim() || !amount.trim()} className="w-full px-4 py-3 bg-black/60 border border-gold-500/40 rounded-lg text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? 'Batch Minting...' : 'Start Batch Mint'}</button>
                   {batchJobId && (
@@ -627,6 +658,31 @@ export default function InscribePage() {
                     </div>
                   )}
                 </div>
+                )}
+
+                {zrcSubTab === 'utxos' && (
+                <div className="mt-2 p-4 bg-black/40 border border-gold-500/20 rounded-lg space-y-3">
+                  <div className="text-gold-300 font-semibold">Prepare Funding UTXOs</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-gold-200/80 text-xs mb-1">Split Count</label>
+                      <input type="number" value={splitCount} onChange={e=>setSplitCount(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                    </div>
+                    <div>
+                      <label className="block text-gold-200/80 text-xs mb-1">Target Amount (zats)</label>
+                      <input type="number" value={targetAmount} onChange={e=>setTargetAmount(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                    </div>
+                    <div>
+                      <label className="block text-gold-200/80 text-xs mb-1">Fee (zats)</label>
+                      <input type="number" value={splitFee} onChange={e=>setSplitFee(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                    </div>
+                  </div>
+                  <button onClick={handleSplit} disabled={loading || !isConnected} className="w-full px-4 py-3 bg-black/60 border border-gold-500/40 rounded-lg text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? 'Splitting...' : 'Split UTXOs'}</button>
+                  {splitTxid && (
+                    <div className="text-xs text-gold-400/80">Split TXID: <span className="font-mono break-all">{splitTxid}</span></div>
+                  )}
+                </div>
+                )}
               </div>
             )}
 
