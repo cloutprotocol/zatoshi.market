@@ -131,6 +131,20 @@ export const mintInscriptionAction = action({
 
     // Log final inscription (optional: adapt to schema expectations)
     const preview = contentStr.slice(0, 200);
+    // Derive ZRC-20 fields if JSON
+    let zrc20Tick: string | undefined;
+    let zrc20Op: string | undefined;
+    let zrc20Amount: string | undefined;
+    if (contentType.startsWith('application/json')) {
+      try {
+        const parsed = JSON.parse(contentStr);
+        if (parsed?.p === 'zrc-20') {
+          zrc20Tick = parsed.tick?.toString()?.toUpperCase();
+          zrc20Op = parsed.op?.toString();
+          zrc20Amount = parsed.amt?.toString();
+        }
+      } catch {}
+    }
     await ctx.runMutation(api.inscriptions.createInscription, {
       txid: revealTxid,
       address: args.address,
@@ -140,9 +154,9 @@ export const mintInscriptionAction = action({
       type: args.type ?? (contentType.startsWith("application/json") ? "zrc20" : "text"),
       platformFeeZat: 0,
       treasuryAddress: args.address,
-      zrc20Tick: undefined,
-      zrc20Op: undefined,
-      zrc20Amount: undefined,
+      zrc20Tick,
+      zrc20Op,
+      zrc20Amount,
     } as any);
 
     return { commitTxid, revealTxid, inscriptionId };

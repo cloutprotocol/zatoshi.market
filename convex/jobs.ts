@@ -132,6 +132,19 @@ export const runNextMint = action({
       const revealTxid = await broadcastTransaction(revealHex);
       const inscriptionId = `${revealTxid}i0`;
       const preview = contentStr.slice(0, 200);
+      let zrc20Tick: string | undefined;
+      let zrc20Op: string | undefined;
+      let zrc20Amount: string | undefined;
+      if (contentType.startsWith('application/json')) {
+        try {
+          const parsed = JSON.parse(contentStr);
+          if (parsed?.p === 'zrc-20') {
+            zrc20Tick = parsed.tick?.toString()?.toUpperCase();
+            zrc20Op = parsed.op?.toString();
+            zrc20Amount = parsed.amt?.toString();
+          }
+        } catch {}
+      }
       const docId = await ctx.runMutation(api.inscriptions.createInscription, {
         txid: revealTxid,
         address: p.address,
@@ -141,9 +154,9 @@ export const runNextMint = action({
         type: p.type ?? (contentType.startsWith("application/json") ? "zrc20" : "text"),
         platformFeeZat: 0,
         treasuryAddress: p.address,
-        zrc20Tick: undefined,
-        zrc20Op: undefined,
-        zrc20Amount: undefined,
+        zrc20Tick,
+        zrc20Op,
+        zrc20Amount,
       } as any);
       await ctx.runMutation(api.jobs.addJobProgress, { jobId: args.jobId, inscriptionId, inscriptionDocId: docId });
 
