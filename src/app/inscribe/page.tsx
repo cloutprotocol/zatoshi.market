@@ -197,7 +197,8 @@ export default function InscribePage() {
   const [splitFee, setSplitFee] = useState(10000);
   const [splitTxid, setSplitTxid] = useState<string | null>(null);
   const [batchCount, setBatchCount] = useState(5);
-  const [batchResults, setBatchResults] = useState<{ txid: string; inscriptionId: string }[] | null>(null);
+  const [batchJobId, setBatchJobId] = useState<string | null>(null);
+  const [batchStatus, setBatchStatus] = useState<{ status: string; completed: number; total: number; ids: string[] } | null>(null);
 
   const handleSplit = async () => {
     if (!wallet?.privateKey || !wallet?.address) {
@@ -245,8 +246,19 @@ export default function InscribePage() {
         fee: 10000,
         waitMs: 10000,
       });
-      const mapped = (res.results || []).map((r: any) => ({ txid: r.revealTxid, inscriptionId: r.inscriptionId }));
-      setBatchResults(mapped);
+      setBatchJobId(res.jobId);
+      // Start polling job status
+      const interval = setInterval(async () => {
+        try {
+          const job = await convex.query(api.jobs.getJob, { jobId: res.jobId });
+          if (job) {
+            setBatchStatus({ status: job.status, completed: job.completedCount, total: job.totalCount, ids: job.inscriptionIds });
+            if (job.status === 'completed' || job.status === 'failed') clearInterval(interval);
+          }
+        } catch (e) {
+          console.error('Job poll error', e);
+        }
+      }, 3000);
     } catch (err) {
       console.error('Batch mint error:', err);
       setError(err instanceof Error ? err.message : 'Failed to batch mint');
@@ -595,11 +607,23 @@ export default function InscribePage() {
                     <div className="sm:col-span-2 text-xs text-gold-400/70 flex items-end">Batch uses the same ticker/amount as above. Use Split first to prepare UTXOs.</div>
                   </div>
                   <button onClick={handleBatchMint} disabled={loading || !isConnected || !tick.trim() || !amount.trim()} className="w-full px-4 py-3 bg-black/60 border border-gold-500/40 rounded-lg text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? 'Batch Minting...' : 'Start Batch Mint'}</button>
-                  {batchResults && (
-                    <div className="space-y-1 text-xs text-gold-300">
-                      {batchResults.map((r, idx)=>(
-                        <div key={idx} className="flex items-center gap-2"><span className="opacity-70">{idx+1}.</span> <a className="underline" href={`https://zerdinals.com/inscription/${r.inscriptionId}`} target="_blank" rel="noreferrer">{r.inscriptionId}</a></div>
-                      ))}
+                  {batchJobId && (
+                    <div className="text-xs text-gold-400/80">Job ID: <span className="font-mono break-all">{batchJobId}</span></div>
+                  )}
+                  {batchStatus && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs text-gold-300">
+                        <span>Status: {batchStatus.status}</span>
+                        <span>{batchStatus.completed}/{batchStatus.total}</span>
+                      </div>
+                      <div className="w-full h-2 bg-black/60 border border-gold-500/30 rounded">
+                        <div className="h-full bg-gold-500 rounded" style={{ width: `${Math.min(100, (batchStatus.completed / Math.max(1, batchStatus.total)) * 100)}%` }} />
+                      </div>
+                      <div className="space-y-1 text-xs text-gold-300 max-h-40 overflow-auto">
+                        {batchStatus.ids.map((id, idx)=>(
+                          <div key={idx} className="flex items-center gap-2"><span className="opacity-70">{idx+1}.</span> <a className="underline" href={`https://zerdinals.com/inscription/${id}`} target="_blank" rel="noreferrer">{id}</a></div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>

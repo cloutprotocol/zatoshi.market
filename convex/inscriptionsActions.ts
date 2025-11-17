@@ -210,11 +210,13 @@ export const batchMintAction = action({
     waitMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const results: { commitTxid: string; revealTxid: string; inscriptionId: string }[] = [];
-    for (let i=0;i<args.count;i++) {
-      const res = await mintInscriptionAction.handler(ctx as any, args as any);
-      results.push(res as any);
-    }
-    return { count: results.length, results };
+    // Create job and start tail-chained internal action
+    const jobId = await ctx.runMutation(api.jobs.createJob, {
+      type: "batch-mint",
+      params: args,
+      totalCount: args.count,
+    });
+    await ctx.runAction(api.jobs.runNextMint, { jobId });
+    return { jobId };
   }
 });

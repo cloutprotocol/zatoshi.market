@@ -112,6 +112,21 @@ export default defineSchema({
     .index("by_txid_vout", ["txid", "vout"]) 
     .index("by_address", ["address"]) ,
 
+  // Long-running orchestration jobs (e.g., batch mint)
+  jobs: defineTable({
+    type: v.string(), // e.g., "batch-mint"
+    status: v.string(), // "pending" | "running" | "completed" | "failed"
+    params: v.any(),
+    totalCount: v.number(),
+    completedCount: v.number(),
+    inscriptionIds: v.array(v.string()),
+    inscriptions: v.array(v.id("inscriptions")),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"]) ,
+
   // Sales tracking for marketplace
   sales: defineTable({
     inscriptionId: v.string(), // What was sold
