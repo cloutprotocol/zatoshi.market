@@ -31,6 +31,7 @@ export default function ZmapsPage() {
   const [showIntro, setShowIntro] = useState(true);
   const [introStep, setIntroStep] = useState(1);
   const [showInfoButton, setShowInfoButton] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Keep ref in sync with state and trigger redraw
   useEffect(() => {
@@ -51,7 +52,7 @@ export default function ZmapsPage() {
     }
   }, []);
   const BLOCKS_PER_MAP = 100; // Each ZMAP square represents 100 Zcash blocks
-  const ZMAP_PRICE = 0.0015; // 0.0015 ZEC per ZMAP
+  const ZMAP_PRICE = 0.002; // 0.002 ZEC per ZMAP
   const COLS = 100; // Grid columns
 
   // Fetch real Zcash block count
@@ -831,10 +832,10 @@ export default function ZmapsPage() {
         {/* Cart Header */}
         <div className="p-4 sm:p-6 border-b border-gold-700/30 flex justify-between items-start">
           <div className="flex-1">
-            <h3 className="text-xl sm:text-2xl font-bold text-gold-300 mb-2">Cart</h3>
+            <h3 className="text-xl sm:text-2xl font-bold text-gold-300 mb-2">PARCELS</h3>
             <p className="text-gold-400/60 text-sm">
               {cartItems.length === 0
-                ? 'Click on available squares to add to cart'
+                ? 'Click on available squares to add to parcels'
                 : `${cartItems.length} ZMAP${cartItems.length > 1 ? 's' : ''} selected`}
             </p>
           </div>
@@ -901,13 +902,13 @@ export default function ZmapsPage() {
               }}
               className="w-full px-6 py-4 bg-gold-500 text-black font-bold text-lg tracking-wide hover:bg-gold-400 transition-colors"
             >
-              Checkout ({cartItems.length})
+              INSCRIBE ({cartItems.length})
             </button>
           </div>
         )}
       </div>
 
-      {/* Checkout Modal */}
+      {/* Inscribe Modal */}
       {showCheckoutModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
@@ -931,31 +932,43 @@ export default function ZmapsPage() {
                 ✕
               </button>
 
-              <h2 className="text-2xl sm:text-3xl font-bold text-gold-300 mb-6">Order Review</h2>
+              <h2 className="text-2xl sm:text-3xl font-bold text-gold-300 mb-6">Review Parcels</h2>
 
               {/* Order Summary */}
-              <div className="space-y-3 mb-6">
-                {cartItems.map((item, index) => (
-                  <div key={item.mapNumber} className="bg-black/30 p-4 rounded-lg flex justify-between items-center">
-                    <div>
-                      <div className="text-gold-300 font-bold">ZMAP #{item.mapNumber.toLocaleString()}</div>
-                      <div className="text-gold-400/60 text-sm font-mono">
-                        Blocks {item.blockStart.toLocaleString()} - {item.blockEnd.toLocaleString()}
+              <div className="relative mb-6">
+                <div ref={scrollContainerRef} className="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
+                  {cartItems.map((item, index) => (
+                    <div key={item.mapNumber} className="bg-black/30 p-4 rounded-lg flex justify-between items-center">
+                      <div>
+                        <div className="text-gold-300 font-bold">ZMAP #{item.mapNumber.toLocaleString()}</div>
+                        <div className="text-gold-400/60 text-sm font-mono">
+                          Blocks {item.blockStart.toLocaleString()} - {item.blockEnd.toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-gold-300 font-bold">{ZMAP_PRICE} ZEC</div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-gold-300 font-bold">{ZMAP_PRICE} ZEC</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Totals */}
-              <div className="bg-gold-500/10 p-6 rounded-lg mb-6 space-y-3">
-                <div className="flex justify-between text-xl">
-                  <span className="text-gold-300 font-bold">Total</span>
-                  <span className="text-gold-300 font-bold">{(cartItems.length * ZMAP_PRICE).toFixed(4)} ZEC</span>
+                  ))}
                 </div>
+                {/* Scroll indicator arrow */}
+                {cartItems.length > 3 && (
+                  <button
+                    onClick={() => {
+                      if (scrollContainerRef.current) {
+                        scrollContainerRef.current.scrollTo({
+                          top: scrollContainerRef.current.scrollHeight,
+                          behavior: 'smooth'
+                        });
+                      }
+                    }}
+                    className="absolute bottom-0 left-1/2 -translate-x-1/2 text-gold-400 animate-bounce hover:text-gold-300 transition-colors cursor-pointer"
+                  >
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 5v14M19 12l-7 7-7-7"/>
+                    </svg>
+                  </button>
+                )}
               </div>
 
               {/* Action Buttons */}
@@ -964,10 +977,11 @@ export default function ZmapsPage() {
                   onClick={() => setShowCheckoutModal(false)}
                   className="flex-1 px-6 py-4 bg-gold-500/10 text-gold-400 font-bold tracking-wide border border-gold-500/30 hover:bg-gold-500/20 transition-colors"
                 >
-                  Continue Shopping
+                  Continue Selecting
                 </button>
                 <button className="flex-1 px-6 py-4 bg-gold-500 text-black font-bold text-lg tracking-wide hover:bg-gold-400 transition-colors">
-                  Inscribe All for {(cartItems.length * ZMAP_PRICE).toFixed(4)} ZEC
+                  <div>Inscribe ({cartItems.length}) ZMAPS</div>
+                  <div className="text-sm font-normal mt-1">{(cartItems.length * ZMAP_PRICE).toFixed(4)} ZEC Total</div>
                 </button>
               </div>
 
@@ -1013,7 +1027,7 @@ export default function ZmapsPage() {
                     <strong>Gold squares</strong> = Already inscribed<br />
                     <strong>Empty squares</strong> = Available to inscribe<br />
                     <strong>Gray squares</strong> = Loading next 100<br />
-                    <strong>Click squares</strong> = Add to cart for bulk purchase
+                    <strong>Click squares</strong> = Add to parcels for bulk inscription
                   </p>
                 </div>
               </div>
@@ -1036,11 +1050,11 @@ export default function ZmapsPage() {
                   </div>
                   <div className="flex items-start gap-3">
                     <span className="text-gold-400 font-bold">•</span>
-                    <span className="text-gold-200/80"><strong>Click</strong> squares to add them to your cart</span>
+                    <span className="text-gold-200/80"><strong>Click</strong> squares to add them to your parcels</span>
                   </div>
                   <div className="flex items-start gap-3">
                     <span className="text-gold-400 font-bold">•</span>
-                    <span className="text-gold-200/80"><strong>Use cart</strong> on the left to review and checkout</span>
+                    <span className="text-gold-200/80"><strong>Use parcels</strong> on the left to review and inscribe</span>
                   </div>
                   <div className="flex items-start gap-3">
                     <span className="text-gold-400 font-bold">•</span>
@@ -1054,8 +1068,8 @@ export default function ZmapsPage() {
               <div>
                 <h2 className="text-3xl font-bold text-gold-300 mb-4">Start Exploring</h2>
                 <p className="text-gold-200/80 text-lg mb-6">
-                  You&apos;re all set! Click on available squares to add them to your cart.
-                  Each ZMAP costs 0.0015 ZEC. Inscribe ZMAPs and mine ZORE tokens on your land plots.
+                  You&apos;re all set! Click on available squares to add them to your parcels.
+                  Each ZMAP costs 0.002 ZEC. Inscribe ZMAPs and mine ZORE tokens on your land plots.
                   You can select multiple ZMAPs and inscribe them all at once!
                 </p>
                 <div className="bg-gold-500/10 p-4 rounded mb-6">
