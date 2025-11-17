@@ -171,17 +171,26 @@ export function parseError(error: unknown): UserFriendlyError {
 
   // Check for specific error patterns with more context (order matters - most specific first)
 
+  // Empty wallet (check first, most specific)
+  if ((errorLower.includes('empty') && errorLower.includes('wallet')) ||
+      errorLower.includes('wallet is empty') ||
+      errorLower.includes('wallet doesn\'t have')) {
+    return ERROR_MESSAGES['no utxos'];
+  }
+
   // UTXO and balance errors (most common)
-  if (errorLower.includes('utxo fetch') || errorLower.includes('utxo') || errorLower.includes('no spendable')) {
+  if (errorLower.includes('utxo fetch') ||
+      errorLower.includes('utxo') ||
+      errorLower.includes('no spendable') ||
+      errorLower.includes('spendable balance')) {
     return ERROR_MESSAGES['UTXO fetch failed'];
   }
 
-  if (errorLower.includes('not enough') || errorLower.includes('insufficient')) {
+  // Insufficient balance
+  if (errorLower.includes('not enough') ||
+      errorLower.includes('insufficient') ||
+      errorLower.includes('don\'t have enough')) {
     return ERROR_MESSAGES['Not enough spendable funds'];
-  }
-
-  if (errorLower.includes('empty') && errorLower.includes('wallet')) {
-    return ERROR_MESSAGES['no utxos'];
   }
 
   // Check for exact matches
