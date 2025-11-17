@@ -1,32 +1,29 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Dither from '@/components/Dither';
+import dynamic from 'next/dynamic';
+
+// Client-only Dither to avoid SSR/hydration mismatch
+const Dither = dynamic(() => import('@/components/Dither'), { ssr: false, loading: () => null });
 
 export default function MinePage() {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const [mounted, setMounted] = useState(true);
 
   return (
     <main className="relative min-h-screen text-gold-100 pt-20">
       {/* Dither Background */}
       <div className="fixed inset-0 w-full h-full -z-10">
-        {mounted && (
-          <Dither
-            waveColor={[0.8, 0.6, 0.2]}
-            disableAnimation={false}
-            enableMouseInteraction={true}
-            mouseRadius={0.3}
-            colorNum={4}
-            waveAmplitude={0.3}
-            waveFrequency={3}
-            waveSpeed={0.05}
-          />
-        )}
+        <Dither
+          waveColor={[0.8, 0.6, 0.2]}
+          disableAnimation={false}
+          enableMouseInteraction={true}
+          mouseRadius={0.3}
+          colorNum={4}
+          waveAmplitude={0.3}
+          waveFrequency={3}
+          waveSpeed={0.05}
+        />
       </div>
 
       {/* Content */}

@@ -2,17 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Dither from '@/components/Dither';
+import dynamic from 'next/dynamic';
 import { zcashRPC } from '@/services/zcash';
+
+// Load Dither only on the client to avoid SSR/hydration issues
+const Dither = dynamic(() => import('@/components/Dither'), { ssr: false, loading: () => null });
 
 export default function Home() {
   const [blockHeight, setBlockHeight] = useState<number>(0);
   const [loading, setLoading] = useState(true);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     async function fetchData() {
@@ -37,18 +35,16 @@ export default function Home() {
     <main className="relative min-h-screen pt-20">
       {/* Dither Background */}
       <div className="fixed inset-0 w-full h-full -z-10">
-        {mounted && (
-          <Dither
-            waveColor={[0.8, 0.6, 0.2]}
-            disableAnimation={false}
-            enableMouseInteraction={true}
-            mouseRadius={0.3}
-            colorNum={4}
-            waveAmplitude={0.3}
-            waveFrequency={3}
-            waveSpeed={0.05}
-          />
-        )}
+        <Dither
+          waveColor={[0.8, 0.6, 0.2]}
+          disableAnimation={false}
+          enableMouseInteraction={true}
+          mouseRadius={0.3}
+          colorNum={4}
+          waveAmplitude={0.3}
+          waveFrequency={3}
+          waveSpeed={0.05}
+        />
       </div>
 
       {/* Content */}

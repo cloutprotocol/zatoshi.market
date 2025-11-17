@@ -42,23 +42,27 @@ export default function WalletPage() {
     }
   }, [wallet?.address, fetchBalance, fetchPrice]);
 
-  const handleCreateWallet = () => {
+  const handleCreateWallet = async () => {
     setLoading(true);
-    setTimeout(() => {
-      const newWallet = generateWallet();
+    try {
+      const newWallet = await generateWallet();
       connectWallet(newWallet);
       setShowMnemonic(true);
+    } catch (e) {
+      alert('Failed to generate wallet: WebAssembly not supported in this environment.');
+      console.error(e);
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
-  const handleImportWallet = () => {
+  const handleImportWallet = async () => {
     const mnemonic = prompt('Enter your 12-word mnemonic phrase:');
     if (!mnemonic) return;
 
     try {
       setLoading(true);
-      const imported = importFromMnemonic(mnemonic.trim());
+      const imported = await importFromMnemonic(mnemonic.trim());
       connectWallet(imported);
       alert(`Wallet imported successfully! Address: ${imported.address}`);
     } catch (error) {

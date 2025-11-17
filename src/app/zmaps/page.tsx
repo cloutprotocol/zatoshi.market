@@ -2,8 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import Dither from '@/components/Dither';
+import dynamic from 'next/dynamic';
 import { zcashRPC } from '@/services/zcash';
+
+// Client-only Dither to avoid SSR/hydration mismatch
+const Dither = dynamic(() => import('@/components/Dither'), { ssr: false, loading: () => null });
 
 export default function ZmapsPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);

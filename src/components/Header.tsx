@@ -2,8 +2,11 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useWallet } from '@/contexts/WalletContext';
-import WalletDrawer from './WalletDrawer';
+
+// Load WalletDrawer only on the client to avoid pulling crypto/WASM libs server-side
+const WalletDrawer = dynamic(() => import('./WalletDrawer'), { ssr: false });
 
 export default function Header() {
   const { wallet, isConnected, mounted } = useWallet();

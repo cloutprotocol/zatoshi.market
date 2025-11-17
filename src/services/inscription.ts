@@ -1,3 +1,4 @@
+"use client";
 /**
  * Zerdinals Inscription Service
  * Client-side inscription creation following the Zerdinals protocol
@@ -5,9 +6,13 @@
 
 import * as bitcoin from 'bitcoinjs-lib';
 import { ECPairFactory } from 'ecpair';
-import * as ecc from 'tiny-secp256k1';
 
-const ECPair = ECPairFactory(ecc);
+// Lazy-load ECC using noble adapter (pure JS) at runtime only
+async function getECPair() {
+  const noble = await import('@/lib/nobleECC');
+  const ecc = await (noble as any).loadECC();
+  return ECPairFactory(ecc);
+}
 
 // Zcash network parameters (similar to Bitcoin mainnet)
 const ZCASH_NETWORK = {
@@ -110,6 +115,7 @@ export async function createInscriptionTransaction(
   address: string,
   inscriptionData: InscriptionData
 ): Promise<string> {
+  const ECPair = await getECPair();
   // Constants
   const INSCRIPTION_OUTPUT_VALUE = BigInt(10000); // 10,000 zatoshis for inscription
   const TRANSACTION_FEE = BigInt(10000); // 10,000 zatoshis fee

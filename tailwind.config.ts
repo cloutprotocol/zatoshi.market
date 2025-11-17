@@ -6,6 +6,18 @@ const config: Config = {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  safelist: [
+    // Ensure custom gold palette utilities are always available
+    { pattern: /^(bg|text|border)-gold-(50|100|200|300|400|500|600|700|800|900)$/ },
+    // Common opacities we use alongside gold utilities
+    { pattern: /^(bg|text|border)-gold-(100|200|300|400|500)\/([1-9]0)$/ },
+    // Custom background alias
+    'bg-liquid-glass',
+    // Effects used across pages
+    'backdrop-blur-xl',
+    'animate-glow',
+    'animate-shimmer',
+  ],
   theme: {
     extend: {
       colors: {

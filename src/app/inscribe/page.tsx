@@ -229,10 +229,6 @@ export default function InscribePage() {
                 <div className="text-xs text-gold-400/60 mb-2">Platform Fees</div>
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-gold-400/80">Names</span>
-                    <span className="text-gold-300 font-mono">{formatZEC(PLATFORM_FEES.NAME_REGISTRATION)}</span>
-                  </div>
-                  <div className="flex justify-between">
                     <span className="text-gold-400/80">Inscriptions</span>
                     <span className="text-gold-300 font-mono">{formatZEC(PLATFORM_FEES.INSCRIPTION)}</span>
                   </div>

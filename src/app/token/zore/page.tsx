@@ -2,18 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Dither from '@/components/Dither';
+import dynamic from 'next/dynamic';
 import { zerdinalsAPI, type ZerdinalsToken } from '@/services/zerdinals';
+
+// Client-only Dither to avoid SSR/hydration mismatch
+const Dither = dynamic(() => import('@/components/Dither'), { ssr: false, loading: () => null });
 
 export default function ZORETokenPage() {
   const [tokenData, setTokenData] = useState<ZerdinalsToken | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const [mounted, setMounted] = useState(true);
 
   useEffect(() => {
     async function fetchTokenData() {
@@ -49,18 +48,16 @@ export default function ZORETokenPage() {
     <main className="relative min-h-screen text-gold-100 pt-20">
       {/* Dither Background */}
       <div className="fixed inset-0 w-full h-full opacity-20 -z-10">
-        {mounted && (
-          <Dither
-            waveColor={[0.8, 0.6, 0.2]}
-            disableAnimation={false}
-            enableMouseInteraction={true}
-            mouseRadius={0.3}
-            colorNum={4}
-            waveAmplitude={0.15}
-            waveFrequency={2}
-            waveSpeed={0.03}
-          />
-        )}
+        <Dither
+          waveColor={[0.8, 0.6, 0.2]}
+          disableAnimation={false}
+          enableMouseInteraction={true}
+          mouseRadius={0.3}
+          colorNum={4}
+          waveAmplitude={0.15}
+          waveFrequency={2}
+          waveSpeed={0.03}
+        />
       </div>
 
       {/* Content */}

@@ -8,10 +8,10 @@ export const PLATFORM_FEES = {
   ZMAP_CREATION: 150000, // 0.0015 ZEC (~$1.05 @ $700/ZEC)
 
   // Name Registration Fee (.zec, .zcash)
-  NAME_REGISTRATION: 100000, // 0.0010 ZEC (~$0.70 @ $700/ZEC)
+  NAME_REGISTRATION: 100000, // 0.0010 ZEC
 
   // General Inscription/Mint Fee
-  INSCRIPTION: 50000, // 0.0005 ZEC (~$0.35 @ $700/ZEC)
+  INSCRIPTION: 100000, // 0.0010 ZEC
 
   // Network fees (estimated, user pays actual)
   NETWORK_FEE_ESTIMATE: 10000, // 0.0001 ZEC
