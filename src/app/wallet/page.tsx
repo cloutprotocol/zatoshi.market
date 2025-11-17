@@ -24,10 +24,11 @@ export default function WalletPage() {
   const [isSending, setIsSending] = useState(false);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasFetchedFresh, setHasFetchedFresh] = useState(false);
 
-  const fetchBalance = useCallback(async () => {
+  const fetchBalance = useCallback(async (forceRefresh: boolean = false) => {
     if (!wallet?.address) return;
-    const bal = await zcashRPC.getBalance(wallet.address);
+    const bal = await zcashRPC.getBalance(wallet.address, forceRefresh);
     setBalance(bal);
   }, [wallet?.address]);
 
@@ -40,19 +41,28 @@ export default function WalletPage() {
     if (isRefreshing) return; // Prevent multiple simultaneous refreshes
     setIsRefreshing(true);
     try {
-      await Promise.all([fetchBalance(), fetchPrice()]);
+      await Promise.all([fetchBalance(true), fetchPrice()]); // Force refresh to bypass cache
     } finally {
       setTimeout(() => setIsRefreshing(false), 2000); // 2 second cooldown
     }
   }, [isRefreshing, fetchBalance, fetchPrice]);
 
-  // Load balance and price only once on mount
+  // Load balance and price on mount
+  // First time: force refresh to bypass Blockchair cache
+  // Subsequent times: use server cache (1 min) to minimize API calls
   useEffect(() => {
     if (wallet?.address) {
-      fetchBalance();
+      if (!hasFetchedFresh) {
+        // First load: bypass caches to get fresh data
+        fetchBalance(true);
+        setHasFetchedFresh(true);
+      } else {
+        // Subsequent loads: use cached data
+        fetchBalance();
+      }
       fetchPrice();
     }
-  }, [wallet?.address, fetchBalance, fetchPrice]);
+  }, [wallet?.address, hasFetchedFresh, fetchBalance, fetchPrice]);
 
   const handleCreateWallet = async () => {
     setLoading(true);

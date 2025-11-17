@@ -205,10 +205,15 @@ class ZcashRPCService {
   /**
    * Get balance for a Zcash address
    * Uses proxied API route to avoid CORS and rate limits
+   * @param address - Zcash address to check
+   * @param forceRefresh - If true, bypasses cache and fetches fresh data
    */
-  async getBalance(address: string): Promise<{ confirmed: number; unconfirmed: number }> {
+  async getBalance(address: string, forceRefresh: boolean = false): Promise<{ confirmed: number; unconfirmed: number }> {
     try {
-      const response = await fetch(`/api/zcash/balance/${address}`);
+      const url = forceRefresh
+        ? `/api/zcash/balance/${address}?refresh=true`
+        : `/api/zcash/balance/${address}`;
+      const response = await fetch(url);
       const data = await response.json();
       return {
         confirmed: data.confirmed || 0,

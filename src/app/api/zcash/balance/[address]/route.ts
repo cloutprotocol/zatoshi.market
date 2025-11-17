@@ -30,10 +30,16 @@ export async function GET(
 ) {
   const { address } = params;
 
-  // Check cache first
-  const cached = balanceCache.get(address);
-  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return NextResponse.json(cached.balance);
+  // Check if refresh is requested (bypass cache)
+  const searchParams = request.nextUrl.searchParams;
+  const forceRefresh = searchParams.get('refresh') === 'true';
+
+  // Check cache first (unless force refresh)
+  if (!forceRefresh) {
+    const cached = balanceCache.get(address);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      return NextResponse.json(cached.balance);
+    }
   }
 
   // Use Blockchair API (REQUIRES valid API key)
@@ -44,9 +50,11 @@ export async function GET(
       console.warn('BLOCKCHAIR_API_KEY not set - balance lookups will be rate limited');
     }
 
+    // Add cache-busting parameter when force refresh is requested
+    const cacheBuster = forceRefresh ? `&_t=${Date.now()}` : '';
     const url = apiKey
-      ? `https://api.blockchair.com/zcash/dashboards/address/${address}?key=${apiKey}`
-      : `https://api.blockchair.com/zcash/dashboards/address/${address}`;
+      ? `https://api.blockchair.com/zcash/dashboards/address/${address}?key=${apiKey}${cacheBuster}`
+      : `https://api.blockchair.com/zcash/dashboards/address/${address}${forceRefresh ? `?_t=${Date.now()}` : ''}`;
 
     const response = await fetch(url);
     const data = await response.json();

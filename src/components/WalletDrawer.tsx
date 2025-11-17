@@ -35,11 +35,13 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   const [loadingInscriptions, setLoadingInscriptions] = useState(false);
   const [inscriptionContents, setInscriptionContents] = useState<Record<string, string>>({});
   const [zrc20Tokens, setZrc20Tokens] = useState<ZRC20Token[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasFetchedFresh, setHasFetchedFresh] = useState(false);
 
-  const fetchBalance = useCallback(async () => {
+  const fetchBalance = useCallback(async (forceRefresh: boolean = false) => {
     if (!wallet?.address) return;
-    console.log('📊 Fetching balance for:', wallet.address);
-    const bal = await zcashRPC.getBalance(wallet.address);
+    console.log('📊 Fetching balance for:', wallet.address, forceRefresh ? '(force refresh)' : '(cached ok)');
+    const bal = await zcashRPC.getBalance(wallet.address, forceRefresh);
     console.log('📊 Balance:', bal);
     setBalance(bal);
   }, [wallet?.address]);
@@ -91,6 +93,20 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
     }
   }, [wallet?.address]);
 
+  const handleRefresh = async () => {
+    if (isRefreshing || !wallet?.address) return;
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        fetchBalance(true), // Force refresh to bypass cache
+        fetchPrice(),
+        fetchInscriptions()
+      ]);
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 1000);
+    }
+  };
+
   // Lock body scroll when drawer is open (mobile only)
   useEffect(() => {
     if (isOpen && typeof window !== 'undefined') {
@@ -110,21 +126,23 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
     }
   }, [isOpen]);
 
-  // Auto-refresh balance, price, and inscriptions when drawer is open
-  // Polling interval matches balance cache duration (60s) to minimize API calls
+  // Load balance, price, and inscriptions when drawer opens
+  // First time: force refresh to bypass Blockchair cache
+  // Subsequent times: use server cache (1 min) to minimize API calls
   useEffect(() => {
     if (wallet?.address && isOpen) {
-      fetchBalance();
+      if (!hasFetchedFresh) {
+        // First load: bypass caches to get fresh data
+        fetchBalance(true);
+        setHasFetchedFresh(true);
+      } else {
+        // Subsequent loads: use cached data
+        fetchBalance();
+      }
       fetchPrice();
       fetchInscriptions();
-      const interval = setInterval(() => {
-        fetchBalance();
-        fetchPrice();
-        // Don't auto-refresh inscriptions (they don't change often)
-      }, 60000); // 60 seconds - matches balance API cache
-      return () => clearInterval(interval);
     }
-  }, [wallet?.address, isOpen, fetchBalance, fetchPrice, fetchInscriptions]);
+  }, [wallet?.address, isOpen, hasFetchedFresh, fetchBalance, fetchPrice, fetchInscriptions]);
 
   const handleCreateWallet = async () => {
     setLoading(true);
@@ -410,7 +428,19 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
 
               {/* Balance */}
               <div className="text-center py-6">
-                <div className="text-sm text-gold-200/60 mb-2">BALANCE</div>
+                <div className="flex items-center justify-center gap-2 text-sm text-gold-200/60 mb-2">
+                  <span>BALANCE</span>
+                  <button
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    className={`p-1 hover:bg-gold-500/20 rounded transition-all ${isRefreshing ? 'animate-spin' : ''}`}
+                    title="Refresh balance"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                </div>
                 <div className="text-4xl font-bold mb-2">
                   <span className="text-white">{totalBalance.toFixed(4)}</span>
                   <span className="text-gold-400 ml-2">ZEC</span>
