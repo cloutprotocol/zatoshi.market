@@ -51,7 +51,7 @@ export default function MinePage() {
                   <div className="w-20 h-20 bg-gold-500/20 border-2 border-gold-500 rounded-lg flex items-center justify-center mb-2">
                     <span className="text-4xl font-bold text-gold-400">Z</span>
                   </div>
-                  <span className="text-sm text-gold-300 font-bold">INSCRIBE ZMAP</span>
+                  <span className="text-xs text-gold-300 font-bold">INSCRIBE ZMAP</span>
                 </div>
 
                 {/* Arrow */}
