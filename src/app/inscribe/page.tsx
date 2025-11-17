@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
 import Link from 'next/link';
-import { inscribe, mintZRC20Token, registerZcashName } from '@/services/inscription';
+// Switch to Convex actions for inscription flows
+import { getConvexClient } from '@/lib/convexClient';
+import { api } from '../../../convex/_generated/api';
 import {
   PLATFORM_FEES,
   TREASURY_WALLET,
@@ -73,13 +75,19 @@ export default function InscribePage() {
     setResult(null);
 
     try {
-      const result = await registerZcashName(
-        wallet.privateKey,
-        wallet.address,
-        fullName
-      );
-
-      setResult(result);
+      const convex = getConvexClient();
+      if (!convex) throw new Error('Convex client not available');
+      const res = await convex.action(api.inscriptionsActions.mintInscriptionAction, {
+        wif: wallet.privateKey,
+        address: wallet.address,
+        content: fullName,
+        contentType: 'text/plain',
+        type: 'name',
+        inscriptionAmount: 60000,
+        fee: 10000,
+        waitMs: 10000,
+      });
+      setResult({ txid: res.revealTxid, inscriptionId: res.inscriptionId });
       setNameInput('');
     } catch (err) {
       console.error('Name registration error:', err);
@@ -105,16 +113,21 @@ export default function InscribePage() {
     setResult(null);
 
     try {
-      const result = await inscribe(
-        wallet.privateKey,
-        wallet.address,
+      const convex = getConvexClient();
+      if (!convex) throw new Error('Convex client not available');
+      const isJson = contentType === 'application/json';
+      const res = await convex.action(api.inscriptionsActions.mintInscriptionAction, {
+        wif: wallet.privateKey,
+        address: wallet.address,
+        content: isJson ? undefined : textContent,
+        contentJson: isJson ? textContent : undefined,
         contentType,
-        textContent,
-        PLATFORM_FEES.INSCRIPTION,
-        TREASURY_WALLET.address
-      );
-
-      setResult(result);
+        type: isJson ? 'json' : 'text',
+        inscriptionAmount: 60000,
+        fee: 10000,
+        waitMs: 10000,
+      });
+      setResult({ txid: res.revealTxid, inscriptionId: res.inscriptionId });
       setTextContent('');
     } catch (err) {
       console.error('Inscription error:', err);
@@ -140,19 +153,58 @@ export default function InscribePage() {
     setResult(null);
 
     try {
-      const result = await mintZRC20Token(
-        wallet.privateKey,
-        wallet.address,
-        tick,
-        amount
-      );
-
-      setResult(result);
+      const convex = getConvexClient();
+      if (!convex) throw new Error('Convex client not available');
+      const payload = JSON.stringify({ p: 'zrc-20', op: 'mint', tick: tick.toUpperCase(), amt: amount });
+      const res = await convex.action(api.inscriptionsActions.mintInscriptionAction, {
+        wif: wallet.privateKey,
+        address: wallet.address,
+        contentJson: payload,
+        contentType: 'application/json',
+        type: 'zrc20-mint',
+        inscriptionAmount: 60000,
+        fee: 10000,
+        waitMs: 10000,
+      });
+      setResult({ txid: res.revealTxid, inscriptionId: res.inscriptionId });
       setTick('');
       setAmount('');
     } catch (err) {
       console.error('Mint error:', err);
       setError(err instanceof Error ? err.message : 'Failed to mint ZRC-20 token');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Split UTXOs UI state
+  const [splitCount, setSplitCount] = useState(5);
+  const [targetAmount, setTargetAmount] = useState(70000);
+  const [splitFee, setSplitFee] = useState(10000);
+  const [splitTxid, setSplitTxid] = useState<string | null>(null);
+
+  const handleSplit = async () => {
+    if (!wallet?.privateKey || !wallet?.address) {
+      setError('Please connect your wallet first');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setSplitTxid(null);
+    try {
+      const convex = getConvexClient();
+      if (!convex) throw new Error('Convex client not available');
+      const res = await convex.action(api.inscriptionsActions.splitUtxosAction, {
+        wif: wallet.privateKey,
+        address: wallet.address,
+        splitCount,
+        targetAmount,
+        fee: splitFee,
+      });
+      setSplitTxid(res.txid);
+    } catch (err) {
+      console.error('Split error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to split UTXOs');
     } finally {
       setLoading(false);
     }
@@ -450,6 +502,29 @@ export default function InscribePage() {
                 >
                   {loading ? 'Minting Token...' : 'Mint ZRC-20'}
                 </button>
+
+                {/* Split UTXOs helper */}
+                <div className="mt-8 p-4 bg-black/40 border border-gold-500/20 rounded-lg space-y-3">
+                  <div className="text-gold-300 font-semibold">Prepare Funding UTXOs</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-gold-200/80 text-xs mb-1">Split Count</label>
+                      <input type="number" value={splitCount} onChange={e=>setSplitCount(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                    </div>
+                    <div>
+                      <label className="block text-gold-200/80 text-xs mb-1">Target Amount (zats)</label>
+                      <input type="number" value={targetAmount} onChange={e=>setTargetAmount(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                    </div>
+                    <div>
+                      <label className="block text-gold-200/80 text-xs mb-1">Fee (zats)</label>
+                      <input type="number" value={splitFee} onChange={e=>setSplitFee(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                    </div>
+                  </div>
+                  <button onClick={handleSplit} disabled={loading || !isConnected} className="w-full px-4 py-3 bg-black/60 border border-gold-500/40 rounded-lg text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? 'Splitting...' : 'Split UTXOs'}</button>
+                  {splitTxid && (
+                    <div className="text-xs text-gold-400/80">Split TXID: <span className="font-mono break-all">{splitTxid}</span></div>
+                  )}
+                </div>
               </div>
             )}
 
