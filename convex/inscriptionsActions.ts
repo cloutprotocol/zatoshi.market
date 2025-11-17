@@ -59,6 +59,24 @@ export const mintInscriptionAction = action({
       const contentStr = args.contentJson ?? args.content ?? "hello world";
       const contentType = args.contentType ?? (args.contentJson ? "application/json" : "text/plain");
 
+      // Basic input validation (server-side guardrails)
+      if (!args.address || !args.address.startsWith('t1')) {
+        throw new Error('Invalid address. Only transparent t-addresses (t1...) are supported.');
+      }
+      const contentBytes = new TextEncoder().encode(contentStr).length;
+      if (contentBytes > 8192) {
+        throw new Error(`Content too large (${contentBytes} bytes). Maximum allowed is 8192 bytes.`);
+      }
+      if (inscriptionAmount < 546 || inscriptionAmount > 1_000_000) {
+        throw new Error('Invalid inscription amount. Choose between 546 and 1,000,000 zats.');
+      }
+      if (fee < 1_000 || fee > 500_000) {
+        throw new Error('Invalid fee. Choose between 1,000 and 500,000 zats.');
+      }
+      if (waitMs < 0 || waitMs > 60_000) {
+        throw new Error('Invalid wait time. Maximum 60 seconds.');
+      }
+
       currentStep = "loading platform config";
       const PLATFORM_FEE_ENABLED = (process.env.PLATFORM_FEE_ENABLED || '').toLowerCase() === 'true';
       const PLATFORM_FEE_ZATS = parseInt(process.env.PLATFORM_FEE_ZATS || '100000', 10);
@@ -245,6 +263,11 @@ export const splitUtxosAction = action({
   },
   handler: async (ctx, args) => {
     const { wif, address, splitCount, targetAmount, fee } = args;
+    // Guardrails
+    if (!address || !address.startsWith('t1')) throw new Error('Invalid address. Expected t1...');
+    if (splitCount < 1 || splitCount > 25) throw new Error('Invalid split count. Choose between 1 and 25.');
+    if (targetAmount < 546) throw new Error('Target amount too small. Must be at least 546 zats.');
+    if (fee < 1_000 || fee > 500_000) throw new Error('Invalid fee. Choose between 1,000 and 500,000 zats.');
     const tatumKey = process.env.TATUM_API_KEY || '';
     let utxos;
     try { utxos = await fetchUtxos(address); }
@@ -307,6 +330,11 @@ export const buildUnsignedSplitAction = action({
     fee: v.number(),
   },
   handler: async (ctx, args) => {
+    // Guardrails
+    if (!args.address || !args.address.startsWith('t1')) throw new Error('Invalid address. Expected t1...');
+    if (args.splitCount < 1 || args.splitCount > 25) throw new Error('Invalid split count. Choose between 1 and 25.');
+    if (args.targetAmount < 546) throw new Error('Target amount too small. Must be at least 546 zats.');
+    if (args.fee < 1_000 || args.fee > 500_000) throw new Error('Invalid fee. Choose between 1,000 and 500,000 zats.');
     let utxos;
     try { utxos = await fetchUtxos(args.address); }
     catch (_) { throw new Error('Unable to check your spendable funds right now. Please try again in a few seconds.'); }
@@ -421,6 +449,20 @@ export const buildUnsignedCommitAction = action({
     const fee = args.fee ?? 10000;
     const contentStr = args.contentJson ?? args.content ?? "hello world";
     const contentType = args.contentType ?? (args.contentJson ? "application/json" : "text/plain");
+    // Guardrails
+    if (!args.address || !args.address.startsWith('t1')) {
+      throw new Error('Invalid address. Only transparent t-addresses (t1...) are supported.');
+    }
+    const contentBytes = new TextEncoder().encode(contentStr).length;
+    if (contentBytes > 8192) {
+      throw new Error(`Content too large (${contentBytes} bytes). Maximum allowed is 8192 bytes.`);
+    }
+    if (inscriptionAmount < 546 || inscriptionAmount > 1_000_000) {
+      throw new Error('Invalid inscription amount. Choose between 546 and 1,000,000 zats.');
+    }
+    if (fee < 1_000 || fee > 500_000) {
+      throw new Error('Invalid fee. Choose between 1,000 and 500,000 zats.');
+    }
     const PLATFORM_FEE_ENABLED = (process.env.PLATFORM_FEE_ENABLED || '').toLowerCase() === 'true';
     const PLATFORM_FEE_ZATS = parseInt(process.env.PLATFORM_FEE_ZATS || '100000', 10);
     const PLATFORM_TREASURY = process.env.PLATFORM_TREASURY_ADDRESS || 't1ZemSSmv1kcqapcCReZJGH4driYmbALX1x';

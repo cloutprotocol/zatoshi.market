@@ -8,6 +8,7 @@ import { InscriptionService } from '@/services/InscriptionService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+const ENABLE_CUSTODIAL = (process.env.ENABLE_CUSTODIAL_API || '').toLowerCase() === 'true';
 
 interface CreateInscriptionRequest {
   content: string;
@@ -16,6 +17,16 @@ interface CreateInscriptionRequest {
 }
 
 export async function POST(request: NextRequest) {
+  // Hard-disable custodial route unless explicitly enabled via env flag.
+  if (!ENABLE_CUSTODIAL) {
+    return NextResponse.json(
+      {
+        error: 'This endpoint is deprecated. Use the non-custodial flow.',
+        status: 410,
+      },
+      { status: 410 }
+    );
+  }
   try {
     const body: CreateInscriptionRequest = await request.json();
 

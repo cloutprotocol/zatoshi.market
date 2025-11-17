@@ -10,6 +10,19 @@ import { v } from "convex/values";
 export const createInscription = mutation(async (ctx, args) => {
     const inscriptionId = `${args.txid}i0`; // Assume offset 0
 
+    // Idempotency: if this tx already recorded, return existing doc id
+    const existingByTx = await ctx.db
+      .query("inscriptions")
+      .withIndex("by_txid", (q) => q.eq("txid", args.txid))
+      .first();
+    if (existingByTx) return existingByTx._id;
+
+    const existingById = await ctx.db
+      .query("inscriptions")
+      .withIndex("by_inscription_id", (q) => q.eq("inscriptionId", inscriptionId))
+      .first();
+    if (existingById) return existingById._id;
+
     const id = await ctx.db.insert("inscriptions", {
       inscriptionId,
       txid: args.txid,

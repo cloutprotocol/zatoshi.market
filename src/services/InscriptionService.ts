@@ -1,6 +1,9 @@
 /**
- * Zcash Inscription Service
- * Core service for creating Ordinals-style inscriptions on Zcash
+ * Zcash Inscription Service (LEGACY/CUSTODIAL)
+ *
+ * Deprecated: This custodial implementation is kept for reference only and is
+ * disabled by default via API route guard. Prefer the non‑custodial Convex
+ * flow which performs client‑side signing.
  */
 
 import { buildRevealScript, buildInscriptionData, buildP2SHScript, buildP2PKHScript, varint } from '../../scripts/inscribe/ordinals-builder';
@@ -27,7 +30,11 @@ export class InscriptionService {
   private tatum_api_key: string;
 
   constructor(tatumApiKey?: string) {
-    this.tatum_api_key = tatumApiKey || process.env.TATUM_API_KEY || 't-691ab5fae2b53035df472a13-2ea27385c5964a15b092bdab';
+    const key = tatumApiKey || process.env.TATUM_API_KEY;
+    if (!key) {
+      throw new Error('TATUM_API_KEY is required for custodial service (disabled by default).');
+    }
+    this.tatum_api_key = key;
   }
 
   /**
