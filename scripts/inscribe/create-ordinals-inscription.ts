@@ -1,13 +1,14 @@
 /**
  * Create Zcash Ordinals-style Inscription
- * Two-transaction commit/reveal pattern with ZIP 244 signatures
- */
+ * Two-transaction commit/reveal pattern with v4 (ZIP-143/243) signatures
+*/
 
 import * as secp256k1 from '@noble/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
 import { hmac } from '@noble/hashes/hmac';
 import bs58check from 'bs58check';
-import { getTransparentSignatureHash, hash160 } from './zip244';
+import { getTransparentSignatureHashV4 } from './zip243';
+import { hash160 } from './zip244';
 import { buildRevealScript, buildInscriptionData, buildP2SHScript, buildP2PKHScript, varint } from './ordinals-builder';
 
 // Set up secp256k1
@@ -144,7 +145,7 @@ async function buildCommitTransaction(
   const outputCount = varint(2);
 
   // Output 1: P2SH (for reveal to spend)
-  const p2shAmount = 10000; // 0.0001 ZEC locked in script
+  const p2shAmount = 60000; // Match Zerdinals pattern
   const output1Value = Buffer.allocUnsafe(8);
   output1Value.writeBigUInt64LE(BigInt(p2shAmount));
   const output1ScriptLen = varint(p2shScript.length);
@@ -177,7 +178,7 @@ async function buildCommitTransaction(
   console.log(`   Change: ${changeAmount} zatoshis`);
   console.log(`   Fee: ${fee} zatoshis\n`);
 
-  // Get signature hash (ZIP 244)
+  // Get signature hash (ZIP 243 for v4)
   const txData = {
     version: 0x80000004,
     versionGroupId: 0x892f2085,
@@ -197,8 +198,8 @@ async function buildCommitTransaction(
     ]
   };
 
-  console.log('✍️  Signing with ZIP 244...\n');
-  const sigHash = getTransparentSignatureHash(txData, 0);
+  console.log('✍️  Signing with ZIP 243 (v4)...\n');
+  const sigHash = getTransparentSignatureHashV4(txData, 0);
   console.log(`   Signature hash: ${Buffer.from(sigHash).toString('hex')}\n`);
 
   const signature = await secp256k1.sign(sigHash, privateKeyBytes);
@@ -263,7 +264,7 @@ async function buildRevealTransaction(
   const outputCount = varint(1);
 
   const fee = 10000;
-  const outputAmount = 10000 - fee; // P2SH amount minus fee
+  const outputAmount = 60000 - fee; // Spend P2SH amount minus fee
   const outputValue = Buffer.allocUnsafe(8);
   outputValue.writeBigUInt64LE(BigInt(outputAmount));
 
@@ -284,12 +285,11 @@ async function buildRevealTransaction(
   const nShieldedOutput = varint(0);
   const nJoinSplit = varint(0);
 
-  console.log(`   Input: ${10000} zatoshis (from P2SH)`);
+  console.log(`   Input: ${60000} zatoshis (from P2SH)`);
   console.log(`   Output: ${outputAmount} zatoshis`);
   console.log(`   Fee: ${fee} zatoshis\n`);
 
-  // Get signature hash (ZIP 244)
-  const p2shScript = buildP2SHScript(revealScript);
+  // Get signature hash (ZIP 243 for v4)
   const txData = {
     version: 0x80000004,
     versionGroupId: 0x892f2085,
@@ -300,16 +300,17 @@ async function buildRevealTransaction(
       txid: commitTxid,
       vout: 0,
       sequence: 0xffffffff,
-      value: 10000,
-      scriptPubKey: p2shScript
+      value: 60000,
+      // For P2SH spend, sign with redeem script as scriptCode
+      scriptPubKey: revealScript
     }],
     outputs: [
       { value: outputAmount, scriptPubKey: outputScript }
     ]
   };
 
-  console.log('✍️  Signing with ZIP 244...\n');
-  const sigHash = getTransparentSignatureHash(txData, 0);
+  console.log('✍️  Signing with ZIP 243 (v4)...\n');
+  const sigHash = getTransparentSignatureHashV4(txData, 0);
 
   const signature = await secp256k1.sign(sigHash, privateKeyBytes);
   const compactSig = (signature as any).toCompactRawBytes();

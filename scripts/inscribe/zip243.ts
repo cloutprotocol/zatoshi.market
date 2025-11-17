@@ -92,7 +92,10 @@ function getPrevoutsHash(tx: TransactionData): Uint8Array {
   }
 
   const data = concat(...parts);
-  return blake2b(data, { dkLen: 32 });
+  return blake2b(data, {
+    dkLen: 32,
+    personalization: Buffer.from('ZcashPrevoutHash', 'utf8')
+  });
 }
 
 /**
@@ -106,7 +109,10 @@ function getSequenceHash(tx: TransactionData): Uint8Array {
   }
 
   const data = concat(...parts);
-  return blake2b(data, { dkLen: 32 });
+  return blake2b(data, {
+    dkLen: 32,
+    personalization: Buffer.from('ZcashSequencHash', 'utf8')
+  });
 }
 
 /**
@@ -122,7 +128,10 @@ function getOutputsHash(tx: TransactionData): Uint8Array {
   }
 
   const data = concat(...parts);
-  return blake2b(data, { dkLen: 32 });
+  return blake2b(data, {
+    dkLen: 32,
+    personalization: Buffer.from('ZcashOutputsHash', 'utf8')
+  });
 }
 
 /**
@@ -156,11 +165,8 @@ export function getTransparentSignatureHashV4(
     writeUInt32LE(tx.lockTime),            // nLockTime
     writeUInt32LE(tx.expiryHeight),        // expiryHeight
     writeUInt64LE(0),                      // valueBalance
-
-    // 5. Hash type
-    writeUInt32LE(hashType),               // nHashType
-
-    // 6. Input being signed
+    writeUInt32LE(hashType),               // nHashType (SIGHASH_ALL)
+    // 5. Input being signed
     Buffer.from(input.txid, 'hex').reverse(), // prevout hash
     writeUInt32LE(input.vout),             // prevout index
     varint(input.scriptPubKey.length),     // scriptCode length
