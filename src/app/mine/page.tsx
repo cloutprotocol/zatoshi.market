@@ -43,13 +43,50 @@ export default function MinePage() {
               MINE ZORE TOKENS
             </p>
 
-            {/* Description */}
+            {/* Graphic Illustration */}
             <div className="p-8 bg-black/40 border border-gold-500/30 rounded-lg">
-              <p className="text-xl text-gold-200/80 mb-4">
-                Inscribe ZMAPs and mine ZORE tokens on the Zcash blockchain.
-              </p>
-              <p className="text-lg text-gold-200/60">
-                Each ZMAP inscription earns you <span className="text-gold-400 font-bold">10,000 ZORE</span> tokens.
+              <div className="flex items-center justify-center gap-4 mb-6 flex-wrap">
+                {/* Step 1: ZMAP */}
+                <div className="flex flex-col items-center">
+                  <div className="w-20 h-20 bg-gold-500/20 border-2 border-gold-500 rounded-lg flex items-center justify-center mb-2">
+                    <svg className="w-12 h-12 text-gold-400" fill="currentColor" viewBox="0 0 24 24">
+                      <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2" fill="none"/>
+                      <path d="M7 8 L17 8 L12 16 L17 16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <span className="text-sm text-gold-300 font-bold">INSCRIBE ZMAP</span>
+                </div>
+
+                {/* Arrow */}
+                <div className="text-3xl text-gold-500">→</div>
+
+                {/* Step 2: Mine */}
+                <div className="flex flex-col items-center">
+                  <div className="w-20 h-20 bg-gold-500/20 border-2 border-gold-500 rounded-lg flex items-center justify-center mb-2">
+                    <svg className="w-12 h-12 text-gold-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                    </svg>
+                  </div>
+                  <span className="text-sm text-gold-300 font-bold">MINE ZORE</span>
+                </div>
+
+                {/* Arrow */}
+                <div className="text-3xl text-gold-500">→</div>
+
+                {/* Step 3: Reward */}
+                <div className="flex flex-col items-center">
+                  <div className="w-20 h-20 bg-gold-500 border-2 border-gold-400 rounded-lg flex items-center justify-center mb-2">
+                    <svg className="w-12 h-12 text-black" fill="currentColor" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="9" />
+                      <text x="12" y="16" textAnchor="middle" fontSize="10" fontWeight="bold" fill="black">Z</text>
+                    </svg>
+                  </div>
+                  <span className="text-sm text-gold-300 font-bold">EARN TOKENS</span>
+                </div>
+              </div>
+
+              <p className="text-lg text-gold-200/80">
+                Inscribe ZMAPs on Zcash and earn <span className="text-gold-400 font-bold">UP TO 10,000 ZORE</span> per ZMAP.
               </p>
             </div>
 
