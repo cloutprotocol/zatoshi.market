@@ -351,15 +351,15 @@ export default function InscribePage() {
             {/* NAME REGISTRATION TAB */}
             {activeTab === 'names' && (
               <div className="max-w-2xl mx-auto">
-                <div className="text-center mb-8 sm:mb-12">
-                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 sm:mb-3">Register Your Zcash Name</h2>
-                  <p className="text-gold-400/60 text-sm sm:text-base lg:text-lg">
+                <div className="text-center mb-6 sm:mb-8 lg:mb-10">
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">Register Your Zcash Name</h2>
+                  <p className="text-gold-400/60 text-xs sm:text-sm lg:text-base">
                     Secure your .zec or .zcash identity on the blockchain
                   </p>
                 </div>
 
                 {/* Name Search Box */}
-                <div className="mb-6 sm:mb-8">
+                <div className="mb-4 sm:mb-6">
                   <div className="relative">
                     <div className="flex flex-col sm:flex-row gap-0 bg-black/60 border-2 border-gold-500/50 rounded-xl overflow-hidden focus-within:border-gold-500 transition-all">
                       <input
@@ -370,7 +370,7 @@ export default function InscribePage() {
                           setNameInput(value);
                           validateName(value);
                         }}
-                        className="flex-1 bg-transparent px-4 sm:px-6 py-4 sm:py-5 text-xl sm:text-2xl font-mono text-gold-300 placeholder-gold-500/40 outline-none"
+                        className="flex-1 bg-transparent px-4 py-3 sm:px-6 sm:py-4 text-lg sm:text-xl font-mono text-gold-300 placeholder-gold-500/40 outline-none"
                         placeholder="yourname"
                         disabled={loading}
                       />
@@ -380,7 +380,7 @@ export default function InscribePage() {
                           setNameExtension(e.target.value as 'zec' | 'zcash');
                           validateName(nameInput);
                         }}
-                        className="bg-black/60 border-t sm:border-t-0 sm:border-l border-gold-500/30 px-4 sm:px-8 py-4 sm:py-5 text-xl sm:text-2xl font-mono text-gold-300 outline-none cursor-pointer"
+                        className="bg-black/60 border-t sm:border-t-0 sm:border-l border-gold-500/30 px-4 py-3 sm:px-6 sm:py-4 text-lg sm:text-xl font-mono text-gold-300 outline-none cursor-pointer"
                         disabled={loading}
                       >
                         <option value="zec">.zec</option>
@@ -397,24 +397,24 @@ export default function InscribePage() {
 
                 {/* Name Preview */}
                 {nameInput && !nameError && (
-                  <div className="mb-6 sm:mb-8 p-4 sm:p-6 bg-gold-500/10 border border-gold-500/30 rounded-xl">
-                    <div className="flex items-center justify-between mb-3 sm:mb-4">
-                      <div>
-                        <div className="text-xs sm:text-sm text-gold-400/60 mb-1">Your Name</div>
-                        <div className="text-xl sm:text-2xl lg:text-3xl font-bold font-mono break-all">{fullName}</div>
+                  <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-gold-500/10 border border-gold-500/30 rounded-xl">
+                    <div className="flex items-center justify-between mb-2 sm:mb-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-gold-400/60 mb-1">Your Name</div>
+                        <div className="text-lg sm:text-xl lg:text-2xl font-bold font-mono break-all">{fullName}</div>
                       </div>
-                      <div className="size-12 sm:size-16 bg-gold-500 rounded-full flex items-center justify-center text-black text-lg sm:text-2xl font-bold flex-shrink-0 ml-3">
+                      <div className="size-10 sm:size-12 lg:size-14 bg-gold-500 rounded-full flex items-center justify-center text-black text-base sm:text-lg lg:text-xl font-bold flex-shrink-0 ml-3">
                         {nameInput[0]?.toUpperCase()}
                       </div>
                     </div>
-                    <div className="text-xs sm:text-sm text-gold-400/80">
+                    <div className="text-xs text-gold-400/80">
                       Owner: {wallet?.address.substring(0, 12)}...
                     </div>
                   </div>
                 )}
 
                 {/* Cost Breakdown */}
-                <div className="mb-6 sm:mb-8">
+                <div className="mb-4 sm:mb-6">
                   <FeeBreakdown
                     platformFee={nameCost.platformFee}
                     networkFee={nameCost.networkFee}
@@ -429,7 +429,7 @@ export default function InscribePage() {
                 <button
                   onClick={handleNameRegistration}
                   disabled={loading || !isConnected || !nameInput.trim() || !!nameError}
-                  className="w-full px-6 sm:px-8 py-4 sm:py-5 bg-gold-500 text-black font-bold text-lg sm:text-xl rounded-xl hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-gold-500/20"
+                  className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-gold-500/20"
                 >
                   {loading ? 'Registering...' : `Register ${fullName}`}
                 </button>
@@ -438,10 +438,10 @@ export default function InscribePage() {
 
             {/* TEXT INSCRIPTION TAB */}
             {activeTab === 'text' && (
-              <div className="max-w-2xl mx-auto space-y-4 sm:space-y-6">
-                <div className="text-center mb-6 sm:mb-8">
-                  <h2 className="text-2xl sm:text-3xl font-bold mb-2">Text Inscription</h2>
-                  <p className="text-gold-400/60 text-sm sm:text-base">
+              <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
+                <div className="text-center mb-4 sm:mb-6">
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">Text Inscription</h2>
+                  <p className="text-gold-400/60 text-xs sm:text-sm lg:text-base">
                     Inscribe any text or data permanently on Zcash
                   </p>
                 </div>
@@ -462,17 +462,17 @@ export default function InscribePage() {
                 </div>
 
                 <div>
-                  <label className="block text-gold-200/80 text-sm mb-2">
+                  <label className="block text-gold-200/80 text-xs sm:text-sm mb-2">
                     Content {textContent.length > 0 && `(${textContent.length} characters)`}
                   </label>
                   <textarea
                     value={textContent}
                     onChange={(e) => setTextContent(e.target.value)}
-                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-4 py-3 text-gold-300 font-mono text-sm min-h-[200px] sm:min-h-[300px] outline-none focus:border-gold-500/50"
+                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-3 py-2 sm:px-4 sm:py-3 text-gold-300 font-mono text-xs sm:text-sm min-h-[180px] sm:min-h-[240px] outline-none focus:border-gold-500/50 resize-none"
                     placeholder="Enter your inscription content..."
                     disabled={loading}
                   />
-                  <p className="text-gold-400/60 text-xs mt-2">
+                  <p className="text-gold-400/60 text-xs mt-1.5">
                     Keep content under 80KB for optimal indexing
                   </p>
                 </div>
@@ -490,7 +490,7 @@ export default function InscribePage() {
                 <button
                   onClick={handleTextInscription}
                   disabled={loading || !isConnected || !textContent.trim()}
-                  className="w-full px-6 py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Creating Inscription...' : 'Inscribe'}
                 </button>
@@ -499,24 +499,25 @@ export default function InscribePage() {
 
             {/* ZRC-20 TAB */}
             {activeTab === 'zrc20' && (
-              <div className="max-w-2xl mx-auto space-y-4 sm:space-y-6">
+              <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
                 {/* Subnav + Safety */}
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-gold-400/70 text-xs">
-                    Safety: {safety === 'on' ? <span className="text-green-400">ON</span> : safety === 'off' ? <span className="text-red-400">OFF</span> : '…'}
+                <div className="flex items-center justify-between mb-2 sm:mb-3 gap-2">
+                  <div className="text-gold-400/70 text-xs flex items-center gap-3 flex-shrink-0">
+                    <span>Safety: {safety === 'on' ? <span className="text-green-400">ON</span> : safety === 'off' ? <span className="text-red-400">OFF</span> : '…'}</span>
+                    <span>Fee: {(process.env.NEXT_PUBLIC_PLATFORM_FEE_ENABLED || '').toLowerCase()==='true' ? <span className="text-green-400">ON</span> : <span className="text-gold-400/60">OFF</span>} { (process.env.NEXT_PUBLIC_PLATFORM_FEE_ENABLED || '').toLowerCase()==='true' ? `(${(Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_ZATS||'100000')/1e8).toFixed(3)} ZEC)` : '' }</span>
                   </div>
-                  <div className="flex gap-2 text-xs">
-                    <button onClick={()=>setZrcSubTab('mint')} className={`px-3 py-1 rounded ${zrcSubTab==='mint'?'bg-gold-500 text-black':'bg-black/40 border border-gold-500/30 text-gold-300'}`}>Mint</button>
-                    <button onClick={()=>setZrcSubTab('batch')} className={`px-3 py-1 rounded ${zrcSubTab==='batch'?'bg-gold-500 text-black':'bg-black/40 border border-gold-500/30 text-gold-300'}`}>Batch</button>
-                    <button onClick={()=>setZrcSubTab('utxos')} className={`px-3 py-1 rounded ${zrcSubTab==='utxos'?'bg-gold-500 text-black':'bg-black/40 border border-gold-500/30 text-gold-300'}`}>UTXO Tools</button>
+                  <div className="flex gap-1.5 sm:gap-2 text-xs">
+                    <button onClick={()=>setZrcSubTab('mint')} className={`px-2 py-1 sm:px-3 rounded ${zrcSubTab==='mint'?'bg-gold-500 text-black':'bg-black/40 border border-gold-500/30 text-gold-300'}`}>Mint</button>
+                    <button onClick={()=>setZrcSubTab('batch')} className={`px-2 py-1 sm:px-3 rounded ${zrcSubTab==='batch'?'bg-gold-500 text-black':'bg-black/40 border border-gold-500/30 text-gold-300'}`}>Batch</button>
+                    <button onClick={()=>setZrcSubTab('utxos')} className={`px-2 py-1 sm:px-3 rounded ${zrcSubTab==='utxos'?'bg-gold-500 text-black':'bg-black/40 border border-gold-500/30 text-gold-300'}`}>UTXO</button>
                   </div>
                 </div>
 
                 {zrcSubTab === 'mint' && (
                 <>
-                <div className="text-center mb-6 sm:mb-8">
-                  <h2 className="text-2xl sm:text-3xl font-bold mb-2">Mint ZRC-20 Token</h2>
-                  <p className="text-gold-400/60 text-sm sm:text-base">
+                <div className="text-center mb-4 sm:mb-6">
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">Mint ZRC-20 Token</h2>
+                  <p className="text-gold-400/60 text-xs sm:text-sm lg:text-base">
                     Mint tokens from deployed ZRC-20 contracts
                   </p>
                 </div>
@@ -536,12 +537,12 @@ export default function InscribePage() {
                 </div>
 
                 {/* Operation */}
-                <div className="mt-2">
-                  <label className="block text-gold-200/80 text-sm mb-2">Operation</label>
+                <div>
+                  <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Operation</label>
                   <select
                     value={zrcOp}
                     onChange={(e)=>setZrcOp(e.target.value as any)}
-                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-4 py-3 text-gold-300 outline-none focus:border-gold-500/50"
+                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50"
                     disabled={loading}
                   >
                     <option value="mint">Mint</option>
@@ -551,12 +552,12 @@ export default function InscribePage() {
                 </div>
 
                 <div>
-                  <label className="block text-gold-200/80 text-sm mb-2">Token Ticker</label>
+                  <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Token Ticker</label>
                   <input
                     type="text"
                     value={tick}
                     onChange={(e) => setTick(e.target.value.toUpperCase())}
-                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-4 py-3 text-gold-300 font-mono uppercase outline-none focus:border-gold-500/50"
+                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 font-mono uppercase outline-none focus:border-gold-500/50"
                     placeholder="ZERO"
                     maxLength={4}
                     disabled={loading}
@@ -565,25 +566,25 @@ export default function InscribePage() {
 
                 {zrcOp !== 'deploy' && (
                   <div>
-                    <label className="block text-gold-200/80 text-sm mb-2">Amount</label>
-                    <input type="number" value={amount} onChange={(e)=>setAmount(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-4 py-3 text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
+                    <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Amount</label>
+                    <input type="number" value={amount} onChange={(e)=>setAmount(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
                   </div>
                 )}
                 {zrcOp === 'deploy' && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-gold-200/80 text-sm mb-2">Max Supply</label>
-                      <input type="number" value={maxSupply} onChange={(e)=>setMaxSupply(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-4 py-3 text-gold-300 outline-none focus:border-gold-500/50" placeholder="21000000" disabled={loading} />
+                      <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Max Supply</label>
+                      <input type="number" value={maxSupply} onChange={(e)=>setMaxSupply(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="21000000" disabled={loading} />
                     </div>
                     <div>
-                      <label className="block text-gold-200/80 text-sm mb-2">Mint Limit</label>
-                      <input type="number" value={mintLimit} onChange={(e)=>setMintLimit(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-4 py-3 text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
+                      <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Mint Limit</label>
+                      <input type="number" value={mintLimit} onChange={(e)=>setMintLimit(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
                     </div>
                   </div>
                 )}
 
-                <div className="bg-black/40 p-3 sm:p-4 rounded-lg border border-gold-500/20">
-                  <p className="text-gold-400/60 text-sm mb-2">Preview:</p>
+                <div className="bg-black/40 p-2.5 sm:p-3 rounded-lg border border-gold-500/20">
+                  <p className="text-gold-400/60 text-xs mb-1.5">Preview:</p>
                   <pre className="text-gold-300 text-xs font-mono overflow-x-auto">
                     {JSON.stringify(
                       zrcOp === 'deploy'
@@ -605,10 +606,10 @@ export default function InscribePage() {
                   zecPrice={zecPrice}
                 />
 
-                <button onClick={handleZRC20Mint} disabled={loading || !isConnected || !tick.trim() || (zrcOp !== 'deploy' && !amount.trim()) || (zrcOp === 'deploy' && (!maxSupply.trim() || !mintLimit.trim()))} className="w-full px-6 py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Submitting...' : (zrcOp === 'deploy' ? 'Deploy Token' : zrcOp === 'transfer' ? 'Inscribe Transfer' : 'Mint ZRC-20')}</button>
+                <button onClick={handleZRC20Mint} disabled={loading || !isConnected || !tick.trim() || (zrcOp !== 'deploy' && !amount.trim()) || (zrcOp === 'deploy' && (!maxSupply.trim() || !mintLimit.trim()))} className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Submitting...' : (zrcOp === 'deploy' ? 'Deploy Token' : zrcOp === 'transfer' ? 'Inscribe Transfer' : 'Mint ZRC-20')}</button>
 
                 {/* Split UTXOs helper */}
-                <div className="mt-8 p-4 bg-black/40 border border-gold-500/20 rounded-lg space-y-3">
+                <div className="mt-4 p-3 sm:p-4 bg-black/40 border border-gold-500/20 rounded-lg space-y-2 sm:space-y-3">
                   <div className="text-gold-300 font-semibold">Prepare Funding UTXOs</div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>

@@ -66,12 +66,20 @@ export const getJob = query({
   },
 });
 
+export const listJobs = query({
+  args: {},
+  handler: async (ctx) => {
+    const jobs = await ctx.db.query("jobs").order("desc").collect();
+    return jobs;
+  },
+});
+
 export const runNextMint = action({
   args: { jobId: v.id("jobs") },
   handler: async (ctx, args) => {
     const job = await ctx.runQuery(api.jobs.getJob, { jobId: args.jobId });
     if (!job) throw new Error("Job not found");
-    if (job.status === "completed" || job.status === "failed") return job;
+    if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") return job;
     if (job.status === "pending") await ctx.runMutation(api.jobs.setJobStatus, { jobId: args.jobId, status: "running" });
 
     const p = job.params as any;
@@ -181,5 +189,25 @@ export const runNextMint = action({
       await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxo.txid, vout: utxo.vout });
       throw e;
     }
+  }
+});
+
+export const retryJob = action({
+  args: { jobId: v.id("jobs") },
+  handler: async (ctx, args) => {
+    const job = await ctx.runQuery(api.jobs.getJob, { jobId: args.jobId });
+    if (!job) throw new Error('Job not found');
+    if (job.status === 'completed') return job;
+    await ctx.runMutation(api.jobs.setJobStatus, { jobId: args.jobId, status: 'pending' });
+    await ctx.runAction(api.jobs.runNextMint, { jobId: args.jobId });
+    return { status: 'running' };
+  }
+});
+
+export const cancelJob = action({
+  args: { jobId: v.id("jobs") },
+  handler: async (ctx, args) => {
+    await ctx.runMutation(api.jobs.setJobStatus, { jobId: args.jobId, status: 'failed', error: 'Cancelled by operator' });
+    return { status: 'failed' };
   }
 });
