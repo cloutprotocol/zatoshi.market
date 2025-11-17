@@ -32,6 +32,7 @@ export default function ZmapsPage() {
   const [introStep, setIntroStep] = useState(1);
   const [showInfoButton, setShowInfoButton] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const zoomToCell = useRef<((x: number, y: number) => void) | null>(null);
 
   // Keep ref in sync with state and trigger redraw
   useEffect(() => {
@@ -229,6 +230,13 @@ export default function ZmapsPage() {
 
     // Store draw function ref for external calls
     drawFnRef.current = draw;
+
+    // Store zoom function ref for external calls from sidebar
+    zoomToCell.current = (x: number, y: number) => {
+      const cellCenterWorldX = (x + 0.5) * cellSize;
+      const cellCenterWorldY = (y + 0.5) * cellSize;
+      smoothZoomToWorld(cellCenterWorldX, cellCenterWorldY, 2.5, 400);
+    };
 
     // --- Draw Cursor Highlight ---
     function drawCursorHighlight(cursorX: number, cursorY: number) {
@@ -857,11 +865,21 @@ export default function ZmapsPage() {
             </div>
           </div>
 
-          <p className="text-gold-400/60 text-sm">
-            {cartItems.length === 0
-              ? 'Click on available squares to add to parcels'
-              : `${cartItems.length} ZMAP${cartItems.length > 1 ? 's' : ''} selected`}
-          </p>
+          <div className="flex justify-between items-center">
+            <p className="text-gold-400/60 text-sm">
+              {cartItems.length === 0
+                ? 'Click on available squares to add to parcels'
+                : `${cartItems.length} ZMAP${cartItems.length > 1 ? 's' : ''} selected`}
+            </p>
+            {cartItems.length > 0 && (
+              <button
+                onClick={() => setCartItems([])}
+                className="text-gold-400/60 hover:text-red-400 text-xs font-bold transition-colors"
+              >
+                Clear All
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Cart Items */}
@@ -875,7 +893,13 @@ export default function ZmapsPage() {
             cartItems.map((item) => (
               <div
                 key={`${item.x}-${item.y}`}
-                className="bg-black/40 border border-gold-500/20 rounded-lg p-4 group hover:border-gold-500/40 transition-colors"
+                onClick={() => {
+                  if (zoomToCell.current) {
+                    zoomToCell.current(item.x, item.y);
+                    setShowCart(false);
+                  }
+                }}
+                className="bg-black/40 border border-gold-500/20 rounded-lg p-4 group hover:border-gold-500/40 transition-colors cursor-pointer"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -883,7 +907,10 @@ export default function ZmapsPage() {
                     <span className="text-gold-300 font-bold">#{item.mapNumber.toLocaleString()}</span>
                   </div>
                   <button
-                    onClick={() => setCartItems((prev) => prev.filter((i) => i.mapNumber !== item.mapNumber))}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCartItems((prev) => prev.filter((i) => i.mapNumber !== item.mapNumber));
+                    }}
                     className="text-gold-400/40 hover:text-red-400 transition-colors text-lg leading-none"
                   >
                     ✕
