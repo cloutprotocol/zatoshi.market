@@ -33,8 +33,11 @@ export default function InscribePage() {
   const [contentType, setContentType] = useState('text/plain');
 
   // ZRC-20 form
+  const [zrcOp, setZrcOp] = useState<'deploy'|'mint'|'transfer'>('mint');
   const [tick, setTick] = useState('');
   const [amount, setAmount] = useState('');
+  const [maxSupply, setMaxSupply] = useState('');
+  const [mintLimit, setMintLimit] = useState('');
 
   // Status
   const [loading, setLoading] = useState(false);
@@ -143,9 +146,12 @@ export default function InscribePage() {
       return;
     }
 
-    if (!tick.trim() || !amount.trim()) {
-      setError('Please enter ticker and amount');
-      return;
+    if (!tick.trim()) { setError('Please enter ticker'); return; }
+    if (zrcOp === 'mint' || zrcOp === 'transfer') {
+      if (!amount.trim()) { setError('Please enter amount'); return; }
+    }
+    if (zrcOp === 'deploy') {
+      if (!maxSupply.trim() || !mintLimit.trim()) { setError('Please enter max and limit'); return; }
     }
 
     setLoading(true);
@@ -155,13 +161,19 @@ export default function InscribePage() {
     try {
       const convex = getConvexClient();
       if (!convex) throw new Error('Convex client not available');
-      const payload = JSON.stringify({ p: 'zrc-20', op: 'mint', tick: tick.toUpperCase(), amt: amount });
+      const payload = JSON.stringify(
+        zrcOp === 'deploy'
+          ? { p: 'zrc-20', op: 'deploy', tick: tick.toUpperCase(), max: maxSupply, lim: mintLimit }
+          : zrcOp === 'transfer'
+          ? { p: 'zrc-20', op: 'transfer', tick: tick.toUpperCase(), amt: amount }
+          : { p: 'zrc-20', op: 'mint', tick: tick.toUpperCase(), amt: amount }
+      );
       const res = await convex.action(api.inscriptionsActions.mintInscriptionAction, {
         wif: wallet.privateKey,
         address: wallet.address,
         contentJson: payload,
         contentType: 'application/json',
-        type: 'zrc20-mint',
+        type: zrcOp === 'deploy' ? 'zrc20-deploy' : zrcOp === 'transfer' ? 'zrc20-transfer' : 'zrc20-mint',
         inscriptionAmount: 60000,
         fee: 10000,
         waitMs: 10000,
@@ -169,6 +181,8 @@ export default function InscribePage() {
       setResult({ txid: res.revealTxid, inscriptionId: res.inscriptionId });
       setTick('');
       setAmount('');
+      setMaxSupply('');
+      setMintLimit('');
     } catch (err) {
       console.error('Mint error:', err);
       setError(err instanceof Error ? err.message : 'Failed to mint ZRC-20 token');
@@ -182,6 +196,8 @@ export default function InscribePage() {
   const [targetAmount, setTargetAmount] = useState(70000);
   const [splitFee, setSplitFee] = useState(10000);
   const [splitTxid, setSplitTxid] = useState<string | null>(null);
+  const [batchCount, setBatchCount] = useState(5);
+  const [batchResults, setBatchResults] = useState<{ txid: string; inscriptionId: string }[] | null>(null);
 
   const handleSplit = async () => {
     if (!wallet?.privateKey || !wallet?.address) {
@@ -208,6 +224,33 @@ export default function InscribePage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBatchMint = async () => {
+    if (!wallet?.privateKey || !wallet?.address) { setError('Please connect your wallet first'); return; }
+    if (!tick.trim() || !amount.trim()) { setError('Please enter ticker and amount'); return; }
+    setLoading(true);
+    setError(null);
+    setBatchResults(null);
+    try {
+      const convex = getConvexClient(); if (!convex) throw new Error('Convex client not available');
+      const payload = JSON.stringify({ p: 'zrc-20', op: 'mint', tick: tick.toUpperCase(), amt: amount });
+      const res = await convex.action(api.inscriptionsActions.batchMintAction, {
+        wif: wallet.privateKey,
+        address: wallet.address,
+        count: batchCount,
+        contentJson: payload,
+        contentType: 'application/json',
+        inscriptionAmount: 60000,
+        fee: 10000,
+        waitMs: 10000,
+      });
+      const mapped = (res.results || []).map((r: any) => ({ txid: r.revealTxid, inscriptionId: r.inscriptionId }));
+      setBatchResults(mapped);
+    } catch (err) {
+      console.error('Batch mint error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to batch mint');
+    } finally { setLoading(false); }
   };
 
   const nameCost = calculateTotalCost(PLATFORM_FEES.NAME_REGISTRATION);
@@ -446,6 +489,21 @@ export default function InscribePage() {
                   </p>
                 </div>
 
+                {/* Operation */}
+                <div className="mt-2">
+                  <label className="block text-gold-200/80 text-sm mb-2">Operation</label>
+                  <select
+                    value={zrcOp}
+                    onChange={(e)=>setZrcOp(e.target.value as any)}
+                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-4 py-3 text-gold-300 outline-none focus:border-gold-500/50"
+                    disabled={loading}
+                  >
+                    <option value="mint">Mint</option>
+                    <option value="deploy">Deploy</option>
+                    <option value="transfer">Transfer</option>
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-gold-200/80 text-sm mb-2">Token Ticker</label>
                   <input
@@ -459,28 +517,34 @@ export default function InscribePage() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-gold-200/80 text-sm mb-2">Amount</label>
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-4 py-3 text-gold-300 outline-none focus:border-gold-500/50"
-                    placeholder="1000"
-                    disabled={loading}
-                  />
-                </div>
+                {zrcOp !== 'deploy' && (
+                  <div>
+                    <label className="block text-gold-200/80 text-sm mb-2">Amount</label>
+                    <input type="number" value={amount} onChange={(e)=>setAmount(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-4 py-3 text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
+                  </div>
+                )}
+                {zrcOp === 'deploy' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-gold-200/80 text-sm mb-2">Max Supply</label>
+                      <input type="number" value={maxSupply} onChange={(e)=>setMaxSupply(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-4 py-3 text-gold-300 outline-none focus:border-gold-500/50" placeholder="21000000" disabled={loading} />
+                    </div>
+                    <div>
+                      <label className="block text-gold-200/80 text-sm mb-2">Mint Limit</label>
+                      <input type="number" value={mintLimit} onChange={(e)=>setMintLimit(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-4 py-3 text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
+                    </div>
+                  </div>
+                )}
 
                 <div className="bg-black/40 p-3 sm:p-4 rounded-lg border border-gold-500/20">
                   <p className="text-gold-400/60 text-sm mb-2">Preview:</p>
                   <pre className="text-gold-300 text-xs font-mono overflow-x-auto">
                     {JSON.stringify(
-                      {
-                        p: 'zrc-20',
-                        op: 'mint',
-                        tick: tick || 'TICK',
-                        amt: amount || '0',
-                      },
+                      zrcOp === 'deploy'
+                        ? { p: 'zrc-20', op: 'deploy', tick: tick || 'TICK', max: maxSupply || '0', lim: mintLimit || '0' }
+                        : zrcOp === 'transfer'
+                        ? { p: 'zrc-20', op: 'transfer', tick: tick || 'TICK', amt: amount || '0' }
+                        : { p: 'zrc-20', op: 'mint', tick: tick || 'TICK', amt: amount || '0' },
                       null,
                       2
                     )}
@@ -495,13 +559,7 @@ export default function InscribePage() {
                   zecPrice={zecPrice}
                 />
 
-                <button
-                  onClick={handleZRC20Mint}
-                  disabled={loading || !isConnected || !tick.trim() || !amount.trim()}
-                  className="w-full px-6 py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? 'Minting Token...' : 'Mint ZRC-20'}
-                </button>
+                <button onClick={handleZRC20Mint} disabled={loading || !isConnected || !tick.trim() || (zrcOp !== 'deploy' && !amount.trim()) || (zrcOp === 'deploy' && (!maxSupply.trim() || !mintLimit.trim()))} className="w-full px-6 py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Submitting...' : (zrcOp === 'deploy' ? 'Deploy Token' : zrcOp === 'transfer' ? 'Inscribe Transfer' : 'Mint ZRC-20')}</button>
 
                 {/* Split UTXOs helper */}
                 <div className="mt-8 p-4 bg-black/40 border border-gold-500/20 rounded-lg space-y-3">
@@ -523,6 +581,26 @@ export default function InscribePage() {
                   <button onClick={handleSplit} disabled={loading || !isConnected} className="w-full px-4 py-3 bg-black/60 border border-gold-500/40 rounded-lg text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? 'Splitting...' : 'Split UTXOs'}</button>
                   {splitTxid && (
                     <div className="text-xs text-gold-400/80">Split TXID: <span className="font-mono break-all">{splitTxid}</span></div>
+                  )}
+                </div>
+
+                {/* Batch Mint helper */}
+                <div className="mt-6 p-4 bg-black/40 border border-gold-500/20 rounded-lg space-y-3">
+                  <div className="text-gold-300 font-semibold">Batch Mint</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-gold-200/80 text-xs mb-1">Count</label>
+                      <input type="number" value={batchCount} onChange={e=>setBatchCount(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                    </div>
+                    <div className="sm:col-span-2 text-xs text-gold-400/70 flex items-end">Batch uses the same ticker/amount as above. Use Split first to prepare UTXOs.</div>
+                  </div>
+                  <button onClick={handleBatchMint} disabled={loading || !isConnected || !tick.trim() || !amount.trim()} className="w-full px-4 py-3 bg-black/60 border border-gold-500/40 rounded-lg text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? 'Batch Minting...' : 'Start Batch Mint'}</button>
+                  {batchResults && (
+                    <div className="space-y-1 text-xs text-gold-300">
+                      {batchResults.map((r, idx)=>(
+                        <div key={idx} className="flex items-center gap-2"><span className="opacity-70">{idx+1}.</span> <a className="underline" href={`https://zerdinals.com/inscription/${r.inscriptionId}`} target="_blank" rel="noreferrer">{r.inscriptionId}</a></div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
