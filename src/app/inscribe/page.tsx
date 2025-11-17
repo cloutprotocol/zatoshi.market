@@ -25,6 +25,7 @@ import {
 import { FeeBreakdown } from '@/components/FeeBreakdown';
 import { ConfirmTransaction } from '@/components/ConfirmTransaction';
 import { InscriptionHistory } from '@/components/InscriptionHistory';
+import { formatErrorAlert, sanitizeError, logError } from '@/utils/errorMessages';
 
 export default function InscribePage() {
   // Ensure noble-secp has HMAC in browser (for deterministic signing)
@@ -104,8 +105,8 @@ export default function InscribePage() {
       setPendingArgs({ content: fullName, contentType: 'text/plain', type: 'name', inscriptionAmount: 60000, fee: 10000 });
       setConfirmOpen(true);
     } catch (err) {
-      console.error('Name registration error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to register name');
+      logError(err, 'Name Registration');
+      setError(sanitizeError(err));
     } finally {
       setLoading(false);
     }
@@ -132,8 +133,8 @@ export default function InscribePage() {
       setPendingArgs({ content: isJson ? undefined : textContent, contentJson: isJson ? textContent : undefined, contentType, type: isJson ? 'json' : 'text', inscriptionAmount: 60000, fee: 10000 });
       setConfirmOpen(true);
     } catch (err) {
-      console.error('Inscription error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create inscription');
+      logError(err, 'Text Inscription');
+      setError(sanitizeError(err));
     } finally {
       setLoading(false);
     }
@@ -169,8 +170,8 @@ export default function InscribePage() {
       setPendingArgs({ contentJson: payload, contentType: 'application/json', type: zrcOp === 'deploy' ? 'zrc20-deploy' : zrcOp === 'transfer' ? 'zrc20-transfer' : 'zrc20-mint', inscriptionAmount: 60000, fee: 10000 });
       setConfirmOpen(true);
     } catch (err) {
-      console.error('Mint error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to mint ZRC-20 token');
+      logError(err, 'ZRC-20 Mint');
+      setError(sanitizeError(err));
     } finally {
       setLoading(false);
     }
@@ -289,8 +290,8 @@ export default function InscribePage() {
         }
       }, 3000);
     } catch (err) {
-      console.error('Batch mint error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to batch mint');
+      logError(err, 'Batch Mint');
+      setError(sanitizeError(err));
     } finally { setLoading(false); }
   };
 
@@ -881,7 +882,8 @@ export default function InscribePage() {
                 if (pendingArgs.type?.startsWith('zrc20')) { setTick(''); setAmount(''); setMaxSupply(''); setMintLimit(''); }
               }
             } catch (e:any) {
-              setError(e?.message || String(e));
+              logError(e, 'Confirm Transaction');
+              setError(sanitizeError(e));
             } finally { setLoading(false); }
           }}
         />

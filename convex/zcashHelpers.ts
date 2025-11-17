@@ -230,9 +230,31 @@ export async function buildRevealTxHex(params: {
 }
 
 export async function fetchUtxos(address: string){
-  const r = await fetch(`https://utxos.zerdinals.com/api/utxos/${address}`);
-  if (!r.ok) throw new Error('UTXO fetch failed');
-  return r.json() as Promise<Utxo[]>;
+  try {
+    const r = await fetch(`https://utxos.zerdinals.com/api/utxos/${address}`);
+    if (!r.ok) {
+      // Provide user-friendly error message
+      throw new Error('No spendable balance found. Please add ZEC to your wallet and try again.');
+    }
+    const utxos = await r.json() as Utxo[];
+
+    // Check if wallet is empty
+    if (!utxos || utxos.length === 0) {
+      throw new Error('Your wallet is empty. Send some ZEC to get started.');
+    }
+
+    return utxos;
+  } catch (error) {
+    // Re-throw with user-friendly message
+    if (error instanceof Error && error.message.includes('wallet is empty')) {
+      throw error; // Already user-friendly
+    }
+    if (error instanceof Error && error.message.includes('No spendable balance')) {
+      throw error; // Already user-friendly
+    }
+    // Network/connection errors
+    throw new Error('Unable to check your wallet balance. Please check your connection and try again.');
+  }
 }
 export async function checkInscriptionAt(location: string){
   try{ const r = await fetch(`https://indexer.zerdinals.com/location/${location}`); if(r.status===404) return false; const j= await r.json(); if(j?.code===404) return false; return true; }catch(e){ throw new Error(`Indexer check failed for ${location}`); }

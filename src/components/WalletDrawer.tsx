@@ -21,6 +21,7 @@ import {
   cleanupOldBalanceCache
 } from '@/utils/balanceCache';
 import { fetchTextWithRetry } from '@/utils/fetchWithRetry';
+import { formatErrorAlert, logError } from '@/utils/errorMessages';
 
 interface WalletDrawerProps {
   isOpen: boolean;
@@ -259,9 +260,8 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       connectWallet(newWallet);
       setShowMnemonic(true);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      alert(`Failed to generate wallet: ${msg}`);
-      console.error('Wallet generation error:', e);
+      logError(e, 'Wallet Generation');
+      alert(formatErrorAlert(e));
     } finally {
       setLoading(false);
     }
@@ -287,8 +287,8 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       connectWallet(imported as any);
       alert(`Wallet imported successfully! Address: ${imported.address}`);
     } catch (error) {
-      console.error('❌ Import error:', error);
-      alert('Invalid private key. Please enter a valid Zcash private key (starts with L or K).');
+      logError(error, 'Wallet Import');
+      alert(formatErrorAlert(error));
     } finally {
       setLoading(false);
     }
@@ -300,7 +300,11 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
     setLoading(true);
     try {
       const ok = await unlockWallet(password);
-      if (!ok) alert('Incorrect password');
+      if (!ok) {
+        const error = new Error('Incorrect password');
+        logError(error, 'Wallet Unlock');
+        alert(formatErrorAlert(error));
+      }
     } finally {
       setLoading(false);
     }
@@ -391,9 +395,8 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       // Refresh balance
       fetchBalance();
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
-      alert(`❌ Transaction failed:\n${msg}`);
-      console.error('Send transaction error:', error);
+      logError(error, 'Send Transaction');
+      alert(formatErrorAlert(error));
     } finally {
       setSendingTx(false);
     }
