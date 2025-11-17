@@ -159,6 +159,43 @@ class ZcashRPCService {
   async getMiningInfo(): Promise<any> {
     return this.apiCall('/stats');
   }
+
+  /**
+   * Get balance for a Zcash address
+   */
+  async getBalance(address: string): Promise<{ confirmed: number; unconfirmed: number }> {
+    try {
+      const response = await fetch(`https://api.blockchair.com/zcash/dashboards/address/${address}`);
+      const data = await response.json();
+
+      if (data.data && data.data[address]) {
+        const addressData = data.data[address].address;
+        return {
+          confirmed: addressData.balance / 100000000, // Convert satoshis to ZEC
+          unconfirmed: addressData.unconfirmed_balance / 100000000,
+        };
+      }
+
+      return { confirmed: 0, unconfirmed: 0 };
+    } catch (error) {
+      console.error('Failed to fetch balance:', error);
+      return { confirmed: 0, unconfirmed: 0 };
+    }
+  }
+
+  /**
+   * Get current ZEC to USD price
+   */
+  async getPrice(): Promise<number> {
+    try {
+      const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=zcash&vs_currencies=usd');
+      const data = await response.json();
+      return data.zcash?.usd || 0;
+    } catch (error) {
+      console.error('Failed to fetch price:', error);
+      return 0;
+    }
+  }
 }
 
 // Export singleton instance

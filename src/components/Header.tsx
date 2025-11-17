@@ -2,12 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { useWallet } from '@/contexts/WalletContext';
-
-const WalletDrawer = dynamic(() => import('./WalletDrawer'), {
-  ssr: false
-});
+import WalletDrawer from './WalletDrawer';
 
 export default function Header() {
   const { wallet, isConnected, mounted } = useWallet();
@@ -33,6 +29,9 @@ export default function Header() {
           </a>
           <Link href="/zmaps" className="px-4 py-2 text-gold-400 hover:text-gold-300">
             ZMAPS
+          </Link>
+          <Link href="/inscribe" className="px-4 py-2 text-gold-400 hover:text-gold-300">
+            INSCRIBE
           </Link>
           <Link href="/mine" className="px-4 py-2 text-gold-400 hover:text-gold-300">
             MINE ZORE
@@ -116,6 +115,13 @@ export default function Header() {
               onClick={() => setIsMobileMenuOpen(false)}
             >
               ZMAPS
+            </Link>
+            <Link
+              href="/inscribe"
+              className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              INSCRIBE
             </Link>
             <Link
               href="/mine"

@@ -19,9 +19,18 @@ export default function ZmapsPage() {
   const [blockCount, setBlockCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [showIntro, setShowIntro] = useState(true);
+  const [introStep, setIntroStep] = useState(1);
+  const [showInfoButton, setShowInfoButton] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    // Check if user has seen intro before
+    const hasSeenIntro = localStorage.getItem('zmaps_intro_seen');
+    if (hasSeenIntro) {
+      setShowIntro(false);
+      setShowInfoButton(true);
+    }
   }, []);
   const BLOCKS_PER_MAP = 100; // Each ZMAP square represents 100 Zcash blocks
   const ZMAP_PRICE = 0.0015; // 0.0015 ZEC per ZMAP
@@ -82,7 +91,8 @@ export default function ZmapsPage() {
     });
 
     // --- Transform State ---
-    let scale = 1;
+    // Start zoomed out to show full grid
+    let scale = 0.3;
     let panX = 0;
     let panY = 0;
     let isPanning = false;
@@ -440,8 +450,22 @@ export default function ZmapsPage() {
     };
 
     const handleReset = () => {
-      scale = 1;
+      scale = 0.3; // Reset to zoomed out view
       resizeCanvas();
+      requestAnimationFrame(draw);
+    };
+
+    const handleFitToScreen = () => {
+      if (!canvas) return;
+      // Calculate scale to fit entire grid on screen
+      const scaleX = canvas.width / gridWidth;
+      const scaleY = canvas.height / gridHeight;
+      const newScale = Math.min(scaleX, scaleY) * 0.9; // 90% to add some padding
+
+      scale = Math.max(minScale, Math.min(maxScale, newScale));
+      panX = canvas.width / 2 - (gridWidth * scale) / 2;
+      panY = canvas.height / 2 - (gridHeight * scale) / 2;
+
       requestAnimationFrame(draw);
     };
 
@@ -449,10 +473,15 @@ export default function ZmapsPage() {
     const zoomInBtn = document.getElementById('zoom-in-btn');
     const zoomOutBtn = document.getElementById('zoom-out-btn');
     const resetBtn = document.getElementById('reset-btn');
+    const fitBtn = document.getElementById('fit-btn');
 
     zoomInBtn?.addEventListener('click', handleZoomIn);
     zoomOutBtn?.addEventListener('click', handleZoomOut);
     resetBtn?.addEventListener('click', handleReset);
+    fitBtn?.addEventListener('click', handleFitToScreen);
+
+    // Fit to screen on initial load
+    setTimeout(handleFitToScreen, 100);
 
     window.addEventListener('resize', handleResize);
     canvas.addEventListener('wheel', handleWheel);
@@ -480,13 +509,25 @@ export default function ZmapsPage() {
       zoomInBtn?.removeEventListener('click', handleZoomIn);
       zoomOutBtn?.removeEventListener('click', handleZoomOut);
       resetBtn?.removeEventListener('click', handleReset);
+      fitBtn?.removeEventListener('click', handleFitToScreen);
     };
   }, [blockCount, loading]);
+
+  const handleCompleteIntro = () => {
+    localStorage.setItem('zmaps_intro_seen', 'true');
+    setShowIntro(false);
+    setShowInfoButton(true);
+  };
+
+  const handleShowIntro = () => {
+    setIntroStep(1);
+    setShowIntro(true);
+  };
 
   return (
     <main className="relative w-full h-screen overflow-hidden pt-20">
       {/* Dither Background */}
-      <div className="fixed inset-0 w-full h-full opacity-20 -z-10">
+      <div className="fixed inset-0 w-full h-full opacity-10 -z-10">
         {mounted && (
           <Dither
             waveColor={[0.8, 0.6, 0.2]}
@@ -526,6 +567,34 @@ export default function ZmapsPage() {
 
       {/* Manual Controls */}
       <div className="fixed bottom-4 right-4 z-20 flex flex-col space-y-2">
+        {showInfoButton && (
+          <button
+            onClick={handleShowIntro}
+            title="Show Help"
+            className="size-12 backdrop-blur-xl bg-black/30 border border-gold-700 text-gold-400 flex items-center justify-center text-xl font-bold"
+          >
+            ?
+          </button>
+        )}
+        <button
+          id="fit-btn"
+          title="Fit to Screen"
+          className="size-12 backdrop-blur-xl bg-black/30 border border-gold-700 text-gold-400 flex items-center justify-center"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+          </svg>
+        </button>
         <button
           id="zoom-in-btn"
           title="Zoom In"
@@ -694,6 +763,140 @@ export default function ZmapsPage() {
                 </Link>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Intro Explainer Overlays */}
+      {showIntro && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+          <div className="bg-gradient-to-br from-gold-900/20 via-black/40 to-gold-900/20 rounded-2xl shadow-[0_8px_32px_0_rgba(255,200,55,0.2)] max-w-2xl w-full p-8">
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-400 to-transparent opacity-50"></div>
+
+            {/* Step Indicator */}
+            <div className="flex justify-center gap-2 mb-6">
+              {[1, 2, 3].map((step) => (
+                <div
+                  key={step}
+                  className={`w-8 h-1 ${
+                    step === introStep ? 'bg-gold-400' : 'bg-gold-700/30'
+                  }`}
+                />
+              ))}
+            </div>
+
+            {introStep === 1 && (
+              <div>
+                <h2 className="text-3xl font-bold text-gold-300 mb-4">Welcome to ZMAPS</h2>
+                <p className="text-gold-200/80 text-lg mb-6">
+                  ZMAPS is a digital land registry on Zcash. Each square represents 100 Zcash blocks.
+                  Inscribe a ZMAP to claim ownership and receive 10,000 ZORE tokens.
+                </p>
+                <div className="bg-gold-500/10 p-4 rounded mb-6">
+                  <p className="text-gold-300 text-sm">
+                    <strong>Gold squares</strong> = Already inscribed<br />
+                    <strong>Empty squares</strong> = Available to inscribe<br />
+                    <strong>Gray squares</strong> = Loading next 100
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {introStep === 2 && (
+              <div>
+                <h2 className="text-3xl font-bold text-gold-300 mb-4">How to Navigate</h2>
+                <p className="text-gold-200/80 text-lg mb-6">
+                  Use your mouse or trackpad to explore the grid:
+                </p>
+                <div className="space-y-3 mb-6">
+                  <div className="flex items-start gap-3">
+                    <span className="text-gold-400 font-bold">•</span>
+                    <span className="text-gold-200/80"><strong>Drag</strong> to pan around the grid</span>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="text-gold-400 font-bold">•</span>
+                    <span className="text-gold-200/80"><strong>Scroll</strong> to zoom in and out</span>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="text-gold-400 font-bold">•</span>
+                    <span className="text-gold-200/80"><strong>Click</strong> any square to see details and inscribe</span>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="text-gold-400 font-bold">•</span>
+                    <span className="text-gold-200/80"><strong>Use controls</strong> on the right to zoom and reset view</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {introStep === 3 && (
+              <div>
+                <h2 className="text-3xl font-bold text-gold-300 mb-4">Start Exploring</h2>
+                <p className="text-gold-200/80 text-lg mb-6">
+                  You&apos;re all set! Click on any available square to inscribe your first ZMAP.
+                  Each ZMAP costs 0.0015 ZEC and rewards you with 10,000 ZORE tokens.
+                </p>
+                <div className="bg-gold-500/10 p-4 rounded mb-6">
+                  <p className="text-gold-300 text-sm">
+                    💡 <strong>Tip:</strong> Press the <strong>?</strong> button in the bottom-right corner anytime to see this guide again.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Navigation Buttons */}
+            <div className="flex gap-4 justify-between">
+              {introStep > 1 && (
+                <button
+                  onClick={() => setIntroStep(introStep - 1)}
+                  className="px-6 py-3 bg-gold-500/10 text-gold-400 font-bold border border-gold-500/30"
+                >
+                  BACK
+                </button>
+              )}
+              <div className="flex-1" />
+              {introStep < 3 ? (
+                <button
+                  onClick={() => setIntroStep(introStep + 1)}
+                  className="px-6 py-3 bg-gold-500 text-black font-bold"
+                >
+                  NEXT
+                </button>
+              ) : (
+                <button
+                  onClick={handleCompleteIntro}
+                  className="px-6 py-3 bg-gold-500 text-black font-bold"
+                >
+                  GET STARTED
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Left Sidebar for Reserved Parcel (placeholder for future implementation) */}
+      {selectedCell && selectedCell.isInscribed === false && (
+        <div className="fixed top-20 left-0 bottom-0 w-[400px] backdrop-blur-xl bg-black/30 border-r border-gold-700/30 z-30 p-6 hidden lg:block">
+          <h3 className="text-xl font-bold text-gold-300 mb-4">ZMAP #{selectedCell.mapNumber}</h3>
+          <div className="space-y-4">
+            <div className="p-4 bg-black/40 rounded">
+              <div className="text-gold-400/60 text-sm mb-1">Block Range</div>
+              <div className="text-gold-300 font-mono">
+                {selectedCell.blockStart.toLocaleString()} - {selectedCell.blockEnd.toLocaleString()}
+              </div>
+            </div>
+            <div className="p-4 bg-black/40 rounded">
+              <div className="text-gold-400/60 text-sm mb-1">ZORE Reward</div>
+              <div className="text-gold-300 text-2xl font-bold">{ZORE_PER_MAP.toLocaleString()}</div>
+            </div>
+            <div className="p-4 bg-black/40 rounded">
+              <div className="text-gold-400/60 text-sm mb-1">Price</div>
+              <div className="text-gold-300 text-2xl font-bold">{ZMAP_PRICE} ZEC</div>
+            </div>
+            <button className="w-full px-6 py-4 bg-gold-500 text-black font-bold text-lg tracking-wide">
+              Reserve & Inscribe
+            </button>
           </div>
         </div>
       )}

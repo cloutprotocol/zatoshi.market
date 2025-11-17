@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
 import { generateWallet, importFromMnemonic } from '@/lib/wallet';
-import { zcashRPCService } from '@/services/zcashRPC';
+import { zcashRPC } from '@/services/zcash';
 import QRCode from 'qrcode';
 
 export default function WalletPage() {
@@ -21,12 +21,12 @@ export default function WalletPage() {
 
   const fetchBalance = useCallback(async () => {
     if (!wallet?.address) return;
-    const bal = await zcashRPCService.getBalance(wallet.address);
+    const bal = await zcashRPC.getBalance(wallet.address);
     setBalance(bal);
   }, [wallet?.address]);
 
   const fetchPrice = useCallback(async () => {
-    const price = await zcashRPCService.getPrice();
+    const price = await zcashRPC.getPrice();
     setUsdPrice(price);
   }, []);
 
