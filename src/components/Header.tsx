@@ -12,6 +12,8 @@ export default function Header() {
   const { wallet, isConnected, mounted } = useWallet();
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const feeEnabled = (process.env.NEXT_PUBLIC_PLATFORM_FEE_ENABLED || '').toLowerCase() === 'true';
+  const convexEnv = (process.env.NEXT_PUBLIC_CONVEX_ENV || (process.env.NEXT_PUBLIC_CONVEX_URL_PROD ? 'prod' : 'dev')).toUpperCase();
 
   return (
     <>
@@ -52,6 +54,20 @@ export default function Header() {
               CONNECT WALLET
             </button>
           )}
+          {/* Fee badge */}
+          <span
+            title={feeEnabled ? 'Platform fee is enabled' : 'Platform fee is disabled'}
+            className={`px-2 py-1 text-xs rounded border ${feeEnabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800/60 text-zinc-300 border-zinc-600/50'}`}
+          >
+            {feeEnabled ? 'FEE ON' : 'FEE OFF'}
+          </span>
+          {/* Env badge */}
+          <span
+            title={`Convex environment: ${convexEnv}`}
+            className={`px-2 py-1 text-xs rounded border ${convexEnv==='PROD' ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-blue-500/20 text-blue-300 border-blue-500/30'}`}
+          >
+            {convexEnv}
+          </span>
         </div>
 
         {/* Mobile Navigation */}

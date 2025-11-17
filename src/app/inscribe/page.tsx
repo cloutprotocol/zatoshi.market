@@ -8,6 +8,11 @@ import Link from 'next/link';
 // Switch to Convex actions for inscription flows
 import { getConvexClient } from '@/lib/convexClient';
 import { api } from '../../../convex/_generated/api';
+import bs58check from 'bs58check';
+import * as secp from '@noble/secp256k1';
+import { hmac } from '@noble/hashes/hmac';
+import { sha256 } from '@noble/hashes/sha256';
+import { safeMintInscription } from '@/utils/inscribe';
 import {
   PLATFORM_FEES,
   TREASURY_WALLET,
@@ -19,11 +24,17 @@ import {
 } from '@/config/fees';
 import { useZecPrice } from '@/hooks/useZecPrice';
 import { FeeBreakdown } from '@/components/FeeBreakdown';
+import { ConfirmTransaction } from '@/components/ConfirmTransaction';
 
 export default function InscribePage() {
+  // Ensure noble-secp has HMAC in browser (for deterministic signing)
+  if (!(secp as any).etc.hmacSha256Sync) {
+    (secp as any).etc.hmacSha256Sync = (key: Uint8Array, ...msgs: Uint8Array[]) =>
+      hmac(sha256, key, (secp as any).etc.concatBytes(...msgs));
+  }
   const { wallet, isConnected } = useWallet();
   const { price: zecPrice, loading: priceLoading, error: priceError } = useZecPrice();
-  const [activeTab, setActiveTab] = useState<'names' | 'text' | 'zrc20'>('names');
+  const [activeTab, setActiveTab] = useState<'names' | 'text' | 'zrc20' | 'utxo'>('names');
 
   // Name registration form
   const [nameInput, setNameInput] = useState('');
@@ -40,11 +51,21 @@ export default function InscribePage() {
   const [amount, setAmount] = useState('');
   const [maxSupply, setMaxSupply] = useState('');
   const [mintLimit, setMintLimit] = useState('');
-  const [zrcSubTab, setZrcSubTab] = useState<'mint'|'batch'|'utxos'>('mint');
+  const [zrcSubTab, setZrcSubTab] = useState<'mint'|'batch'>('mint');
 
   // Status
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ txid: string; inscriptionId: string } | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingArgs, setPendingArgs] = useState<{
+    content?: string;
+    contentJson?: string;
+    contentType: string;
+    type?: string;
+    inscriptionAmount: number;
+    fee: number;
+  } | null>(null);
+  const [confirmTitle, setConfirmTitle] = useState<string>('Confirm Transaction');
   const [error, setError] = useState<string | null>(null);
 
   const fullName = `${nameInput}.${nameExtension}`;
@@ -81,20 +102,9 @@ export default function InscribePage() {
     setResult(null);
 
     try {
-      const convex = getConvexClient();
-      if (!convex) throw new Error('Convex client not available');
-      const res = await convex.action(api.inscriptionsActions.mintInscriptionAction, {
-        wif: wallet.privateKey,
-        address: wallet.address,
-        content: fullName,
-        contentType: 'text/plain',
-        type: 'name',
-        inscriptionAmount: 60000,
-        fee: 10000,
-        waitMs: 10000,
-      });
-      setResult({ txid: res.revealTxid, inscriptionId: res.inscriptionId });
-      setNameInput('');
+      setConfirmTitle('Confirm Name Registration');
+      setPendingArgs({ content: fullName, contentType: 'text/plain', type: 'name', inscriptionAmount: 60000, fee: 10000 });
+      setConfirmOpen(true);
     } catch (err) {
       console.error('Name registration error:', err);
       setError(err instanceof Error ? err.message : 'Failed to register name');
@@ -119,22 +129,10 @@ export default function InscribePage() {
     setResult(null);
 
     try {
-      const convex = getConvexClient();
-      if (!convex) throw new Error('Convex client not available');
       const isJson = contentType === 'application/json';
-      const res = await convex.action(api.inscriptionsActions.mintInscriptionAction, {
-        wif: wallet.privateKey,
-        address: wallet.address,
-        content: isJson ? undefined : textContent,
-        contentJson: isJson ? textContent : undefined,
-        contentType,
-        type: isJson ? 'json' : 'text',
-        inscriptionAmount: 60000,
-        fee: 10000,
-        waitMs: 10000,
-      });
-      setResult({ txid: res.revealTxid, inscriptionId: res.inscriptionId });
-      setTextContent('');
+      setConfirmTitle('Confirm Text Inscription');
+      setPendingArgs({ content: isJson ? undefined : textContent, contentJson: isJson ? textContent : undefined, contentType, type: isJson ? 'json' : 'text', inscriptionAmount: 60000, fee: 10000 });
+      setConfirmOpen(true);
     } catch (err) {
       console.error('Inscription error:', err);
       setError(err instanceof Error ? err.message : 'Failed to create inscription');
@@ -162,8 +160,6 @@ export default function InscribePage() {
     setResult(null);
 
     try {
-      const convex = getConvexClient();
-      if (!convex) throw new Error('Convex client not available');
       const payload = JSON.stringify(
         zrcOp === 'deploy'
           ? { p: 'zrc-20', op: 'deploy', tick: tick.toUpperCase(), max: maxSupply, lim: mintLimit }
@@ -171,21 +167,9 @@ export default function InscribePage() {
           ? { p: 'zrc-20', op: 'transfer', tick: tick.toUpperCase(), amt: amount }
           : { p: 'zrc-20', op: 'mint', tick: tick.toUpperCase(), amt: amount }
       );
-      const res = await convex.action(api.inscriptionsActions.mintInscriptionAction, {
-        wif: wallet.privateKey,
-        address: wallet.address,
-        contentJson: payload,
-        contentType: 'application/json',
-        type: zrcOp === 'deploy' ? 'zrc20-deploy' : zrcOp === 'transfer' ? 'zrc20-transfer' : 'zrc20-mint',
-        inscriptionAmount: 60000,
-        fee: 10000,
-        waitMs: 10000,
-      });
-      setResult({ txid: res.revealTxid, inscriptionId: res.inscriptionId });
-      setTick('');
-      setAmount('');
-      setMaxSupply('');
-      setMintLimit('');
+      setConfirmTitle('Confirm ZRC‑20 Action');
+      setPendingArgs({ contentJson: payload, contentType: 'application/json', type: zrcOp === 'deploy' ? 'zrc20-deploy' : zrcOp === 'transfer' ? 'zrc20-transfer' : 'zrc20-mint', inscriptionAmount: 60000, fee: 10000 });
+      setConfirmOpen(true);
     } catch (err) {
       console.error('Mint error:', err);
       setError(err instanceof Error ? err.message : 'Failed to mint ZRC-20 token');
@@ -203,6 +187,10 @@ export default function InscribePage() {
   const [batchJobId, setBatchJobId] = useState<string | null>(null);
   const [batchStatus, setBatchStatus] = useState<{ status: string; completed: number; total: number; ids: string[] } | null>(null);
   const [safety, setSafety] = useState<'unknown'|'on'|'off'>('unknown');
+  const [demoOpen, setDemoOpen] = useState(false);
+  const [demoContent, setDemoContent] = useState('hello from client-signing demo');
+  const [demoRunning, setDemoRunning] = useState(false);
+  const [demoLog, setDemoLog] = useState<string[]>([]);
 
   // Ping indexer to display safety status
   useEffect(() => {
@@ -243,6 +231,50 @@ export default function InscribePage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const runClientSigningDemo = async () => {
+    if (!wallet?.privateKey || !wallet?.address) { setError('Please connect your wallet first'); return; }
+    setDemoRunning(true); setDemoLog([]);
+    try {
+      // Build signer using local WIF
+      const wifPayload = (await import('bs58check')).default.decode(wallet.privateKey) as Uint8Array;
+      const priv = wifPayload.slice(1, wifPayload.length === 34 ? 33 : undefined);
+      const pubKeyHex = Array.from((await import('@noble/secp256k1')).getPublicKey(priv, true)).map(b=>b.toString(16).padStart(2,'0')).join('');
+      const signer = async (sighashHex: string) => {
+        const secp = await import('@noble/secp256k1');
+        const digest = Uint8Array.from(sighashHex.match(/.{1,2}/g)!.map((b)=>parseInt(b,16)));
+        const sig = await secp.sign(digest, priv);
+        const raw = (sig as any).toCompactRawBytes ? (sig as any).toCompactRawBytes() : (sig as Uint8Array);
+        return Array.from(raw).map(b=>b.toString(16).padStart(2,'0')).join('');
+      };
+      const convex = getConvexClient(); if (!convex) throw new Error('Convex client not available');
+      // Step 1
+      const step1 = await convex.action(api.inscriptionsActions.buildUnsignedCommitAction, {
+        address: wallet.address,
+        pubKeyHex,
+        content: demoContent,
+        contentType: 'text/plain',
+        type: 'demo', inscriptionAmount: 60000, fee: 10000,
+      } as any);
+      setDemoLog(l => [...l, `commitSigHashHex: ${step1.commitSigHashHex.slice(0,16)}...`]);
+      // Step 2
+      const commitSignatureRawHex = await signer(step1.commitSigHashHex);
+      const step2 = await convex.action(api.inscriptionsActions.finalizeCommitAndGetRevealPreimageAction, {
+        contextId: step1.contextId,
+        commitSignatureRawHex,
+      });
+      setDemoLog(l => [...l, `commitTxid: ${step2.commitTxid}`, `revealSigHashHex: ${step2.revealSigHashHex.slice(0,16)}...`]);
+      // Step 3
+      const revealSignatureRawHex = await signer(step2.revealSigHashHex);
+      const step3 = await convex.action(api.inscriptionsActions.broadcastSignedRevealAction, {
+        contextId: step1.contextId,
+        revealSignatureRawHex,
+      });
+      setDemoLog(l => [...l, `revealTxid: ${step3.revealTxid}`, `inscriptionId: ${step3.inscriptionId}`]);
+    } catch (e: any) {
+      setDemoLog(l => [...l, `Error: ${e?.message || String(e)}`]);
+    } finally { setDemoRunning(false); }
   };
 
   const handleBatchMint = async () => {
@@ -330,6 +362,18 @@ export default function InscribePage() {
               >
                 <div className="text-sm sm:text-base lg:text-lg whitespace-nowrap lg:whitespace-normal">ZRC-20</div>
                 <div className="text-xs opacity-75 hidden sm:block">Token Mint</div>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('utxo')}
+                className={`flex-shrink-0 lg:w-full text-left px-6 py-3 sm:px-6 sm:py-4 rounded-lg font-bold transition-all ${
+                  activeTab === 'utxo'
+                    ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
+                    : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
+                }`}
+              >
+                <div className="text-sm sm:text-base lg:text-lg whitespace-nowrap lg:whitespace-normal">UTXO</div>
+                <div className="text-xs opacity-75 hidden sm:block">UTXO MANAGEMENT</div>
               </button>
             </div>
 
@@ -509,7 +553,6 @@ export default function InscribePage() {
                   <div className="flex gap-1.5 sm:gap-2 text-xs">
                     <button onClick={()=>setZrcSubTab('mint')} className={`px-2 py-1 sm:px-3 rounded ${zrcSubTab==='mint'?'bg-gold-500 text-black':'bg-black/40 border border-gold-500/30 text-gold-300'}`}>Mint</button>
                     <button onClick={()=>setZrcSubTab('batch')} className={`px-2 py-1 sm:px-3 rounded ${zrcSubTab==='batch'?'bg-gold-500 text-black':'bg-black/40 border border-gold-500/30 text-gold-300'}`}>Batch</button>
-                    <button onClick={()=>setZrcSubTab('utxos')} className={`px-2 py-1 sm:px-3 rounded ${zrcSubTab==='utxos'?'bg-gold-500 text-black':'bg-black/40 border border-gold-500/30 text-gold-300'}`}>UTXO</button>
                   </div>
                 </div>
 
@@ -608,41 +651,29 @@ export default function InscribePage() {
 
                 <button onClick={handleZRC20Mint} disabled={loading || !isConnected || !tick.trim() || (zrcOp !== 'deploy' && !amount.trim()) || (zrcOp === 'deploy' && (!maxSupply.trim() || !mintLimit.trim()))} className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Submitting...' : (zrcOp === 'deploy' ? 'Deploy Token' : zrcOp === 'transfer' ? 'Inscribe Transfer' : 'Mint ZRC-20')}</button>
 
-                {/* Split UTXOs helper */}
-                <div className="mt-4 p-3 sm:p-4 bg-black/40 border border-gold-500/20 rounded-lg space-y-2 sm:space-y-3">
-                  <div className="text-gold-300 font-semibold">Prepare Funding UTXOs</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-gold-200/80 text-xs mb-1">Split Count</label>
-                      <input type="number" value={splitCount} onChange={e=>setSplitCount(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
-                    </div>
-                    <div>
-                      <label className="block text-gold-200/80 text-xs mb-1">Target Amount (zats)</label>
-                      <input type="number" value={targetAmount} onChange={e=>setTargetAmount(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
-                    </div>
-                    <div>
-                      <label className="block text-gold-200/80 text-xs mb-1">Fee (zats)</label>
-                      <input type="number" value={splitFee} onChange={e=>setSplitFee(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
-                    </div>
-                  </div>
-                  <button onClick={handleSplit} disabled={loading || !isConnected} className="w-full px-4 py-3 bg-black/60 border border-gold-500/40 rounded-lg text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? 'Splitting...' : 'Split UTXOs'}</button>
-                  {splitTxid && (
-                    <div className="text-xs text-gold-400/80">Split TXID: <span className="font-mono break-all">{splitTxid}</span></div>
-                  )}
-                </div>
-
-                </>
-                )}
-
-                {zrcSubTab === 'batch' && (
-                <div className="mt-2 p-4 bg-black/40 border border-gold-500/20 rounded-lg space-y-3">
+                {/* Batch Mint (glassmorphism highlight) */}
+                <div className="mt-6 p-4 sm:p-5 rounded-xl border border-gold-500/30 bg-white/5 backdrop-blur-xl space-y-3">
                   <div className="text-gold-300 font-semibold">Batch Mint</div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-gold-200/80 text-xs mb-1">Count</label>
-                      <input type="number" value={batchCount} onChange={e=>setBatchCount(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                      <input type="number" min={1} max={10} value={batchCount} onChange={e=>setBatchCount(Math.max(1, Math.min(10, parseInt(e.target.value||'0'))))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                      <input type="range" min={1} max={10} value={batchCount} onChange={e=>setBatchCount(parseInt(e.target.value))} className="w-full mt-2" />
                     </div>
                     <div className="sm:col-span-2 text-xs text-gold-400/70 flex items-end">Batch uses the same ticker/amount as Mint. Use UTXO Tools to prepare funding.</div>
+                  </div>
+                  {/* Batch Fee Summary */}
+                  <div className="text-xs text-gold-400/80">
+                    {(() => {
+                      const singleTotal = zrc20Cost.total;
+                      const batchTotal = singleTotal * Math.max(1, batchCount);
+                      return (
+                        <div>
+                          <div>Single mint est. total: <span className="font-mono text-gold-300">{formatZEC(singleTotal)}</span></div>
+                          <div>Batch est. total: <span className="font-mono text-gold-300">{formatZEC(batchTotal)}</span> ({batchCount} × single)</div>
+                        </div>
+                      );
+                    })()}
                   </div>
                   <button onClick={handleBatchMint} disabled={loading || !isConnected || !tick.trim() || !amount.trim()} className="w-full px-4 py-3 bg-black/60 border border-gold-500/40 rounded-lg text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? 'Batch Minting...' : 'Start Batch Mint'}</button>
                   {batchJobId && (
@@ -659,17 +690,48 @@ export default function InscribePage() {
                       </div>
                       <div className="space-y-1 text-xs text-gold-300 max-h-40 overflow-auto">
                         {batchStatus.ids.map((id, idx)=>(
-                          <div key={idx} className="flex items-center gap-2"><span className="opacity-70">{idx+1}.</span> <a className="underline" href={`https://zerdinals.com/inscription/${id}`} target="_blank" rel="noreferrer">{id}</a></div>
+                          <div key={idx} className="flex items-center gap-2"><span className="opacity-70">{idx+1}.</span> <a className="underline" href={`https://zerdinals.com/zerdinals/${id}`} target="_blank" rel="noreferrer">{id}</a></div>
                         ))}
                       </div>
                     </div>
                   )}
                 </div>
-                )}
 
-                {zrcSubTab === 'utxos' && (
-                <div className="mt-2 p-4 bg-black/40 border border-gold-500/20 rounded-lg space-y-3">
-                  <div className="text-gold-300 font-semibold">Prepare Funding UTXOs</div>
+                </>
+                )}
+              </div>
+            )}
+
+            {/* CLIENT-SIGNING DEMO */}
+            <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
+              <button onClick={()=>setDemoOpen(!demoOpen)} className="w-full px-4 py-2 bg-black/40 border border-gold-500/30 rounded hover:border-gold-500/50 text-left">
+                <span className="font-bold">Client-Signing Demo</span> <span className="text-xs text-gold-400/70">(non-custodial 3-step flow)</span>
+              </button>
+              {demoOpen && (
+                <div className="p-3 border border-gold-500/20 rounded bg-black/30">
+                  <label className="block text-gold-200/80 text-xs mb-2">Demo Content</label>
+                  <input value={demoContent} onChange={e=>setDemoContent(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-sm" />
+                  <div className="mt-3 flex gap-2">
+                    <button onClick={runClientSigningDemo} disabled={demoRunning || !isConnected} className="px-4 py-2 bg-gold-500 text-black font-bold rounded disabled:opacity-50">{demoRunning ? 'Running…' : 'Run Secure Mint'}</button>
+                  </div>
+                  {demoLog.length > 0 && (
+                    <pre className="mt-3 text-xs text-gold-300/90 bg-black/60 border border-gold-500/20 rounded p-3 overflow-auto max-h-48">{demoLog.join('\n')}</pre>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* UTXO TAB */}
+            {activeTab === 'utxo' && (
+              <div className="max-w-2xl mx-auto">
+                <div className="text-center mb-4 sm:mb-6">
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">UTXO Management</h2>
+                  <p className="text-gold-400/60 text-xs sm:text-sm lg:text-base">
+                    Split larger UTXOs into smaller ones to prepare funding for batch operations. This does not create inscriptions.
+                  </p>
+                </div>
+
+                <div className="bg-black/40 border border-gold-500/20 rounded-2xl p-4 sm:p-6">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-gold-200/80 text-xs mb-1">Split Count</label>
@@ -684,12 +746,11 @@ export default function InscribePage() {
                       <input type="number" value={splitFee} onChange={e=>setSplitFee(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
                     </div>
                   </div>
-                  <button onClick={handleSplit} disabled={loading || !isConnected} className="w-full px-4 py-3 bg-black/60 border border-gold-500/40 rounded-lg text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? 'Splitting...' : 'Split UTXOs'}</button>
-                  {splitTxid && (
-                    <div className="text-xs text-gold-400/80">Split TXID: <span className="font-mono break-all">{splitTxid}</span></div>
-                  )}
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <button onClick={handleSplit} disabled={loading || !isConnected} className="px-4 py-3 bg-black/60 border border-gold-500/40 rounded-lg text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? 'Splitting...' : 'Split UTXOs'}</button>
+                    {splitTxid && (<div className="text-xs text-gold-400/80">Split TXID: <span className="font-mono break-all">{splitTxid}</span></div>)}
+                  </div>
                 </div>
-                )}
               </div>
             )}
 
@@ -713,7 +774,7 @@ export default function InscribePage() {
 
             {/* Success Display */}
             {result && (
-              <div className="mt-6 p-4 sm:p-6 bg-gold-500/10 border border-gold-500/30 rounded-lg">
+              <div className="max-w-2xl m-auto mt-6 p-4 sm:p-6 bg-gold-500/10 border border-gold-500/30 rounded-lg">
                 <h3 className="text-gold-300 font-bold mb-4 text-base sm:text-lg">✓ Success!</h3>
                 <div className="space-y-3">
                   <div>
@@ -728,9 +789,10 @@ export default function InscribePage() {
                       {result.inscriptionId}
                     </div>
                   </div>
-                  <div className="pt-4">
+                  <div className="pt-3">
+                    <p className="text-xs text-gold-400/70 mb-2">Note: New inscriptions may take up to ~5 minutes to appear in the public explorer.</p>
                     <a
-                      href={`https://indexer.zerdinals.com/inscription/${result.inscriptionId}`}
+                      href={`https://zerdinals.com/zerdinals/${result.inscriptionId}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-block px-4 sm:px-6 py-2 sm:py-3 bg-gold-500 text-black font-bold text-sm sm:text-base rounded-lg hover:bg-gold-400 transition-all"
@@ -745,6 +807,46 @@ export default function InscribePage() {
           </div>
         </div>
       </div>
+      {/* UTXO tools moved into its own tab above */}
+
+      {/* Confirm Modal (reusable component) */}
+      {confirmOpen && pendingArgs && (
+        <ConfirmTransaction
+          isOpen={confirmOpen}
+          title={confirmTitle}
+          items={[
+            { label: 'Inscription output', valueZats: pendingArgs.inscriptionAmount },
+            { label: 'Network fee', valueZats: pendingArgs.fee },
+            { label: 'Platform fee', valueZats: Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_ZATS || '100000'), hidden: (process.env.NEXT_PUBLIC_PLATFORM_FEE_ENABLED || '').toLowerCase() !== 'true' },
+          ]}
+          onCancel={()=>setConfirmOpen(false)}
+          onConfirm={async ()=>{
+            if (!wallet?.privateKey || !wallet?.address) { setConfirmOpen(false); setError('Please connect your wallet first'); return; }
+            setConfirmOpen(false); setLoading(true); setError(null); setResult(null);
+            try {
+              const wifPayload = bs58check.decode(wallet.privateKey);
+              const priv = wifPayload.slice(1, wifPayload.length === 34 ? 33 : undefined);
+              const pubKeyHex = Array.from(secp.getPublicKey(priv, true)).map(b=>b.toString(16).padStart(2,'0')).join('');
+              const walletSigner = async (sighashHex: string) => {
+                const digest = Uint8Array.from(sighashHex.match(/.{1,2}/g)!.map((b)=>parseInt(b,16)));
+                const sig = await secp.sign(digest, priv);
+                const raw = (sig as any).toCompactRawBytes ? (sig as any).toCompactRawBytes() : (sig as Uint8Array);
+                return Array.from(raw).map(b=>b.toString(16).padStart(2,'0')).join('');
+              };
+              const { revealTxid, inscriptionId } = await safeMintInscription(
+                { address: wallet.address, pubKeyHex, ...pendingArgs },
+                walletSigner
+              );
+              setResult({ txid: revealTxid, inscriptionId });
+              if (pendingArgs.type === 'name') setNameInput('');
+              if (pendingArgs.type === 'text' || pendingArgs.type === 'json') setTextContent('');
+              if (pendingArgs.type?.startsWith('zrc20')) { setTick(''); setAmount(''); setMaxSupply(''); setMintLimit(''); }
+            } catch (e:any) {
+              setError(e?.message || String(e));
+            } finally { setLoading(false); }
+          }}
+        />
+      )}
     </main>
   );
 }

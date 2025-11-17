@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       success: true,
       ...result,
       explorerUrl: `https://zcashblockexplorer.com/transactions/${result.revealTxid}`,
-      zerdinals: `https://zerdinals.com/inscription/${result.inscriptionId}`
+      zerdinals: `https://zerdinals.com/zerdinals/${result.inscriptionId}`
     });
 
   } catch (error: any) {

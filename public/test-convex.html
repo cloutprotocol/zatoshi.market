@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zatoshi Convex Debug Panel</title>
+  <style>
+    body { background:#0b0b0b; color:#e5c07b; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Cantarell, Noto Sans, Ubuntu, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji"; margin:0; }
+    header { position:sticky; top:0; background:rgba(0,0,0,.6); backdrop-filter: blur(10px); border-bottom:1px solid rgba(229,192,123,.2); padding:12px 16px; }
+    main { padding:16px; max-width:1100px; margin:0 auto; }
+    h1 { margin:0 0 4px 0; font-size:20px; }
+    .row { display:flex; gap:12px; flex-wrap: wrap; align-items:center; }
+    .card { background:rgba(0,0,0,.4); border:1px solid rgba(229,192,123,.25); border-radius:8px; padding:12px; margin:8px 0; }
+    label { display:block; font-size:12px; color:rgba(229,192,123,.8); margin:6px 0 4px; }
+    input, textarea, select { width:100%; box-sizing:border-box; background:rgba(0,0,0,.5); color:#e5c07b; border:1px solid rgba(229,192,123,.35); border-radius:6px; padding:8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    textarea { min-height:90px; }
+    button { background:#e5c07b; color:#000; border:0; border-radius:6px; padding:8px 12px; font-weight:700; cursor:pointer; }
+    button.secondary { background: transparent; color:#e5c07b; border:1px solid rgba(229,192,123,.45); }
+    .muted { color: rgba(229,192,123,.7); font-size:12px; }
+    .danger { color:#ff6b6b; }
+    pre { background:rgba(0,0,0,.6); border:1px solid rgba(229,192,123,.25); border-radius:6px; padding:10px; color:#f0e6d2; max-height:280px; overflow:auto; }
+    .grid { display:grid; grid-template-columns: repeat(2, minmax(260px, 1fr)); gap:16px; }
+    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+    .pill { padding:2px 6px; border-radius:999px; border:1px solid rgba(229,192,123,.35); font-size:11px; }
+  </style>
+  <script type="module">
+    import { ConvexHttpClient } from "https://esm.sh/convex@1.16.1/browser";
+    import * as secp from "https://esm.sh/@noble/secp256k1@2.0.0";
+    import bs58check from "https://esm.sh/bs58check@3.0.1";
+    import { hmac } from "https://esm.sh/@noble/hashes@1.4.0/hmac";
+    import { sha256 } from "https://esm.sh/@noble/hashes@1.4.0/sha256";
+
+    // Ensure noble-secp has HMAC helpers (browser runtime)
+    if (!secp.etc.hmacSha256Sync) {
+      secp.etc.hmacSha256Sync = (key, ...msgs) => hmac(sha256, key, secp.etc.concatBytes(...msgs));
+    }
+    if (!secp.etc.hmacSha256Async) {
+      secp.etc.hmacSha256Async = async (key, ...msgs) => hmac(sha256, key, secp.etc.concatBytes(...msgs));
+    }
+
+    // State
+    let client = null;
+    let contextId = null;
+    let commitSigHashHex = null;
+    let revealSigHashHex = null;
+    let lastCommitTxid = null;
+
+    const qs = (sel) => document.querySelector(sel);
+    const qsv = (sel) => qs(sel).value.trim();
+    const setText = (sel, txt) => (qs(sel).textContent = txt);
+    const appendLog = (txt) => {
+      const pre = qs('#log');
+      pre.textContent += (pre.textContent ? "\n" : "") + txt;
+      pre.scrollTop = pre.scrollHeight;
+    };
+
+    function toHex(u8) { return Array.from(u8).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+
+    function parseWIFtoPriv(wif) {
+      const payload = bs58check.decode(wif);
+      if (payload[0] !== 0x80) throw new Error('Invalid WIF version (expected 0x80)');
+      if (payload.length !== 33 && payload.length !== 34) throw new Error('Invalid WIF length');
+      return payload.slice(1, payload.length === 34 ? 33 : undefined);
+    }
+
+    async function ensureClient() {
+      const url = qsv('#convexUrl') || localStorage.getItem('convexUrl') || '';
+      if (!url) throw new Error('Set Convex URL first');
+      if (!client || client.baseUrl !== url) client = new ConvexHttpClient(url);
+      localStorage.setItem('convexUrl', url);
+      setText('#connState', `Connected: ${url}`);
+    }
+
+    window.initDefaults = () => {
+      const stored = localStorage.getItem('convexUrl');
+      if (stored) qs('#convexUrl').value = stored;
+      const envDefault = "https://cool-panda-546.convex.cloud";
+      if (!qs('#convexUrl').value) qs('#convexUrl').value = envDefault;
+      setText('#connState', qs('#convexUrl').value ? `Connected: ${qs('#convexUrl').value}` : 'Not connected');
+    }
+
+    // Simple test
+    window.testSimple = async function() {
+      try {
+        await ensureClient();
+        const address = qsv('#testAddress') || 't1ZemSSmv1kcqapcCReZJGH4driYmbALX1x';
+        const result = await client.action("testAction:simpleTest", { address });
+        qs('#simpleOut').textContent = JSON.stringify(result, null, 2);
+      } catch (error) {
+        qs('#simpleOut').textContent = `ERROR: ${error.message}`;
+      }
+    };
+
+    // Build unsigned commit (Step 1)
+    window.buildUnsignedCommit = async function() {
+      try {
+        await ensureClient();
+        const address = qsv('#address');
+        const wif = qsv('#wif');
+        const content = qsv('#content');
+        const contentType = qsv('#contentType');
+        const inscriptionAmount = Number(qsv('#inscriptionAmount')) || 60000;
+        const fee = Number(qsv('#fee')) || 10000;
+        if (!address || !wif || !content) throw new Error('Provide address, WIF, and content');
+
+        const priv = parseWIFtoPriv(wif);
+        const pubKeyHex = toHex(secp.getPublicKey(priv, true));
+        const res = await client.action("inscriptionsActions:buildUnsignedCommitAction", {
+          address, pubKeyHex, content, contentType, inscriptionAmount, fee
+        });
+        contextId = res.contextId;
+        commitSigHashHex = res.commitSigHashHex;
+        qs('#step1Out').textContent = JSON.stringify(res, null, 2);
+        appendLog(`Step1: contextId=${contextId}, commitSigHashHex=${commitSigHashHex.slice(0,16)}...`);
+      } catch (e) {
+        qs('#step1Out').textContent = `ERROR: ${e.message}`;
+        appendLog(`Step1 Error: ${e.message}`);
+      }
+    }
+
+    // Finalize commit (Step 2)
+    window.finalizeCommit = async function() {
+      try {
+        await ensureClient();
+        const wif = qsv('#wif');
+        if (!contextId || !commitSigHashHex) throw new Error('Run Step 1 first');
+        const priv = parseWIFtoPriv(wif);
+        const msg = new Uint8Array(commitSigHashHex.match(/.{1,2}/g).map(b=>parseInt(b,16)));
+        const sig = await secp.sign(msg, priv, { der: false });
+        const sigHex = toHex(sig.signature ? sig.signature : (sig.length ? sig : sig));
+        const res = await client.action("inscriptionsActions:finalizeCommitAndGetRevealPreimageAction", {
+          contextId, commitSignatureRawHex: sigHex
+        });
+        revealSigHashHex = res.revealSigHashHex;
+        lastCommitTxid = res.commitTxid;
+        qs('#step2Out').textContent = JSON.stringify(res, null, 2);
+        appendLog(`Step2: commitTxid=${res.commitTxid}, revealSigHashHex=${revealSigHashHex.slice(0,16)}...`);
+      } catch (e) {
+        qs('#step2Out').textContent = `ERROR: ${e.message}`;
+        appendLog(`Step2 Error: ${e.message}`);
+      }
+    }
+
+    // Broadcast reveal (Step 3)
+    window.broadcastReveal = async function() {
+      try {
+        await ensureClient();
+        const wif = qsv('#wif');
+        if (!contextId || !revealSigHashHex) throw new Error('Run Step 2 first');
+        const priv = parseWIFtoPriv(wif);
+        const msg = new Uint8Array(revealSigHashHex.match(/.{1,2}/g).map(b=>parseInt(b,16)));
+        const sig = await secp.sign(msg, priv, { der: false });
+        const sigHex = toHex(sig.signature ? sig.signature : (sig.length ? sig : sig));
+        const res = await client.action("inscriptionsActions:broadcastSignedRevealAction", {
+          contextId, revealSignatureRawHex: sigHex
+        });
+        qs('#step3Out').textContent = JSON.stringify(res, null, 2);
+        appendLog(`Step3: revealTxid=${res.revealTxid}, inscriptionId=${res.inscriptionId}`);
+      } catch (e) {
+        qs('#step3Out').textContent = `ERROR: ${e.message}`;
+        appendLog(`Step3 Error: ${e.message}`);
+      }
+    }
+
+    // End-to-end (run all three)
+    window.runEndToEnd = async function() {
+      qs('#step1Out').textContent = ''; qs('#step2Out').textContent=''; qs('#step3Out').textContent='';
+      await buildUnsignedCommit();
+      if (!contextId) return;
+      await finalizeCommit();
+      if (!revealSigHashHex) return;
+      await broadcastReveal();
+    }
+
+    // Get job by id
+    window.loadJob = async function() {
+      try {
+        await ensureClient();
+        const jobId = qsv('#jobId');
+        const job = await client.query("jobs:getJob", { jobId });
+        qs('#jobOut').textContent = JSON.stringify(job, null, 2);
+      } catch (e) { qs('#jobOut').textContent = `ERROR: ${e.message}`; }
+    }
+
+    // Recent inscriptions
+    window.loadRecent = async function() {
+      try {
+        await ensureClient();
+        const res = await client.query("inscriptions:getRecentInscriptions", { limit: 10 });
+        qs('#recentOut').textContent = JSON.stringify(res, null, 2);
+      } catch (e) { qs('#recentOut').textContent = `ERROR: ${e.message}`; }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => { window.initDefaults(); });
+  </script>
+</head>
+<body>
+  <header>
+    <div class="row" style="justify-content: space-between; align-items: center;">
+      <div>
+        <h1>Zatoshi Convex Debug Panel</h1>
+        <div id="connState" class="muted">Not connected</div>
+      </div>
+      <div style="min-width:320px;">
+        <label>Convex Deployment URL</label>
+        <input id="convexUrl" placeholder="https://<name>.convex.cloud" />
+      </div>
+    </div>
+  </header>
+  <main>
+    <section class="card">
+      <h2 style="margin:0 0 8px 0;">Quick Test</h2>
+      <div class="grid">
+        <div>
+          <label>Address</label>
+          <input id="testAddress" value="t1ZemSSmv1kcqapcCReZJGH4driYmbALX1x" />
+          <div style="margin-top:8px; display:flex; gap:8px;">
+            <button onclick="testSimple()">Run testAction:simpleTest</button>
+          </div>
+        </div>
+        <div>
+          <label>Output</label>
+          <pre id="simpleOut"></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0 0 8px 0;">Secure Client‑Signing Flow</h2>
+      <div class="grid">
+        <div>
+          <label>Address</label>
+          <input id="address" placeholder="t1..." />
+          <label>WIF (Local only)</label>
+          <input id="wif" placeholder="L... (private, stays in browser)" />
+          <label>Content Type</label>
+          <select id="contentType">
+            <option value="text/plain">text/plain</option>
+            <option value="application/json">application/json</option>
+          </select>
+          <label>Content</label>
+          <textarea id="content">hello world</textarea>
+          <div class="row">
+            <div style="flex:1">
+              <label>Inscription Amount</label>
+              <input id="inscriptionAmount" value="60000" />
+            </div>
+            <div style="flex:1">
+              <label>Fee</label>
+              <input id="fee" value="10000" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button onclick="buildUnsignedCommit()">Step 1: Build Unsigned Commit</button>
+            <button class="secondary" onclick="finalizeCommit()">Step 2: Finalize Commit</button>
+            <button class="secondary" onclick="broadcastReveal()">Step 3: Broadcast Reveal</button>
+            <button onclick="runEndToEnd()">Run All</button>
+          </div>
+        </div>
+        <div>
+          <label>Step 1 Output</label>
+          <pre id="step1Out"></pre>
+          <label>Step 2 Output</label>
+          <pre id="step2Out"></pre>
+          <label>Step 3 Output</label>
+          <pre id="step3Out"></pre>
+        </div>
+      </div>
+      <label>Log</label>
+      <pre id="log"></pre>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0 0 8px 0;">Inspect</h2>
+      <div class="grid">
+        <div>
+          <label>Job ID</label>
+          <input id="jobId" placeholder="jqxxxxxxxxxx" />
+          <div style="margin-top:8px; display:flex; gap:8px;">
+            <button onclick="loadJob()">Load Job</button>
+            <button class="secondary" onclick="loadRecent()">Recent Inscriptions</button>
+          </div>
+        </div>
+        <div>
+          <label>Output</label>
+          <pre id="jobOut"></pre>
+          <pre id="recentOut"></pre>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script>
+    // Non-module fallback if needed
+  </script>
+</body>
+</html>

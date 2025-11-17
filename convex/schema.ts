@@ -112,6 +112,38 @@ export default defineSchema({
     .index("by_txid_vout", ["txid", "vout"]) 
     .index("by_address", ["address"]) ,
 
+  // Pending transaction contexts for client-side signing flow
+  txContexts: defineTable({
+    contextId: v.string(),
+    status: v.string(), // commit_prepared | commit_broadcast | completed | failed
+    // Linked UTXO
+    utxoTxid: v.string(),
+    utxoVout: v.number(),
+    utxoValue: v.number(),
+    address: v.string(),
+    // Transaction building params
+    consensusBranchId: v.number(),
+    inscriptionAmount: v.number(),
+    fee: v.number(),
+    platformFeeZats: v.number(),
+    platformTreasuryAddress: v.optional(v.string()),
+    // Scripts and data
+    pubKeyHex: v.string(),
+    redeemScriptHex: v.string(),
+    p2shScriptHex: v.string(),
+    inscriptionDataHex: v.string(),
+    // Content metadata for logging
+    contentType: v.string(),
+    contentStr: v.string(),
+    type: v.optional(v.string()),
+    // Broadcast artifacts
+    commitTxid: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_context_id", ["contextId"]) 
+    .index("by_address", ["address"]) ,
+
   // Long-running orchestration jobs (e.g., batch mint)
   jobs: defineTable({
     type: v.string(), // e.g., "batch-mint"

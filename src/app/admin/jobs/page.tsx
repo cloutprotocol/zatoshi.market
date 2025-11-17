@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { getConvexClient } from '@/lib/convexClient';
 import { api } from '../../../../convex/_generated/api';
 
@@ -38,12 +39,12 @@ export default function JobsPage() {
 
   const retry = async (id: string) => {
     const convex = getConvexClient(); if (!convex) return;
-    await convex.action(api.jobs.retryJob, { jobId: id as any });
+    await convex.action(api.jobsActions.retryJob, { jobId: id as any });
     load();
   };
   const cancel = async (id: string) => {
     const convex = getConvexClient(); if (!convex) return;
-    await convex.action(api.jobs.cancelJob, { jobId: id as any });
+    await convex.action(api.jobsActions.cancelJob, { jobId: id as any });
     load();
   };
 
@@ -57,7 +58,9 @@ export default function JobsPage() {
           {jobs.map((job) => (
             <div key={job._id} className="p-4 bg-black/40 border border-gold-500/20 rounded">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-sm text-gold-400/80">{job.type} • <span className="font-mono">{job._id}</span></div>
+                <div className="text-sm text-gold-400/80">
+                  {job.type} • <Link href={`/admin/jobs/${job._id}`} className="underline font-mono">{job._id}</Link>
+                </div>
                 <div className="text-xs text-gold-400/70">Updated: {new Date(job.updatedAt).toLocaleString()}</div>
               </div>
               <div className="flex items-center justify-between text-sm mb-2">
@@ -75,7 +78,7 @@ export default function JobsPage() {
                 <div className="mt-3 text-xs text-gold-300 max-h-32 overflow-auto space-y-1">
                   {job.inscriptionIds.map((id, idx)=>(
                     <div key={idx}>
-                      {idx+1}. <a className="underline" href={`https://zerdinals.com/inscription/${id}`} target="_blank" rel="noreferrer">{id}</a>
+                      {idx+1}. <a className="underline" href={`https://zerdinals.com/zerdinals/${id}`} target="_blank" rel="noreferrer">{id}</a>
                     </div>
                   ))}
                 </div>
@@ -87,4 +90,3 @@ export default function JobsPage() {
     </main>
   );
 }
-
