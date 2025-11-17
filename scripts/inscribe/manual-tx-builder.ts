@@ -20,7 +20,9 @@ const WALLET = {
 const UTXO = {
   txid: '48d9a62d2b368e5446409b5a346290fa7173d242dee744f36ec9575d05009ab1',
   vout: 0,
-  value: 500000
+  value: 500000,
+  // Actual scriptPubKey from source transaction
+  scriptPubKey: '76a914ad147aafdeaeba4dbb59874e7aec3c44110283be88ac'
 };
 
 /**
@@ -191,6 +193,14 @@ async function buildSignedTransaction() {
   // Create signature hash
   const prevOutScript = createP2PKHScript(pubKeyHash);
   const prevOutScriptLen = varint(prevOutScript.length);
+
+  // Verify our script matches the source UTXO
+  const expectedScript = UTXO.scriptPubKey;
+  const ourScript = prevOutScript.toString('hex');
+  console.log(`   Expected scriptPubKey: ${expectedScript}`);
+  console.log(`   Our scriptPubKey: ${ourScript}`);
+  console.log(`   Match: ${expectedScript === ourScript ? '✅' : '❌'}\n`);
+
   const inputValue = Buffer.allocUnsafe(8);
   inputValue.writeBigUInt64LE(BigInt(UTXO.value));
 
@@ -204,11 +214,16 @@ async function buildSignedTransaction() {
   const SIGHASH_ALL = Buffer.allocUnsafe(4);
   SIGHASH_ALL.writeUInt32LE(1);
 
+  // NU6 consensus branch ID (current as of block 2726400+)
+  const consensusBranchId = Buffer.allocUnsafe(4);
+  consensusBranchId.writeUInt32LE(0xc8e71055);
+
   const preimage = Buffer.concat([
     version, versionGroupId, hashPrevouts, hashSequence, hashOutputs,
     Buffer.alloc(32), Buffer.alloc(32), Buffer.alloc(32),
     lockTime, expiryHeight, valueBalance, SIGHASH_ALL,
-    prevTxId, prevOutIndex, prevOutScriptLen, prevOutScript, inputValue, sequence
+    prevTxId, prevOutIndex, prevOutScriptLen, prevOutScript, inputValue, sequence,
+    consensusBranchId  // <-- This was missing!
   ]);
 
   const hashForSig = sha256(sha256(preimage));

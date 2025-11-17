@@ -46,14 +46,13 @@ async function createInscriptionViaZerdinals() {
     const privateKey = bitcore.PrivateKey.fromWIF(WALLET.privateKeyWIF);
     const tx = new bitcore.Transaction();
 
-    // Add input
+    // Add input with exact scriptPubKey from source transaction
+    const scriptPubKeyHex = '76a914ad147aafdeaeba4dbb59874e7aec3c44110283be88ac';
     tx.from({
       txId: utxos[0].txid,
       outputIndex: utxos[0].vout,
       satoshis: utxos[0].value,
-      script: bitcore.Script.buildPublicKeyHashOut(
-        bitcore.Address.fromString(WALLET.address)
-      )
+      script: bitcore.Script.fromHex(scriptPubKeyHex)
     });
 
     // Add OP_RETURN output with inscription
