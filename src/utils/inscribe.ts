@@ -1,8 +1,20 @@
 "use client";
 
-import { getConvexClient } from "@/lib/convexClient";
-import { api } from "../../convex/_generated/api";
 import { sanitizeError } from "./errorMessages";
+
+async function gatePost<T = any>(op: string, params: any): Promise<T> {
+  const res = await fetch('/api/gate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ op, params }),
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Gate proxy error ${res.status}: ${text}`);
+  }
+  return res.json();
+}
 
 export type InscribeArgs = {
   address: string;
@@ -30,46 +42,34 @@ export async function safeMintInscription(
   args: InscribeArgs,
   signer: Signer
 ) {
-  const convex = getConvexClient();
-  if (!convex) throw new Error("Service not available. Please try again in a moment.");
-
   try {
-    // Step 1: server assembles and returns commit preimage
-    const { contextId, commitSigHashHex } = await convex.action(
-      api.inscriptionsActions.buildUnsignedCommitAction,
-      {
-        address: args.address,
-        pubKeyHex: args.pubKeyHex,
-        content: args.content,
-        contentJson: args.contentJson,
-        contentType: args.contentType,
-        type: args.type,
-        inscriptionAmount: args.inscriptionAmount,
-        fee: args.fee,
-      } as any
-    );
+    // Step 1: server assembles and returns commit preimage via secure gate
+    const { contextId, commitSigHashHex } = await gatePost('unsignedCommit', {
+      address: args.address,
+      pubKeyHex: args.pubKeyHex,
+      content: args.content,
+      contentJson: args.contentJson,
+      contentType: args.contentType,
+      type: args.type,
+      inscriptionAmount: args.inscriptionAmount,
+      fee: args.fee,
+    });
 
     // Step 2: client signs commit locally
     const commitSignatureRawHex = await signer(commitSigHashHex);
 
-    const { commitTxid, revealSigHashHex } = await convex.action(
-      api.inscriptionsActions.finalizeCommitAndGetRevealPreimageAction,
-      {
-        contextId,
-        commitSignatureRawHex,
-      }
-    );
+    const { commitTxid, revealSigHashHex } = await gatePost('finalizeCommit', {
+      contextId,
+      commitSignatureRawHex,
+    });
 
     // Step 3: client signs reveal and server broadcasts
     const revealSignatureRawHex = await signer(revealSigHashHex);
 
-    const { revealTxid, inscriptionId } = await convex.action(
-      api.inscriptionsActions.broadcastSignedRevealAction,
-      {
-        contextId,
-        revealSignatureRawHex,
-      }
-    );
+    const { revealTxid, inscriptionId } = await gatePost('broadcastReveal', {
+      contextId,
+      revealSignatureRawHex,
+    });
 
     return { commitTxid, revealTxid, inscriptionId };
   } catch (error) {
@@ -77,4 +77,3 @@ export async function safeMintInscription(
     sanitizeConvexError(error);
   }
 }
-

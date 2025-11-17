@@ -9,6 +9,7 @@ import { InscriptionService } from '@/services/InscriptionService';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const ENABLE_CUSTODIAL = (process.env.ENABLE_CUSTODIAL_API || '').toLowerCase() === 'true';
+const ADMIN_TOKEN = (process.env.CUSTODIAL_ADMIN_TOKEN || '').trim();
 
 interface CreateInscriptionRequest {
   content: string;
@@ -25,6 +26,20 @@ export async function POST(request: NextRequest) {
         status: 410,
       },
       { status: 410 }
+    );
+  }
+  // Require admin token even when enabled (non-public)
+  if (!ADMIN_TOKEN) {
+    return NextResponse.json(
+      { error: 'Service not configured', status: 503 },
+      { status: 503 }
+    );
+  }
+  const token = request.headers.get('x-admin-token') || '';
+  if (token !== ADMIN_TOKEN) {
+    return NextResponse.json(
+      { error: 'Unauthorized', status: 403 },
+      { status: 403 }
     );
   }
   try {

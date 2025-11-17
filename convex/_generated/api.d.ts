@@ -8,10 +8,14 @@
  * @module
  */
 
+import type * as config from "../config.js";
+import type * as gate from "../gate.js";
+import type * as http from "../http.js";
 import type * as inscriptions from "../inscriptions.js";
 import type * as inscriptionsActions from "../inscriptionsActions.js";
 import type * as jobs from "../jobs.js";
 import type * as jobsActions from "../jobsActions.js";
+import type * as maintenanceActions from "../maintenanceActions.js";
 import type * as sales from "../sales.js";
 import type * as testAction from "../testAction.js";
 import type * as txContexts from "../txContexts.js";
@@ -27,10 +31,14 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  config: typeof config;
+  gate: typeof gate;
+  http: typeof http;
   inscriptions: typeof inscriptions;
   inscriptionsActions: typeof inscriptionsActions;
   jobs: typeof jobs;
   jobsActions: typeof jobsActions;
+  maintenanceActions: typeof maintenanceActions;
   sales: typeof sales;
   testAction: typeof testAction;
   txContexts: typeof txContexts;

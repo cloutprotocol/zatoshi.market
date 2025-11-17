@@ -60,7 +60,7 @@ export default function Home() {
               ON <span className="text-gold-400">ZCASH</span>
             </h1>
             <p className="text-xl md:text-2xl mb-12 max-w-2xl text-gold-100/80">
-              Deploy, mint & trade ZRC20 tokens, ZMAPS, and Zordinal Inscriptions on Zcash.
+              Deploy and Mint ZRC20 tokens, ZMAPS, and Inscribe Zordinal on Zcash.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Link

@@ -227,26 +227,25 @@ export default function InscribePage() {
         const raw = (sig as any).toCompactRawBytes ? (sig as any).toCompactRawBytes() : (sig as Uint8Array);
         return Array.from(raw).map(b=>b.toString(16).padStart(2,'0')).join('');
       };
-      const convex = getConvexClient(); if (!convex) throw new Error('Service not available. Please try again in a moment.');
-      // Step 1
-      const step1 = await convex.action(api.inscriptionsActions.buildUnsignedCommitAction, {
+      // Step 1 via secure proxy
+      const step1 = await gatePost('unsignedCommit', {
         address: wallet.address,
         pubKeyHex,
         content: demoContent,
         contentType: 'text/plain',
         type: 'demo', inscriptionAmount: 60000, fee: 10000,
-      } as any);
+      });
       setDemoLog(l => [...l, `commitSigHashHex: ${step1.commitSigHashHex.slice(0,16)}...`]);
       // Step 2
       const commitSignatureRawHex = await signer(step1.commitSigHashHex);
-      const step2 = await convex.action(api.inscriptionsActions.finalizeCommitAndGetRevealPreimageAction, {
+      const step2 = await gatePost('finalizeCommit', {
         contextId: step1.contextId,
         commitSignatureRawHex,
       });
       setDemoLog(l => [...l, `commitTxid: ${step2.commitTxid}`, `revealSigHashHex: ${step2.revealSigHashHex.slice(0,16)}...`]);
       // Step 3
       const revealSignatureRawHex = await signer(step2.revealSigHashHex);
-      const step3 = await convex.action(api.inscriptionsActions.broadcastSignedRevealAction, {
+      const step3 = await gatePost('broadcastReveal', {
         contextId: step1.contextId,
         revealSignatureRawHex,
       });
@@ -265,9 +264,8 @@ export default function InscribePage() {
     setBatchStatus(null);
     setBatchJobId(null);
     try {
-      const convex = getConvexClient(); if (!convex) throw new Error('Service not available. Please try again in a moment.');
       const payload = JSON.stringify({ p: 'zrc-20', op: 'mint', tick: tick.toUpperCase(), amt: amount });
-      const res = await convex.action(api.inscriptionsActions.batchMintAction, {
+      const res = await gatePost('batchMint', {
         wif: wallet.privateKey,
         address: wallet.address,
         count: batchCount,
@@ -858,16 +856,15 @@ export default function InscribePage() {
                 return Array.from(raw).map(b=>b.toString(16).padStart(2,'0')).join('');
               };
               if (pendingArgs.contentType === 'split') {
-                const convex = getConvexClient(); if (!convex) throw new Error('Service not available. Please try again in a moment.');
-                const step1 = await convex.action(api.inscriptionsActions.buildUnsignedSplitAction, {
+                const step1 = await gatePost('splitBuild', {
                   address: wallet.address,
                   pubKeyHex,
                   splitCount,
                   targetAmount,
                   fee: splitFee,
-                } as any);
+                });
                 const splitSignatureRawHex = await walletSigner(step1.splitSigHashHex);
-                const res = await convex.action(api.inscriptionsActions.broadcastSignedSplitAction, {
+                const res = await gatePost('splitBroadcast', {
                   contextId: step1.contextId,
                   splitSignatureRawHex,
                 });
@@ -892,3 +889,14 @@ export default function InscribePage() {
     </main>
   );
 }
+  // Secure proxy helper to call our Next API, which signs requests to Convex gate
+  const gatePost = async <T = any>(op: string, params: any): Promise<T> => {
+    const res = await fetch('/api/gate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ op, params }),
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  };

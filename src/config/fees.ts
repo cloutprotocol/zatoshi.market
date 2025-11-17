@@ -80,21 +80,14 @@ export const isValidZcashName = (name: string): { valid: boolean; error?: string
   // Remove extension for validation
   const nameWithoutExtension = name.replace(/\.(zec|zcash)$/i, '');
 
-  // Check length (3-63 characters without extension)
-  if (nameWithoutExtension.length < 3) {
-    return { valid: false, error: 'Name must be at least 3 characters' };
+  // Check that name is not empty
+  if (nameWithoutExtension.length === 0) {
+    return { valid: false, error: 'Name cannot be empty' };
   }
 
+  // Check max length (63 characters without extension)
   if (nameWithoutExtension.length > 63) {
     return { valid: false, error: 'Name must be 63 characters or less' };
-  }
-
-  // Check valid characters (alphanumeric and hyphens, no leading/trailing hyphens)
-  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i.test(nameWithoutExtension)) {
-    return {
-      valid: false,
-      error: 'Name can only contain letters, numbers, and hyphens (no leading/trailing hyphens)'
-    };
   }
 
   // Check extension
