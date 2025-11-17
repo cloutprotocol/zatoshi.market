@@ -94,8 +94,13 @@ export default function Header() {
 
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
-        <div className="fixed top-20 left-0 right-0 z-40 lg:hidden bg-black border-b border-gold-500/20">
-          <div className="px-6 py-4 space-y-3">
+        <>
+          <div
+            className="fixed inset-0 bg-black/60 z-30 lg:hidden top-20"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+          <div className="fixed top-20 left-0 right-0 z-40 lg:hidden backdrop-blur-xl bg-black/90 border-b border-gold-500/20">
+            <div className="px-6 py-4 space-y-3">
             <a
               href="https://zerdinals.com/"
               target="_blank"
@@ -121,6 +126,7 @@ export default function Header() {
             </Link>
           </div>
         </div>
+        </>
       )}
 
       {/* Wallet Drawer */}

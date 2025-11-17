@@ -25,6 +25,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   const [sendForm, setSendForm] = useState({ to: '', amount: '' });
   const [dragStart, setDragStart] = useState(0);
   const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
 
   const fetchBalance = useCallback(async () => {
     if (!wallet?.address) return;
@@ -36,6 +37,25 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
     const price = await zcashRPCService.getPrice();
     setUsdPrice(price);
   }, []);
+
+  // Lock body scroll when drawer is open (mobile only)
+  useEffect(() => {
+    if (isOpen && typeof window !== 'undefined') {
+      const isMobile = window.innerWidth < 1024;
+      if (isMobile) {
+        document.body.style.overflow = 'hidden';
+        document.body.style.position = 'fixed';
+        document.body.style.width = '100%';
+        document.body.style.touchAction = 'none';
+      }
+      return () => {
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.width = '';
+        document.body.style.touchAction = '';
+      };
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (wallet?.address && isOpen) {
@@ -121,24 +141,29 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   const totalBalance = balance.confirmed + balance.unconfirmed;
   const usdValue = totalBalance * usdPrice;
 
-  // Drag handlers for mobile bottom sheet
-  const handleTouchStart = (e: React.TouchEvent) => {
+  // Drag handlers for mobile bottom sheet (handle only)
+  const handleDragStart = (e: React.TouchEvent) => {
+    setIsDragging(true);
     setDragStart(e.touches[0].clientY);
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  const handleDragMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+
     const offset = e.touches[0].clientY - dragStart;
     if (offset > 0) {
+      e.preventDefault(); // Prevent pull-to-refresh
       setDragOffset(offset);
     }
   };
 
-  const handleTouchEnd = () => {
+  const handleDragEnd = () => {
     if (dragOffset > 100) {
       onClose();
     }
     setDragOffset(0);
     setDragStart(0);
+    setIsDragging(false);
   };
 
   // Prevent hydration mismatch and don't show until client is ready
@@ -154,29 +179,39 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
 
       {/* Drawer */}
       <div
-        className={`fixed z-50 backdrop-blur-xl bg-black/30 overflow-y-auto rounded-t-3xl lg:rounded-none
+        className={`fixed z-50 backdrop-blur-xl bg-black/30 rounded-t-3xl lg:rounded-none
         bottom-0 left-0 right-0 max-h-[80vh] lg:max-h-none
         lg:top-0 lg:right-0 lg:left-auto lg:w-[400px] lg:bottom-0
-        transition-transform duration-300
+        transition-transform duration-300 flex flex-col
         ${dragOffset === 0 ? 'translate-y-0' : ''}
       `}
         style={{
-          transform: dragOffset > 0 ? `translateY(${dragOffset}px)` : 'translateY(0)'
+          transform: dragOffset > 0 ? `translateY(${dragOffset}px)` : 'translateY(0)',
+          touchAction: 'pan-y',
+          willChange: isDragging ? 'transform' : 'auto'
         }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
       >
-        {/* Drag Handle (mobile only) */}
-        <div className="lg:hidden flex justify-center pt-3 pb-2">
-          <div className="w-12 h-1.5 bg-gold-500/40 rounded-full"></div>
+        {/* Drag Handle Area (mobile only) - DRAGGABLE */}
+        <div
+          className="lg:hidden flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing"
+          onTouchStart={handleDragStart}
+          onTouchMove={handleDragMove}
+          onTouchEnd={handleDragEnd}
+          style={{ touchAction: 'none' }}
+        >
+          <div
+            className={`w-12 h-1.5 rounded-full transition-colors ${
+              dragOffset > 100 ? 'bg-red-400' : 'bg-gold-500/40'
+            }`}
+          ></div>
         </div>
 
-        <div className="p-6">
+        {/* Scrollable Content Area */}
+        <div className="p-6 overflow-y-auto flex-1 no-overscroll">
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-gold-400 hover:text-gold-300 text-2xl lg:block hidden"
+            className="absolute top-4 right-4 text-gold-400 hover:text-gold-300 text-2xl z-10"
           >
             ×
           </button>
