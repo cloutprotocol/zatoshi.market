@@ -91,9 +91,10 @@ function InscribePageContent() {
     }
   }, [searchParams]);
 
-  // Clear success message when switching tabs
+  // Clear success message and errors when switching tabs
   useEffect(() => {
     setResult(null);
+    setError(null);
   }, [activeTab]);
 
   // Validate name in real-time
@@ -1156,7 +1157,7 @@ function InscribePageContent() {
 
             {/* Error Display */}
             {error && (
-              <div className="mt-6 p-4 sm:p-6 bg-red-500/10 border border-red-500/30 rounded relative">
+              <div className="mt-6 my-4 p-4 sm:p-6 bg-red-500/10 border border-red-500/30 rounded relative max-w-2xl mx-auto">
                 <button
                   onClick={() => setError(null)}
                   className="absolute top-3 right-3 text-red-400/60 hover:text-red-300 transition-colors"
@@ -1184,6 +1185,10 @@ function InscribePageContent() {
                 ) : error.includes('unpaid action limit exceeded') || error.includes('action limit exceeded') ? (
                   <p className="text-red-400 text-sm">
                     Transaction too complex. Try reducing the split count to 10 or fewer outputs, or ensure you have sufficient transparent ZEC balance.
+                  </p>
+                ) : error.includes('UTXO lock failed') ? (
+                  <p className="text-red-400 text-sm">
+                    Your UTXOs are currently locked by another operation. Please wait a moment and try again.
                   </p>
                 ) : (
                   <p className="text-red-400 text-sm">{error}</p>
