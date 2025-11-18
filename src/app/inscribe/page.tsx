@@ -68,6 +68,11 @@ export default function InscribePage() {
 
   const fullName = `${nameInput}.${nameExtension}`;
 
+  // Clear success message when switching tabs
+  useEffect(() => {
+    setResult(null);
+  }, [activeTab]);
+
   // Validate name in real-time
   const validateName = (name: string) => {
     if (!name) {
@@ -382,6 +387,7 @@ export default function InscribePage() {
           {/* Main Content Area */}
           <div className="flex-1 bg-black/40 border border-none rounded-xl sm:rounded-2xl backdrop-blur-xl overflow-y-auto min-h-0">
             <div className="p-4 sm:p-6 lg:p-8">
+
             {/* NAME REGISTRATION TAB */}
             {activeTab === 'names' && (
               <div className="max-w-2xl mx-auto">
@@ -462,7 +468,12 @@ export default function InscribePage() {
                   disabled={loading || !isConnected || !nameInput.trim() || !!nameError}
                   className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-gold-500/20"
                 >
-                  {loading ? 'Registering...' : `Register ${fullName}`}
+                  {loading ? (
+                    <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : `Register ${fullName}`}
                 </button>
               </div>
             )}
@@ -520,7 +531,12 @@ export default function InscribePage() {
                   disabled={loading || !isConnected || !textContent.trim()}
                   className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'Creating Inscription...' : 'Inscribe'}
+                  {loading ? (
+                    <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : 'Inscribe'}
                 </button>
               </div>
             )}
@@ -627,10 +643,102 @@ export default function InscribePage() {
                   total={zrc20Cost.total}
                 />
 
-                <button onClick={handleZRC20Mint} disabled={loading || !isConnected || !tick.trim() || (zrcOp !== 'deploy' && !amount.trim()) || (zrcOp === 'deploy' && (!maxSupply.trim() || !mintLimit.trim()))} className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed">{loading ? 'Submitting...' : (zrcOp === 'deploy' ? 'Deploy Token' : zrcOp === 'transfer' ? 'Inscribe Transfer' : 'Mint ZRC-20')}</button>
+                <button onClick={handleZRC20Mint} disabled={loading || !isConnected || !tick.trim() || (zrcOp !== 'deploy' && !amount.trim()) || (zrcOp === 'deploy' && (!maxSupply.trim() || !mintLimit.trim()))} className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed">{loading ? (
+                    <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : (zrcOp === 'deploy' ? 'Deploy Token' : zrcOp === 'transfer' ? 'Inscribe Transfer' : 'Mint ZRC-20')}</button>
+
+                {/* Success Display */}
+                {result && (
+                  <div className="mt-6 p-4 sm:p-6 bg-gold-500/10 border border-gold-500/30 rounded-lg relative">
+                    <button
+                      onClick={() => setResult(null)}
+                      className="absolute top-3 right-3 text-gold-400/60 hover:text-gold-300 transition-colors"
+                      aria-label="Close"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                    <h3 className="text-gold-300 font-bold mb-4 text-base sm:text-lg">✓ Success!</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-gold-400/60 text-sm mb-1">Transaction ID</div>
+                        <a
+                          href={`https://mainnet.zcashexplorer.app/transactions/${result.txid}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
+                        >
+                          {result.txid}
+                        </a>
+                      </div>
+                      <div>
+                        <div className="text-gold-400/60 text-sm mb-1">Inscription ID</div>
+                        <div className="text-gold-300 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded">
+                          {result.inscriptionId}
+                        </div>
+                      </div>
+                      <div className="pt-3">
+                        <p className="text-xs text-gold-400/70">Note: New inscriptions may take up to ~5 minutes to appear in the public explorer.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Batch Mint - Enhanced liquid glass design */}
-                <div className="mt-8 p-6 sm:p-8 rounded-2xl border-2 border-gold-500/40 bg-gradient-to-br from-gold-500/10 via-transparent to-gold-500/5 backdrop-blur-2xl shadow-xl shadow-gold-500/10 space-y-5">
+                <div className="mt-8 p-6 sm:p-8 rounded-2xl border-2 border-gold-500/40 bg-gradient-to-br from-gold-500/10 via-transparent to-gold-500/5 backdrop-blur-2xl shadow-xl shadow-gold-500/10 space-y-5 relative overflow-hidden isolate">
+                  {/* Liquid Glass Overlay */}
+                  <div className="absolute inset-0 rounded-2xl z-10 flex flex-col items-center justify-center border border-black/30" style={{ backdropFilter: 'blur(64px) saturate(180%)', WebkitBackdropFilter: 'blur(64px) saturate(180%)' }}>
+                    <div className="absolute inset-0 bg-black/50 rounded-2xl"></div>
+                    <div className="absolute inset-0 bg-liquid-glass opacity-50 rounded-2xl"></div>
+                    <div className="absolute inset-0 bg-gradient-to-br from-black/30 via-black/10 to-black/30 rounded-2xl"></div>
+                    <div className="absolute inset-0 backdrop-blur-3xl rounded-2xl"></div>
+                    <div className="absolute inset-0 border border-gold-500/5 rounded-2xl"></div>
+                    <div className="relative z-20 text-center group">
+                      <style dangerouslySetInnerHTML={{__html: `
+                        @keyframes holographic-lock {
+                          0% {
+                            background-position: 0% 50%;
+                          }
+                          50% {
+                            background-position: 100% 50%;
+                          }
+                          100% {
+                            background-position: 0% 50%;
+                          }
+                        }
+                        .holographic-lock-hover:hover::before {
+                          content: '';
+                          position: absolute;
+                          inset: 0;
+                          border-radius: 1rem;
+                          background: linear-gradient(
+                            45deg,
+                            rgba(255, 215, 0, 0.3),
+                            rgba(255, 235, 59, 0.3),
+                            rgba(255, 193, 7, 0.3),
+                            rgba(255, 215, 0, 0.3),
+                            rgba(255, 235, 59, 0.3)
+                          );
+                          background-size: 400% 400%;
+                          animation: holographic-lock 3s ease infinite;
+                          z-index: 1;
+                        }
+                      `}} />
+                      <div className="relative inline-block p-5 rounded-2xl bg-black/80 backdrop-blur-xl shadow-2xl border border-black/40 transition-all duration-300 holographic-lock-hover hover:border-gold-500/40 hover:shadow-gold-500/20">
+                        <div className="absolute inset-0 bg-liquid-glass opacity-50 rounded-2xl"></div>
+                        <div className="absolute inset-0 border border-gold-500/10 rounded-2xl group-hover:border-gold-500/30 transition-all duration-300"></div>
+                        <svg className="w-12 h-12 mx-auto relative z-10 text-gold-400/70 group-hover:text-gold-400 transition-all duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                      </div>
+                      <p className="text-xs text-gold-400/70 tracking-wide mt-4">zmaps required</p>
+                    </div>
+                  </div>
+
                   <div className="text-center">
                     <h3 className="text-xl sm:text-2xl font-bold text-gold-300 mb-1">Batch Mint</h3>
                   </div>
@@ -639,7 +747,7 @@ export default function InscribePage() {
                   <div className="max-w-md mx-auto">
                     <label className="block text-gold-200/80 text-sm font-medium mb-3 text-center">Count</label>
                     <div className="flex items-center justify-center mb-4">
-                      <div className="w-28 h-20 bg-black/60 border-2 border-gold-500/40 rounded-lg flex items-center justify-center focus-within:border-gold-500/60 transition-colors">
+                      <div className="w-28 h-20 bg-black/60 rounded-lg flex items-center justify-center">
                         <input
                           type="number"
                           min={1}
@@ -685,7 +793,12 @@ export default function InscribePage() {
                     disabled={loading || !isConnected || !tick.trim() || !amount.trim()}
                     className="relative w-full px-6 py-4 bg-gradient-to-r from-gold-500 via-yellow-400 to-gold-500 text-black font-bold text-lg rounded-xl transition-all duration-300 shadow-lg shadow-gold-500/30 hover:shadow-2xl hover:shadow-gold-500/60 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-lg border-2 border-gold-400/50 overflow-hidden before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-white/30 before:to-transparent before:-translate-x-full hover:before:translate-x-full before:transition-transform before:duration-700"
                   >
-                    <span className="relative z-10">{loading ? 'Batch Minting...' : 'Start Batch Mint'}</span>
+                    <span className="relative z-10">{loading ? (
+                      <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : 'Start Batch Mint'}</span>
                   </button>
 
                   {batchJobId && (
@@ -737,7 +850,12 @@ export default function InscribePage() {
                     </div>
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-3">
-                    <button onClick={handleSplit} disabled={loading || !isConnected} className="px-4 py-3 bg-black/60 border border-gold-500/40 rounded-lg text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? 'Splitting...' : 'Split UTXOs'}</button>
+                    <button onClick={handleSplit} disabled={loading || !isConnected} className="px-4 py-3 bg-black/60 border border-gold-500/40 rounded-lg text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? (
+                      <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : 'Split UTXOs'}</button>
                     {splitTxid && (<div className="text-xs text-gold-400/80">Split TXID: <span className="font-mono break-all">{splitTxid}</span></div>)}
                   </div>
                 </div>
@@ -781,47 +899,6 @@ export default function InscribePage() {
             {error && (
               <div className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
                 <p className="text-red-400 text-sm">{error}</p>
-              </div>
-            )}
-
-            {/* Success Display */}
-            {result && (
-              <div className="max-w-2xl m-auto mt-6 p-4 sm:p-6 bg-gold-500/10 border border-gold-500/30 rounded-lg relative">
-                <button
-                  onClick={() => setResult(null)}
-                  className="absolute top-3 right-3 text-gold-400/60 hover:text-gold-300 transition-colors"
-                  aria-label="Close"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-                <h3 className="text-gold-300 font-bold mb-4 text-base sm:text-lg">✓ Success!</h3>
-                <div className="space-y-3">
-                  <div>
-                    <div className="text-gold-400/60 text-sm mb-1">Transaction ID</div>
-                    <div className="text-gold-300 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded">
-                      {result.txid}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-gold-400/60 text-sm mb-1">Inscription ID</div>
-                    <div className="text-gold-300 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded">
-                      {result.inscriptionId}
-                    </div>
-                  </div>
-                  <div className="pt-3">
-                    <p className="text-xs text-gold-400/70 mb-2">Note: New inscriptions may take up to ~5 minutes to appear in the public explorer.</p>
-                    <a
-                      href={`https://zerdinals.com/zerdinals/${result.inscriptionId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-block px-4 sm:px-6 py-2 sm:py-3 bg-gold-500 text-black font-bold text-sm sm:text-base rounded-lg hover:bg-gold-400 transition-all"
-                    >
-                      View on Explorer →
-                    </a>
-                  </div>
-                </div>
               </div>
             )}
 
