@@ -5,7 +5,6 @@ import Header from "@/components/Header";
 
 export const metadata: Metadata = {
   title: "zatoshi.market",
-  description: "Host and trade ZRC20 tokens, ZMAPS, and Zerdinal inscriptions on Zcash.",
   viewport: {
     width: 'device-width',
     initialScale: 1,
@@ -18,6 +17,15 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'zatoshi.market'
+  },
+  openGraph: {
+    title: 'zatoshi.market',
+    images: ['/ogimage.png'],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'zatoshi.market',
+    images: ['/ogimage.png'],
   }
 };
 
