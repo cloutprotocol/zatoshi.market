@@ -147,9 +147,19 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
     return _cachedBranchId.value;
   }
   const url = 'https://api.tatum.io/v3/blockchain/node/zcash-mainnet';
-  const r = await fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json', 'x-api-key': tatumKey || process.env.TATUM_API_KEY || '' }, body: JSON.stringify({ jsonrpc:'2.0', method:'getblockchaininfo', id:1 }) });
-  const j = await r.json();
-  if (!j?.result?.consensus?.nextblock) throw new Error('Failed to fetch consensusBranchId');
+  let j: any = null;
+  try {
+    const r = await fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json', 'x-api-key': tatumKey || process.env.TATUM_API_KEY || '' }, body: JSON.stringify({ jsonrpc:'2.0', method:'getblockchaininfo', id:1 }) });
+    if (!r.ok) throw new Error(`RPC status ${r.status}`);
+    // Some providers may return HTML on errors; read as text then parse
+    const text = await r.text();
+    try { j = JSON.parse(text); } catch { throw new Error('Consensus RPC returned non-JSON response'); }
+    if (!j?.result?.consensus?.nextblock) throw new Error('Consensus RPC missing branch id');
+  } catch (e: any) {
+    // If we previously cached a value, return it despite expiration to keep UX flowing
+    if (_cachedBranchId) return _cachedBranchId.value;
+    throw new Error(`Unable to fetch consensus branch id. Please retry in a moment. (${e?.message || e})`);
+  }
   const value = parseInt(j.result.consensus.nextblock, 16);
   _cachedBranchId = { value, expiresAt: now + BRANCH_ID_TTL_MS };
   return value;
