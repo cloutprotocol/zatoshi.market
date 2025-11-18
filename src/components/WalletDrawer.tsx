@@ -27,15 +27,13 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [sendForm, setSendForm] = useState({ to: '', amount: '' });
   const [sendingTx, setSendingTx] = useState(false);
-  const [dragStart, setDragStart] = useState(0);
-  const [dragOffset, setDragOffset] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
   const [inscriptions, setInscriptions] = useState<any[]>([]);
   const [loadingInscriptions, setLoadingInscriptions] = useState(false);
   const [inscriptionContents, setInscriptionContents] = useState<Record<string, string>>({});
   const [zrc20Tokens, setZrc20Tokens] = useState<ZRC20Token[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasFetchedFresh, setHasFetchedFresh] = useState(false);
+  const [isDesktopExpanded, setIsDesktopExpanded] = useState(true);
 
   const fetchBalance = useCallback(async (forceRefresh: boolean = false) => {
     if (!wallet?.address) return;
@@ -301,85 +299,56 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   const totalBalance = balance.confirmed + balance.unconfirmed;
   const usdValue = totalBalance * usdPrice;
 
-  // Drag handlers for mobile bottom sheet (handle only)
-  const handleDragStart = (e: React.TouchEvent) => {
-    setIsDragging(true);
-    setDragStart(e.touches[0].clientY);
-  };
-
-  const handleDragMove = (e: React.TouchEvent) => {
-    if (!isDragging) return;
-
-    const offset = e.touches[0].clientY - dragStart;
-    if (offset > 0) {
-      e.preventDefault(); // Prevent pull-to-refresh
-      setDragOffset(offset);
-    }
-  };
-
-  const handleDragEnd = () => {
-    if (dragOffset > 100) {
-      onClose();
-    }
-    setDragOffset(0);
-    setDragStart(0);
-    setIsDragging(false);
-  };
-
   // Prevent hydration mismatch and don't show until client is ready
   if (!mounted || !isOpen) return null;
 
   return (
     <>
-      {/* Overlay */}
+      {/* Overlay - mobile only */}
       <div
-        className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+        className="fixed inset-0 top-16 bg-black/60 z-40 lg:hidden"
         onClick={onClose}
       />
 
+      {/* Desktop Toggle Button - always visible */}
+      <button
+        onClick={() => setIsDesktopExpanded(!isDesktopExpanded)}
+        className={`hidden lg:flex fixed top-1/2 -translate-y-1/2 z-40
+          w-8 h-16 bg-black/30 backdrop-blur-xl border border-gold-500/20
+          items-center justify-center text-gold-400 hover:text-gold-300 hover:bg-black/50 transition-all duration-300
+          ${isDesktopExpanded ? 'right-[400px]' : 'right-0'}
+        `}
+      >
+        {isDesktopExpanded ? '→' : '←'}
+      </button>
+
       {/* Drawer */}
       <div
-        className={`fixed z-50 backdrop-blur-xl bg-black/30 rounded-t-3xl lg:rounded-none
-        bottom-0 left-0 right-0 max-h-[80vh] lg:max-h-none
-        lg:top-0 lg:right-0 lg:left-auto lg:w-[400px] lg:bottom-0
-        transition-transform duration-300 flex flex-col
-        ${dragOffset === 0 ? 'translate-y-0' : ''}
+        className={`fixed backdrop-blur-xl bg-black/30
+        top-16 bottom-0 left-0 right-0
+        z-50 lg:z-40
+        lg:right-0 lg:left-auto lg:w-[400px]
+        transition-all duration-300 flex flex-col
+        lg:border-l lg:border-gold-500/20
+        ${!isDesktopExpanded ? 'lg:translate-x-full' : 'lg:translate-x-0'}
       `}
-        style={{
-          transform: dragOffset > 0 ? `translateY(${dragOffset}px)` : 'translateY(0)',
-          touchAction: 'pan-y',
-          willChange: isDragging ? 'transform' : 'auto'
-        }}
       >
-        {/* Drag Handle Area (mobile only) - DRAGGABLE */}
-        <div
-          className="lg:hidden flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing"
-          onTouchStart={handleDragStart}
-          onTouchMove={handleDragMove}
-          onTouchEnd={handleDragEnd}
-          style={{ touchAction: 'none' }}
-        >
-          <div
-            className={`w-12 h-1.5 rounded-full transition-colors ${
-              dragOffset > 100 ? 'bg-red-400' : 'bg-gold-500/40'
-            }`}
-          ></div>
-        </div>
 
         {/* Scrollable Content Area */}
-        <div className="p-6 overflow-y-auto flex-1 no-overscroll mt-20">
-          {/* Close button */}
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 text-gold-400 hover:text-gold-300 text-2xl z-10"
-          >
-            ×
-          </button>
-
+        <div className="px-6 pt-3 pb-6 overflow-y-auto flex-1 no-overscroll">
           {!wallet ? (
             /* No wallet state */
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gold-300">WALLET</h2>
+              {/* Header with close button */}
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-gold-300">WALLET</h2>
+                <button
+                  onClick={onClose}
+                  className="text-gold-400 hover:text-gold-300 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
               <div className="p-4 bg-gold-500/10 border border-gold-500/30 rounded">
                 <p className="text-sm text-gold-300">
                   Client-side wallet. Your keys stay in your browser. Encrypted at rest with your password.
@@ -413,15 +382,29 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
           ) : (
             /* Wallet connected state */
             <div className="space-y-6">
-              {/* Header */}
+              {/* Header with Address and Close */}
               <div className="flex justify-between items-center">
-                <h2 className="text-xl text-gold-400 font-bold">WALLET</h2>
+                <div className="flex items-center gap-3 flex-1 lg:flex-col lg:items-start lg:gap-0">
+                  <h2 className="text-xl text-gold-400 font-bold">WALLET</h2>
+                  <div
+                    onClick={handleCopyAddress}
+                    className="flex-1 lg:hidden cursor-pointer"
+                  >
+                    <p className="text-gold-300 font-mono text-xs truncate">{wallet.address.slice(0, 12)}...{wallet.address.slice(-6)}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={onClose}
+                  className="text-gold-400 hover:text-gold-300 text-1xl mr-2"
+                >
+                  \/
+                </button>
               </div>
 
-              {/* Address */}
+              {/* Address - Desktop only */}
               <div
                 onClick={handleCopyAddress}
-                className="p-3 bg-black/40 rounded cursor-pointer hover:bg-black/60 transition-all"
+                className="hidden lg:block p-3 bg-black/40 rounded cursor-pointer hover:bg-black/60 transition-all"
               >
                 <p className="text-gold-300 font-mono text-xs break-all">{wallet.address}</p>
               </div>
@@ -467,19 +450,38 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
 
               {/* Inscriptions Section */}
               <div className="space-y-2">
-                <h3 className="text-sm font-bold text-gold-400 uppercase tracking-wide">Inscriptions</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-gold-400 uppercase tracking-wide">Inscriptions</h3>
+                  <div className="group relative">
+                    <div className="w-4 h-4 rounded-full border border-gold-500/50 flex items-center justify-center text-gold-500/70 text-xs cursor-help">
+                      i
+                    </div>
+                    <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-black/90 border border-gold-500/30 rounded text-xs text-gold-300 text-center z-10">
+                      Some inscriptions may not be shown
+                    </div>
+                  </div>
+                </div>
                 <div>
                   {loadingInscriptions ? (
-                    <div className="p-8 text-center text-gold-200/60 text-sm">
-                      Loading inscriptions...
+                    <div className="grid grid-cols-3 lg:grid-cols-2 gap-2">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="bg-black/40 border border-gold-500/20 rounded p-2">
+                          <div className="bg-gold-500/10 rounded p-2 mb-1.5 h-[60px] animate-pulse"></div>
+                          <div className="flex items-center justify-between">
+                            <div className="w-12 h-3 bg-gold-500/10 rounded animate-pulse"></div>
+                            <div className="w-8 h-4 bg-gold-500/10 rounded animate-pulse"></div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ) : inscriptions.length === 0 ? (
                     <div className="p-8 text-center text-gold-200/60 text-sm">
                       No inscriptions
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto">
-                      {inscriptions.map((insc) => {
+                    <div className="relative">
+                      <div className="grid grid-cols-3 lg:grid-cols-2 gap-2 max-h-[200px] lg:max-h-[300px] overflow-y-auto">
+                        {inscriptions.map((insc) => {
                         // Get content from fetched data
                         const content = inscriptionContents[insc.id] || '';
                         let contentPreview = '';
@@ -532,6 +534,11 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                           </div>
                         );
                       })}
+                      </div>
+                      {/* Gradient hint for more content */}
+                      {inscriptions.length > 6 && (
+                        <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none"></div>
+                      )}
                     </div>
                   )}
                 </div>

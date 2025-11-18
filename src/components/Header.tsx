@@ -42,14 +42,14 @@ export default function Header() {
             </button>
           ) : isConnected && wallet ? (
             <button
-              onClick={() => setIsWalletOpen(true)}
+              onClick={() => setIsWalletOpen(!isWalletOpen)}
               className="px-4 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 font-mono text-sm hover:bg-gold-500/30 transition-all"
             >
               {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
             </button>
           ) : (
             <button
-              onClick={() => setIsWalletOpen(true)}
+              onClick={() => setIsWalletOpen(!isWalletOpen)}
               className="px-6 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 font-bold hover:bg-gold-500/30 transition-all"
             >
               CONNECT WALLET
@@ -78,19 +78,6 @@ export default function Header() {
           <div className="fixed top-20 -mt-5 left-0 right-0 bottom-0 z-40 lg:hidden backdrop-blur-xl bg-black/90">
             <div className="h-full flex flex-col">
               <div className="flex-1 px-6 py-4 space-y-2 pt-20">
-                {/* Connected Wallet Info */}
-                {isConnected && wallet && (
-                  <button
-                    onClick={() => {
-                      setIsMobileMenuOpen(false);
-                      setIsWalletOpen(true);
-                    }}
-                    className="w-full mb-4 px-4 py-3 bg-gold-500/20 text-gold-400 border border-gold-500/30 font-mono text-sm hover:bg-gold-500/30 transition-all rounded"
-                  >
-                    {wallet.address.slice(0, 8)}...{wallet.address.slice(-8)}
-                  </button>
-                )}
-
                 <Link
                   href="/zmaps"
                   className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
@@ -121,9 +108,19 @@ export default function Header() {
                 </Link>
               </div>
 
-              {/* Connect Button - Bottom of screen on mobile when not connected */}
-              {!isConnected && (
-                <div className="flex justify-center px-6 pb-8 pt-4" style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}>
+              {/* Wallet Button - Bottom of screen on mobile */}
+              <div className="flex justify-center px-6 pb-8 pt-4" style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}>
+                {isConnected && wallet ? (
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      setIsWalletOpen(true);
+                    }}
+                    className="w-[90%] max-w-md py-4 bg-gold-500/20 backdrop-blur-xl text-gold-400 border border-gold-500/30 font-mono active:bg-gold-500/40 transition-all rounded-xl text-sm shadow-lg"
+                  >
+                    {wallet.address.slice(0, 8)}...{wallet.address.slice(-8)}
+                  </button>
+                ) : (
                   <button
                     onClick={() => {
                       setIsMobileMenuOpen(false);
@@ -133,8 +130,8 @@ export default function Header() {
                   >
                     CONNECT WALLET
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </>
