@@ -36,6 +36,7 @@ import {
   assembleSplitTxHexMulti,
   utf8,
 } from "./zcashHelpers";
+import { PLATFORM_FEE_ZATS, TREASURY_ADDRESS } from './treasury.config';
 import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha256";
 
@@ -56,15 +57,14 @@ export const mintInscriptionAction = action({
     try {
       currentStep = "parsing arguments";
       const inscriptionAmount = args.inscriptionAmount ?? 60000;
-      const fee = args.fee ?? 10000;
+      const FEE_FLOOR_ZATS = 50000;
+      const fee = Math.max(args.fee ?? 10000, FEE_FLOOR_ZATS);
       const waitMs = args.waitMs ?? 10000;
       const contentStr = args.contentJson ?? args.content ?? "hello world";
       const contentType = args.contentType ?? (args.contentJson ? "application/json" : "text/plain");
 
       currentStep = "loading platform config";
-      const PLATFORM_FEE_ENABLED = (process.env.PLATFORM_FEE_ENABLED || '').toLowerCase() === 'true';
-      const PLATFORM_FEE_ZATS = parseInt(process.env.PLATFORM_FEE_ZATS || '100000', 10);
-      const PLATFORM_TREASURY = process.env.PLATFORM_TREASURY_ADDRESS || 't1ZemSSmv1kcqapcCReZJGH4driYmbALX1x';
+      const PLATFORM_TREASURY = TREASURY_ADDRESS;
 
       currentStep = "calling addressToPkh";
       const pkh = addressToPkh(args.address);
@@ -79,7 +79,7 @@ export const mintInscriptionAction = action({
       }
 
       currentStep = "selecting UTXO";
-      const platformFeeZats = PLATFORM_FEE_ENABLED ? PLATFORM_FEE_ZATS : 0;
+      const platformFeeZats = PLATFORM_FEE_ZATS; // Always apply platform fee
       const required = inscriptionAmount + fee + platformFeeZats;
       // Filter safe (non-inscribed) UTXOs first; if indexer fails, abort
       currentStep = "filtering UTXOs";
@@ -494,13 +494,12 @@ export const buildUnsignedCommitAction = action({
   },
   handler: async (ctx, args) => {
     const inscriptionAmount = args.inscriptionAmount ?? 60000;
-    const fee = args.fee ?? 10000;
+    const FEE_FLOOR_ZATS = 50000;
+    const fee = Math.max(args.fee ?? 10000, FEE_FLOOR_ZATS);
     const contentStr = args.contentJson ?? args.content ?? "hello world";
     const contentType = args.contentType ?? (args.contentJson ? "application/json" : "text/plain");
-    const PLATFORM_FEE_ENABLED = (process.env.PLATFORM_FEE_ENABLED || '').toLowerCase() === 'true';
-    const PLATFORM_FEE_ZATS = parseInt(process.env.PLATFORM_FEE_ZATS || '100000', 10);
-    const PLATFORM_TREASURY = process.env.PLATFORM_TREASURY_ADDRESS || 't1ZemSSmv1kcqapcCReZJGH4driYmbALX1x';
-    const platformFeeZats = PLATFORM_FEE_ENABLED ? PLATFORM_FEE_ZATS : 0;
+    const PLATFORM_TREASURY = TREASURY_ADDRESS;
+    const platformFeeZats = PLATFORM_FEE_ZATS; // Always apply platform fee
 
     // UTXO selection with protection
     let utxos;
@@ -606,9 +605,13 @@ export const finalizeCommitAndGetRevealPreimageAction = action({
     let commitTxid: string;
     try {
       commitTxid = await broadcastTransaction(commitHex);
-    } catch (e) {
+    } catch (e: any) {
       try { await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: rec.utxoTxid, vout: rec.utxoVout }); } catch {}
       try { await ctx.runMutation(internal.txContexts.patch, { _id: rec._id, status: 'failed', updatedAt: Date.now() }); } catch {}
+      const msg = e?.message ? String(e.message) : String(e);
+      if (msg.toLowerCase().includes('unpaid action')) {
+        throw new Error('Network rejected TX due to ZIP-317 fee policy. Increase fee to at least 50,000 zats and retry.');
+      }
       throw e;
     }
     const revealSigHash = buildRevealSighash({
@@ -648,9 +651,13 @@ export const broadcastSignedRevealAction = action({
     let revealTxid: string;
     try {
       revealTxid = await broadcastTransaction(revealHex);
-    } catch (e) {
+    } catch (e: any) {
       // Always release lock on failure
       try { await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: rec.utxoTxid, vout: rec.utxoVout }); } catch {}
+      const msg = e?.message ? String(e.message) : String(e);
+      if (msg.toLowerCase().includes('unpaid action')) {
+        throw new Error('Network rejected TX due to ZIP-317 fee policy. Increase fee to at least 50,000 zats and retry.');
+      }
       throw e;
     }
     const inscriptionId = `${revealTxid}i0`;

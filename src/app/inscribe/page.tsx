@@ -1500,7 +1500,7 @@ function InscribePageContent() {
               ? [
                   { label: 'Required input balance', valueText: `${(splitCount * targetAmount + Math.max(splitFee, MIN_SPLIT_FEE)).toLocaleString()} zats (${(((splitCount * targetAmount) + Math.max(splitFee, MIN_SPLIT_FEE)) / 100000000).toFixed(8)} ZEC)` } as any,
                 ]
-              : [{ label: 'Platform fee', valueZats: Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_ZATS || '100000'), hidden: (process.env.NEXT_PUBLIC_PLATFORM_FEE_ENABLED || '').toLowerCase() !== 'true' } as any]),
+              : [{ label: 'Platform fee', valueZats: PLATFORM_FEES.INSCRIPTION } as any]),
           ]}
           onCancel={()=>setConfirmOpen(false)}
           onConfirm={async ()=>{

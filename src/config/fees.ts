@@ -24,9 +24,10 @@ export const PLATFORM_FEES = {
  * Treasury wallet address for platform fees
  * TODO: Set this to your actual treasury address
  */
+import { TREASURY_ADDRESS, PLATFORM_FEE_ZATS } from './treasury.config';
+
 export const TREASURY_WALLET = {
-  address: process.env.NEXT_PUBLIC_TREASURY_ADDRESS || 't1YourTreasuryAddressHere',
-  // In development, you can test with a test address
+  address: TREASURY_ADDRESS,
   isDev: process.env.NODE_ENV === 'development',
 } as const;
 

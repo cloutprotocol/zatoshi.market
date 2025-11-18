@@ -148,7 +148,7 @@ export class InscriptionService {
     const output1ScriptLen = varint(p2shScript.length);
 
     // Output 2: Change
-    const fee = 10000;
+    const fee = 50000; // ZIP-317 policy: raise min relay fee to avoid unpaid action limit
     const changeAmount = utxo.value - p2shAmount - fee;
     const output2Value = Buffer.allocUnsafe(8);
     output2Value.writeBigUInt64LE(BigInt(changeAmount));

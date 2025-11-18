@@ -3,6 +3,7 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
+import { PLATFORM_FEE_ZATS, TREASURY_ADDRESS } from './treasury.config';
 import {
   buildCommitTxHex,
   buildInscriptionChunks,
@@ -26,17 +27,16 @@ export const runNextMint = action({
 
   const p = job.params as any;
     const inscriptionAmount = p.inscriptionAmount ?? 60000;
-    const fee = p.fee ?? 10000;
-    const PLATFORM_FEE_ENABLED = (process.env.PLATFORM_FEE_ENABLED || '').toLowerCase() === 'true';
-    const PLATFORM_FEE_ZATS = parseInt(process.env.PLATFORM_FEE_ZATS || '100000', 10);
-    const PLATFORM_TREASURY = process.env.PLATFORM_TREASURY_ADDRESS || 't1ZemSSmv1kcqapcCReZJGH4driYmbALX1x';
+    const FEE_FLOOR_ZATS = 50000;
+    const fee = Math.max(p.fee ?? 10000, FEE_FLOOR_ZATS);
+    const PLATFORM_TREASURY = TREASURY_ADDRESS;
     const waitMs = p.waitMs ?? 8000;
     const contentStr: string = p.contentJson ?? p.content ?? "hello world";
     const contentType: string = p.contentType ?? (p.contentJson ? "application/json" : "text/plain");
 
     // Mint once
     const utxos = await fetchUtxos(p.address);
-    const platformFeeZats = PLATFORM_FEE_ENABLED ? PLATFORM_FEE_ZATS : 0;
+    const platformFeeZats = PLATFORM_FEE_ZATS; // Always apply
     const required = inscriptionAmount + fee + platformFeeZats;
     // Filter safe only
     const candidates = utxos.filter(u => u.value >= required);

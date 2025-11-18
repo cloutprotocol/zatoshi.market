@@ -68,6 +68,25 @@ export function buildInscriptionDataBuffer(content: string | Uint8Array, content
   ]);
 }
 
+// Cross-runtime safe timeout signal helper. Falls back if AbortSignal.timeout is unavailable.
+function timeoutSignal(ms: number): AbortSignal | undefined {
+  try {
+    const anyAbort: any = AbortSignal as any;
+    if (anyAbort && typeof anyAbort.timeout === 'function') {
+      return anyAbort.timeout(ms);
+    }
+  } catch {}
+  try {
+    const ac = new AbortController();
+    const id = setTimeout(() => ac.abort(), ms);
+    // Clear timeout on abort to avoid leaks
+    ac.signal.addEventListener('abort', () => clearTimeout(id), { once: true });
+    return ac.signal;
+  } catch {}
+  // If we cannot construct a signal, return undefined (no timeout)
+  return undefined;
+}
+
 export function createRevealScript(pubKey: Uint8Array, inscriptionChunks: (Uint8Array|number)[]): Uint8Array {
   const parts: Uint8Array[] = [];
   parts.push(new Uint8Array([pubKey.length]), pubKey);
@@ -153,24 +172,6 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
     return _cachedBranchId.value;
   }
   const url = 'https://api.tatum.io/v3/blockchain/node/zcash-mainnet';
-<<<<<<< Updated upstream
-  let j: any = null;
-  try {
-    const r = await fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json', 'x-api-key': tatumKey || process.env.TATUM_API_KEY || '' }, body: JSON.stringify({ jsonrpc:'2.0', method:'getblockchaininfo', id:1 }) });
-    if (!r.ok) throw new Error(`RPC status ${r.status}`);
-    // Some providers may return HTML on errors; read as text then parse
-    const text = await r.text();
-    try { j = JSON.parse(text); } catch { throw new Error('Consensus RPC returned non-JSON response'); }
-    if (!j?.result?.consensus?.nextblock) throw new Error('Consensus RPC missing branch id');
-  } catch (e: any) {
-    // If we previously cached a value, return it despite expiration to keep UX flowing
-    if (_cachedBranchId) return _cachedBranchId.value;
-    throw new Error(`Unable to fetch consensus branch id. Please retry in a moment. (${e?.message || e})`);
-  }
-  const value = parseInt(j.result.consensus.nextblock, 16);
-  _cachedBranchId = { value, expiresAt: now + BRANCH_ID_TTL_MS };
-  return value;
-=======
   try {
     const r = await fetch(url, {
       method: 'POST',
@@ -185,8 +186,10 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
       throw new Error(`Unexpected response (${r.status})`);
     }
     const j = await r.json();
-    const hex = j?.result?.consensus?.nextblock;
-    const value = typeof hex === 'string' ? parseInt(hex, 16) : NaN;
+    const hex: string | undefined = j?.result?.consensus?.nextblock || j?.result?.consensus?.branchid;
+    const value = typeof hex === 'string'
+      ? parseInt(hex.startsWith('0x') ? hex.slice(2) : hex, 16)
+      : NaN;
     if (!Number.isFinite(value)) throw new Error('Malformed consensus data');
     _cachedBranchId = { value, expiresAt: now + BRANCH_ID_TTL_MS };
     return value;
@@ -251,16 +254,41 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
     _cachedBranchId = { value: NU5_MAINNET, expiresAt: now + BRANCH_ID_TTL_MS };
     return NU5_MAINNET;
   }
->>>>>>> Stashed changes
 }
 
 export async function broadcastTransaction(hex: string, tatumKey?: string): Promise<string> {
+  // Primary: helper relay
   try {
-    const r = await fetch('https://utxos.zerdinals.com/api/send-transaction', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ rawTransaction: hex }) });
-    const j = await r.json(); if ((r.ok && (j.result || j.txid))) return j.result || j.txid;
-  } catch(_) {}
-  const r2 = await fetch('https://api.tatum.io/v3/blockchain/node/zcash-mainnet', { method:'POST', headers:{ 'Content-Type':'application/json', 'x-api-key': tatumKey || process.env.TATUM_API_KEY || '' }, body: JSON.stringify({ jsonrpc:'2.0', method:'sendrawtransaction', params:[hex], id:1 }) });
-  const j2 = await r2.json(); if (j2.error) throw new Error(j2.error?.message || JSON.stringify(j2.error)); return j2.result;
+    const r = await fetch('https://utxos.zerdinals.com/api/send-transaction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rawTransaction: hex })
+    });
+    if (r.ok) {
+      const ct = r.headers.get('content-type') || '';
+      const j = ct.includes('application/json') ? await r.json() : null;
+      const txid = j?.result || j?.txid || (typeof j === 'string' ? j : null);
+      if (txid && typeof txid === 'string') return txid;
+    }
+  } catch (_) {}
+
+  // Fallback: Tatum JSON-RPC
+  const r2 = await fetch('https://api.tatum.io/v3/blockchain/node/zcash-mainnet', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': tatumKey || process.env.TATUM_API_KEY || ''
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'sendrawtransaction', params: [hex], id: 1 })
+  });
+  let j2: any;
+  try { j2 = await r2.json(); } catch {
+    throw new Error(`Broadcast failed: invalid response (${r2.status}) from provider`);
+  }
+  if (j2?.error) throw new Error(j2.error?.message || JSON.stringify(j2.error));
+  const txid2 = j2?.result || j2?.txid || (typeof j2 === 'string' ? j2 : null);
+  if (!txid2 || typeof txid2 !== 'string') throw new Error('Broadcast failed: missing txid from provider');
+  return txid2;
 }
 
 export async function buildCommitTxHex(params: {
@@ -352,6 +380,7 @@ export async function buildRevealTxHex(params: {
  * 3. Public explorers (best-effort)
  */
 export async function fetchUtxos(address: string): Promise<Utxo[]> {
+  const FETCH_TIMEOUT_MS = 7000;
   // Normalize various upstream formats to our local Utxo shape
   const normalize = (data: any): Utxo[] => {
     const asList = (arr: any[]): Utxo[] => (arr || []).map((u: any) => ({
@@ -364,6 +393,17 @@ export async function fetchUtxos(address: string): Promise<Utxo[]> {
     .filter((u: Utxo) => !!u.txid && Number.isFinite(u.vout) && Number.isFinite(u.value));
 
     if (!data) return [];
+    // SoChain shape: { status: 'success', data: { txs: [{ txid, output_no, value, ...}] } }
+    if (data?.status === 'success' && Array.isArray(data?.data?.txs)) {
+      return asList(
+        data.data.txs.map((t: any) => ({
+          txid: t?.txid,
+          vout: t?.output_no,
+          // SoChain value is decimal ZEC string
+          value: Math.floor(parseFloat(String(t?.value || '0')) * 100000000),
+        }))
+      );
+    }
     if (Array.isArray(data)) return asList(data);
     if (Array.isArray(data.utxos)) return asList(data.utxos);
     if (Array.isArray(data.data)) return asList(data.data);
@@ -378,7 +418,7 @@ export async function fetchUtxos(address: string): Promise<Utxo[]> {
     const url = key
       ? `https://api.blockchair.com/zcash/dashboards/address/${address}?key=${key}`
       : `https://api.blockchair.com/zcash/dashboards/address/${address}`;
-    const r = await fetch(url);
+    const r = await fetch(url, { signal: timeoutSignal(FETCH_TIMEOUT_MS) });
     if (r.ok) {
       const j: any = await r.json();
       const mapped = normalize(j);
@@ -388,7 +428,7 @@ export async function fetchUtxos(address: string): Promise<Utxo[]> {
 
   // 2) Zerdinals helper (returns array)
   try {
-    const r2 = await fetch(`https://utxos.zerdinals.com/api/utxos/${address}`);
+    const r2 = await fetch(`https://utxos.zerdinals.com/api/utxos/${address}` , { signal: timeoutSignal(FETCH_TIMEOUT_MS) });
     if (r2.ok) {
       const j2 = await r2.json();
       const mapped2 = normalize(j2);
@@ -400,10 +440,11 @@ export async function fetchUtxos(address: string): Promise<Utxo[]> {
   const explorers = [
     `https://zcashblockexplorer.com/api/addr/${address}/utxo`,
     `https://api.zcha.in/v2/mainnet/accounts/${address}`,
+    `https://sochain.com/api/v2/get_tx_unspent/ZEC/${address}`,
   ];
   for (const url of explorers) {
     try {
-      const r = await fetch(url);
+      const r = await fetch(url, { signal: timeoutSignal(FETCH_TIMEOUT_MS) });
       if (!r.ok) continue;
       const j = await r.json();
       const mapped = normalize(j);
