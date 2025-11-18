@@ -28,7 +28,7 @@ export default function Header() {
           <Link href="/inscribe" className="px-4 py-2 text-gold-400 hover:text-gold-300">
             INSCRIBE
           </Link>
-          <Link href="/mine" className="px-4 py-2 text-gold-400 hover:text-gold-300">
+          <Link href="/zore" className="px-4 py-2 text-gold-400 hover:text-gold-300">
             ZORE
           </Link>
           <Link href="/tokens" className="px-4 py-2 text-gold-400 hover:text-gold-300">
@@ -106,7 +106,7 @@ export default function Header() {
                   INSCRIBE
                 </Link>
                 <Link
-                  href="/mine"
+                  href="/zore"
                   className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >

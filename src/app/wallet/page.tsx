@@ -245,7 +245,7 @@ export default function WalletPage() {
                 ZCASH WALLET
               </h1>
               <p className="text-gold-100/80 mb-8">
-                Create a new wallet or import an existing one to manage your ZEC, ZRC20 tokens, and Zerdinal inscriptions.
+                Create a new wallet or import an existing one to manage your ZEC, ZRC20 tokens, and inscriptions.
               </p>
 
               {/* Security Notice */}

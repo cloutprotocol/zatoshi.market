@@ -2,7 +2,7 @@
 
 **The premiere marketplace for Zerdinals & ZRC20 on Zcash**
 
-A modern, privacy-focused marketplace for discovering, trading, and minting ZRC20 tokens and Zerdinal inscriptions on the Zcash blockchain.
+A modern, privacy-focused marketplace for discovering, trading, and minting ZRC20 tokens and inscriptions on the Zcash blockchain.
 
 ## Features
 

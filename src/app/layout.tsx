@@ -5,7 +5,7 @@ import Header from "@/components/Header";
 
 export const metadata: Metadata = {
   title: "zatoshi.market",
-  description: "Host and trade ZRC20 tokens, ZMAPS, and Zerdinal inscriptions on Zcash.",
+  description: "Host and trade ZRC20 tokens, ZMAPS, and inscriptions on Zcash.",
   viewport: {
     width: 'device-width',
     initialScale: 1,

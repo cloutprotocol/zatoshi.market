@@ -47,20 +47,26 @@ export default function Home() {
         />
       </div>
 
+      {/* Glass Overlay */}
+      <div className="fixed inset-0 w-full h-full bg-liquid-glass opacity-20 -z-8"></div>
+
+      {/* Subtle Dark Overlay */}
+      <div className="fixed inset-0 w-full h-full bg-black/15 -z-5"></div>
+
       {/* Content */}
       <div className="relative z-10">
         {/* Hero Section */}
-        <div className="container mx-auto px-6 py-24 md:py-32">
+        <div className="container mx-auto px-6 py-24 md:py-20">
           <div className="max-w-4xl">
             <h1 className="text-6xl md:text-8xl font-bold mb-8 leading-none text-gold-300">
-              ZORDINALS
+              INSCRIPTION
               <br />
               MARKETPLACE
               <br />
               ON <span className="text-gold-400">ZCASH</span>
             </h1>
             <p className="text-xl md:text-2xl mb-12 max-w-2xl text-gold-100/80">
-              Deploy, mint & trade ZRC20 tokens, ZMAPS, and Zordinal Inscriptions on Zcash.
+             DEPLOY & MINT ZRC20 tokens, ZMAPS, .ZEC NAMES. Now Inscribing on Zcash.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Link
@@ -99,7 +105,7 @@ export default function Home() {
             </div>
 
             <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
-              <h3 className="text-2xl font-bold mb-4 text-gold-400">ZERDINAL INSCRIPTIONS</h3>
+              <h3 className="text-2xl font-bold mb-4 text-gold-400">INSCRIPTIONS</h3>
               <p className="text-gold-100/80">
                 Digital art inscriptions on Zcash coming soon.
               </p>
@@ -109,28 +115,28 @@ export default function Home() {
 
         {/* Stats Section - Live Data */}
         <div className="container mx-auto px-6 py-24">
-          <div className="p-12 bg-black/40 relative overflow-hidden">
+          <div className="p-8 md:p-12 bg-black/40 relative overflow-hidden">
             <div className="absolute inset-0 bg-liquid-glass opacity-60"></div>
-            <div className="grid md:grid-cols-4 gap-8 text-center relative z-10">
+            <div className="grid md:grid-cols-4 gap-6 md:gap-4 lg:gap-8 text-center relative z-10">
               <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">
+                <div className="text-2xl md:text-3xl lg:text-5xl font-bold mb-2 text-gold-400">
                   {loading ? '...' : blockHeight.toLocaleString()}
                 </div>
-                <div className="text-gold-200/80 text-sm">ZCASH BLOCKS</div>
+                <div className="text-gold-200/80 text-xs">ZCASH BLOCKS</div>
               </div>
               <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">
+                <div className="text-2xl md:text-3xl lg:text-5xl font-bold mb-2 text-gold-400">
                   {loading ? '...' : totalZmaps.toLocaleString()}
                 </div>
-                <div className="text-gold-200/80 text-sm">TOTAL ZMAPS</div>
+                <div className="text-gold-200/80 text-xs">TOTAL ZMAPS</div>
               </div>
               <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">...</div>
-                <div className="text-gold-200/80 text-sm">INSCRIBED ZMAPS</div>
+                <div className="text-2xl md:text-3xl lg:text-5xl font-bold mb-2 text-gold-400">...</div>
+                <div className="text-gold-200/80 text-xs">INSCRIBED ZMAPS</div>
               </div>
               <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">0.002</div>
-                <div className="text-gold-200/80 text-sm">ZEC PER ZMAP</div>
+                <div className="text-2xl md:text-3xl lg:text-5xl font-bold mb-2 text-gold-400">0.002</div>
+                <div className="text-gold-200/80 text-xs">ZEC PER ZMAP</div>
               </div>
             </div>
           </div>
@@ -159,7 +165,7 @@ export default function Home() {
             </div>
           </div>
           <div className="text-center mt-8 text-gold-200/60">
-            ZRC20 tokens, ZMAPS, and Zerdinal inscriptions on Zcash
+            ZRC20 tokens, ZMAPS, and inscriptions on Zcash
           </div>
         </footer>
       </div>
