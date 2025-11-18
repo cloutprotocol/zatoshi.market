@@ -66,7 +66,7 @@ export default function Home() {
               ON <span className="text-gold-400">ZCASH</span>
             </h1>
             <p className="text-xl md:text-2xl mb-12 max-w-2xl text-gold-100/80">
-             DEPLOY & MINT ZRC20 tokens, ZMAPS, .ZEC NAMES. Now Inscribing on Zcash.
+             DEPLOY and MINT ZRC20 tokens | ZMAPS | .ZEC .ZCASH Names | Now Inscribing on Zcash
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Link
@@ -147,25 +147,25 @@ export default function Home() {
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="text-2xl text-gold-400">zatoshi.market</div>
             <div className="flex gap-6 text-gold-300/80">
-              <Link href="/wallet" className="hover:text-gold-400 transition-all">
-                WALLET
+              <Link href="/inscribe" className="hover:text-gold-400 transition-all">
+                INSCRIBE
               </Link>
-              <a href="https://zerdinals.com/" target="_blank" rel="noopener noreferrer" className="hover:text-gold-400 transition-all">
-                EXPLORER
-              </a>
               <Link href="/zmaps" className="hover:text-gold-400 transition-all">
                 ZMAPS
               </Link>
-              <Link href="/token/zore" className="hover:text-gold-400 transition-all">
+              <Link href="/zore" className="hover:text-gold-400 transition-all">
                 ZORE
+              </Link>
+              <Link href="/tokens" className="hover:text-gold-400 transition-all">
+                ZRC20
               </Link>
               <a href="https://twitter.com/zatoshimarket" target="_blank" rel="noopener noreferrer" className="hover:text-gold-400 transition-all">
                 TWITTER
               </a>
             </div>
           </div>
-          <div className="text-center mt-8 text-gold-200/60">
-            ZRC20 tokens, ZMAPS, and inscriptions on Zcash
+          <div className="text-center mt-8 text-gold-200/60 text-sm">
+            © zatoshi
           </div>
         </footer>
       </div>
