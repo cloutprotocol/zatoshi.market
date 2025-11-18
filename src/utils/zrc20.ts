@@ -9,14 +9,17 @@
  * 3. transfer: Creates a transferable inscription (locks tokens in UTXO)
  *
  * Balance calculation:
+ * - If you HOLD a "mint" inscription UTXO = you have minted tokens in your balance
  * - If you HOLD a "transfer" inscription UTXO = you have transferable tokens
- * - Amount is in the inscription content
+ * - Amount is in the inscription content for both operations
  */
 
 export interface ZRC20Token {
   tick: string;
   balance: string;
   transferableCount: number; // Number of transfer inscriptions
+  mintCount: number; // Number of mint inscriptions
+  totalInscriptions: number; // Total inscriptions (mints + transfers)
 }
 
 export interface ZRC20Inscription {
@@ -54,7 +57,7 @@ export function calculateZRC20Balances(
   inscriptions: any[],
   inscriptionContents: Record<string, string>
 ): ZRC20Token[] {
-  const balances = new Map<string, { balance: bigint; count: number }>();
+  const balances = new Map<string, { balance: bigint; mintCount: number; transferCount: number }>();
 
   for (const insc of inscriptions) {
     const content = inscriptionContents[insc.id];
@@ -63,16 +66,17 @@ export function calculateZRC20Balances(
     const zrc20 = parseZRC20(content);
     if (!zrc20) continue;
 
-    // Only count "transfer" operations as balance
-    // (mint/deploy operations don't represent holdings in this UTXO)
-    if (zrc20.op === 'transfer' && zrc20.amt) {
+    // Count both "mint" and "transfer" operations as balance
+    // Both represent tokens held in UTXOs owned by this wallet
+    if ((zrc20.op === 'mint' || zrc20.op === 'transfer') && zrc20.amt) {
       const tick = zrc20.tick.toUpperCase();
       const amount = BigInt(zrc20.amt);
 
-      const current = balances.get(tick) || { balance: BigInt(0), count: 0 };
+      const current = balances.get(tick) || { balance: BigInt(0), mintCount: 0, transferCount: 0 };
       balances.set(tick, {
         balance: current.balance + amount,
-        count: current.count + 1
+        mintCount: zrc20.op === 'mint' ? current.mintCount + 1 : current.mintCount,
+        transferCount: zrc20.op === 'transfer' ? current.transferCount + 1 : current.transferCount
       });
     }
   }
@@ -83,7 +87,9 @@ export function calculateZRC20Balances(
     tokens.push({
       tick,
       balance: data.balance.toString(),
-      transferableCount: data.count
+      transferableCount: data.transferCount,
+      mintCount: data.mintCount,
+      totalInscriptions: data.mintCount + data.transferCount
     });
   }
 

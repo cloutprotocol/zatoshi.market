@@ -497,7 +497,6 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                       </div>
                       <div className="flex-1">
                         <div className="text-gold-300 font-bold">ZORE</div>
-                        <div className="text-gold-200/60 text-sm">Platform Token</div>
                       </div>
                       <div className="text-gold-400 font-bold">0</div>
                     </div>
@@ -517,8 +516,19 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                           </div>
                           <div className="flex-1">
                             <div className="text-gold-300 font-bold">{token.tick}</div>
-                            <div className="text-gold-200/60 text-xs">
-                              {token.transferableCount} transfer inscription{token.transferableCount !== 1 ? 's' : ''}
+                            <div className="text-gold-200/60 text-xs flex gap-3">
+                              {token.mintCount > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <span className="w-1 h-1 rounded-full bg-blue-400"></span>
+                                  {token.mintCount} mint{token.mintCount !== 1 ? 's' : ''}
+                                </span>
+                              )}
+                              {token.transferableCount > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <span className="w-1 h-1 rounded-full bg-purple-400"></span>
+                                  {token.transferableCount} transfer{token.transferableCount !== 1 ? 's' : ''}
+                                </span>
+                              )}
                             </div>
                           </div>
                           <div className="text-gold-400 font-bold">{formatZRC20Amount(token.balance)}</div>
