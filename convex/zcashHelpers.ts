@@ -413,6 +413,7 @@ export async function fetchUtxos(address: string): Promise<Utxo[]> {
   };
 
   // 1) Blockchair (optionally with API key to avoid rate limits)
+  // Rationale: fastest and most complete when API key is present.
   try {
     const key = process.env.BLOCKCHAIR_API_KEY;
     const url = key
@@ -425,6 +426,32 @@ export async function fetchUtxos(address: string): Promise<Utxo[]> {
       return mapped; // may be empty when address has no UTXOs
     }
   } catch (_) {}
+
+  // 2) Your own site proxy (Next.js API). Prefer this over third-party gateways to
+  //    bypass regional Cloudflare issues and consolidate provider logic server-side.
+  //    We accept several envs + a hard-coded fallback to the production site.
+  {
+    const baseCandidates = [
+      process.env.NEXT_PUBLIC_SITE_URL,
+      process.env.PUBLIC_SITE_URL,
+      process.env.SITE_URL,
+      process.env.NEXT_PUBLIC_BASE_URL,
+      process.env.APP_ORIGIN,
+      process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
+      'https://zatoshi.market',
+    ].filter(Boolean) as string[];
+    for (const base of baseCandidates) {
+      try {
+        const origin = base.startsWith('http') ? base : `https://${base}`;
+        const url = `${origin.replace(/\/$/, '')}/api/zcash/utxos/${address}`;
+        const r = await fetch(url, { signal: timeoutSignal(FETCH_TIMEOUT_MS) });
+        if (!r.ok) continue;
+        const j = await r.json();
+        const mapped = normalize(j?.utxos ?? j);
+        return mapped; // may be empty
+      } catch (_) { /* continue */ }
+    }
+  }
 
   // 2) Zerdinals helper (returns array)
   try {

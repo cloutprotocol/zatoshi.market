@@ -26,6 +26,7 @@ export const runNextMint = action({
     if (job.status === "pending") await ctx.runMutation(api.jobs.setJobStatus, { jobId: args.jobId, status: "running" });
 
   const p = job.params as any;
+    // Batch mint runner uses the same ZIP-317 fee floor to avoid relay rejections
     const inscriptionAmount = p.inscriptionAmount ?? 60000;
     const FEE_FLOOR_ZATS = 50000;
     const fee = Math.max(p.fee ?? 10000, FEE_FLOOR_ZATS);

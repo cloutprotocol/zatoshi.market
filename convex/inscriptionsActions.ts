@@ -56,6 +56,9 @@ export const mintInscriptionAction = action({
     let currentStep = "initialization";
     try {
       currentStep = "parsing arguments";
+      // Inputs & fees
+      // - inscriptionAmount: value locked into the P2SH reveal output (vout 0 of commit)
+      // - fee: ZIP-317 floor enforced to avoid "unpaid action limit" mempool rejections
       const inscriptionAmount = args.inscriptionAmount ?? 60000;
       const FEE_FLOOR_ZATS = 50000;
       const fee = Math.max(args.fee ?? 10000, FEE_FLOOR_ZATS);
@@ -64,6 +67,9 @@ export const mintInscriptionAction = action({
       const contentType = args.contentType ?? (args.contentJson ? "application/json" : "text/plain");
 
       currentStep = "loading platform config";
+      // Platform fee is hard-coded in treasury.config. We always add a second output
+      // to the commit that pays 0.001 ZEC (100,000 zats) to the treasury. Change is
+      // computed after this fee so the commit has: [p2sh inscription, platform fee, change].
       const PLATFORM_TREASURY = TREASURY_ADDRESS;
 
       currentStep = "calling addressToPkh";
@@ -493,6 +499,7 @@ export const buildUnsignedCommitAction = action({
     fee: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    // Client-signing path: same ZIP-317 fee floor
     const inscriptionAmount = args.inscriptionAmount ?? 60000;
     const FEE_FLOOR_ZATS = 50000;
     const fee = Math.max(args.fee ?? 10000, FEE_FLOOR_ZATS);
