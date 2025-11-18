@@ -473,6 +473,14 @@ export const batchMintAction = action({
 });
 
 // Phase 2: Client-side signing flow
+/**
+ * Build unsigned commit transaction (client-side signing flow).
+ *
+ * Resilience notes:
+ * - Wraps UTXO fetch with a friendly error for upstream outages.
+ * - Wraps consensus branch ID fetch and suggests retry; supports env fallback.
+ * - Filters out inscribed UTXOs via indexer before selection.
+ */
 export const buildUnsignedCommitAction = action({
   args: {
     address: v.string(),
@@ -495,7 +503,12 @@ export const buildUnsignedCommitAction = action({
     const platformFeeZats = PLATFORM_FEE_ENABLED ? PLATFORM_FEE_ZATS : 0;
 
     // UTXO selection with protection
-    const utxos = await fetchUtxos(args.address);
+    let utxos;
+    try {
+      utxos = await fetchUtxos(args.address);
+    } catch (_) {
+      throw new Error('Unable to check your spendable funds right now. Please try again in a few seconds.');
+    }
     const required = inscriptionAmount + fee + platformFeeZats;
     const candidates = utxos.filter(u => u.value >= required);
     let utxo = undefined as undefined | typeof candidates[number];
@@ -516,7 +529,12 @@ export const buildUnsignedCommitAction = action({
     const chunks = buildInscriptionChunks(contentType, contentStr);
     const redeemScript = createRevealScript(pubKey, chunks);
     const p2sh = p2shFromRedeem(redeemScript);
-    const consensusBranchId = await getConsensusBranchId();
+    let consensusBranchId: number;
+    try {
+      consensusBranchId = await getConsensusBranchId();
+    } catch (_) {
+      throw new Error('Network is busy; cannot fetch consensus parameters. Please retry shortly.');
+    }
 
     // Compute commit sighash
     const sigHash = buildCommitSighash({

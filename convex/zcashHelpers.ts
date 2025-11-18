@@ -141,12 +141,19 @@ export function zip243Sighash(tx: {
 let _cachedBranchId: { value: number; expiresAt: number } | null = null;
 const BRANCH_ID_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+/**
+ * Obtain the current Zcash consensus branch ID with caching and fallbacks.
+ * - Caches value for 10 minutes to avoid provider rate limits.
+ * - Verifies JSON Content-Type before parsing (guards against HTML error pages).
+ * - Falls back to env override `ZCASH_CONSENSUS_BRANCH_ID` if RPC is blocked.
+ */
 export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
   const now = Date.now();
   if (_cachedBranchId && _cachedBranchId.expiresAt > now) {
     return _cachedBranchId.value;
   }
   const url = 'https://api.tatum.io/v3/blockchain/node/zcash-mainnet';
+<<<<<<< Updated upstream
   let j: any = null;
   try {
     const r = await fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json', 'x-api-key': tatumKey || process.env.TATUM_API_KEY || '' }, body: JSON.stringify({ jsonrpc:'2.0', method:'getblockchaininfo', id:1 }) });
@@ -163,6 +170,88 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
   const value = parseInt(j.result.consensus.nextblock, 16);
   _cachedBranchId = { value, expiresAt: now + BRANCH_ID_TTL_MS };
   return value;
+=======
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': tatumKey || process.env.TATUM_API_KEY || ''
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'getblockchaininfo', id: 1 })
+    });
+    const ct = r.headers.get('content-type') || '';
+    if (!r.ok || !ct.includes('application/json')) {
+      throw new Error(`Unexpected response (${r.status})`);
+    }
+    const j = await r.json();
+    const hex = j?.result?.consensus?.nextblock;
+    const value = typeof hex === 'string' ? parseInt(hex, 16) : NaN;
+    if (!Number.isFinite(value)) throw new Error('Malformed consensus data');
+    _cachedBranchId = { value, expiresAt: now + BRANCH_ID_TTL_MS };
+    return value;
+  } catch (_) {
+    // Secondary fallback: try REST-style explorers for getblockchaininfo
+    const restCandidates: string[] = [];
+    const restBase = process.env.NEXT_PUBLIC_ZCASH_RPC_URL || '';
+    if (restBase) restCandidates.push(restBase.replace(/\/$/, '') + '/getblockchaininfo');
+    // Known public explorer (best-effort)
+    restCandidates.push('https://mainnet.zcashexplorer.app/api/getblockchaininfo');
+    for (const restUrl of restCandidates) {
+      try {
+        const r = await fetch(restUrl);
+        const ct = r.headers.get('content-type') || '';
+        if (!r.ok || !ct.includes('application/json')) continue;
+        const j = await r.json();
+        const pick = (obj: any): string | undefined => {
+          const c1 = obj?.result?.consensus?.nextblock;
+          const c2 = obj?.result?.consensus?.branchid;
+          const c3 = obj?.consensus?.nextblock;
+          const c4 = obj?.consensus?.branchid;
+          if (typeof c1 === 'string') return c1;
+          if (typeof c2 === 'string') return c2;
+          if (typeof c3 === 'string') return c3;
+          if (typeof c4 === 'string') return c4;
+          // Try upgrades structure
+          const upgrades = obj?.result?.upgrades || obj?.upgrades;
+          if (upgrades && typeof upgrades === 'object') {
+            // Prefer NU5 if present, else take the last upgrade object
+            const nu5 = upgrades.NU5 || upgrades.nu5;
+            if (nu5?.branchid) return nu5.branchid;
+            const keys = Object.keys(upgrades);
+            if (keys.length) {
+              const last = upgrades[keys[keys.length - 1]];
+              if (last?.branchid) return last.branchid;
+            }
+          }
+          return undefined;
+        };
+        const hex = pick(j);
+        if (hex) {
+          const val = hex.startsWith('0x') ? parseInt(hex.slice(2), 16) : parseInt(hex, 16);
+          if (Number.isFinite(val)) {
+            _cachedBranchId = { value: val, expiresAt: now + BRANCH_ID_TTL_MS };
+            return val;
+          }
+        }
+      } catch {}
+    }
+
+    // Fallback to env override if provided
+    const envHex = process.env.ZCASH_CONSENSUS_BRANCH_ID || process.env.NEXT_PUBLIC_ZCASH_CONSENSUS_BRANCH_ID;
+    if (envHex) {
+      const val = envHex.startsWith('0x') ? parseInt(envHex.slice(2), 16) : Number(envHex);
+      if (Number.isFinite(val)) {
+        _cachedBranchId = { value: val, expiresAt: now + BRANCH_ID_TTL_MS };
+        return val;
+      }
+    }
+    // Last-resort constant for Zcash mainnet (NU5)
+    const NU5_MAINNET = 0xf919a198;
+    _cachedBranchId = { value: NU5_MAINNET, expiresAt: now + BRANCH_ID_TTL_MS };
+    return NU5_MAINNET;
+  }
+>>>>>>> Stashed changes
 }
 
 export async function broadcastTransaction(hex: string, tatumKey?: string): Promise<string> {
@@ -249,30 +338,80 @@ export async function buildRevealTxHex(params: {
   return bytesToHex(raw);
 }
 
-// Fetch UTXOs for an address. Prefer Blockchair; fall back to our helper API if needed.
+/**
+ * Fetch UTXOs for an address with multi-provider fallbacks.
+ *
+ * Invariants:
+ * - Returns an array (possibly empty) on any HTTP 200 JSON response.
+ * - Throws only if all providers fail to respond OK (network outage).
+ * - Normalizes diverse response shapes to { txid, vout, value } in zatoshis.
+ *
+ * Providers (in order):
+ * 1. Blockchair (optionally with BLOCKCHAIR_API_KEY)
+ * 2. Zerdinals helper
+ * 3. Public explorers (best-effort)
+ */
 export async function fetchUtxos(address: string): Promise<Utxo[]> {
-  // Try Blockchair first
+  // Normalize various upstream formats to our local Utxo shape
+  const normalize = (data: any): Utxo[] => {
+    const asList = (arr: any[]): Utxo[] => (arr || []).map((u: any) => ({
+      txid: u?.txid || u?.tx_hash || u?.transaction_hash || u?.hash,
+      vout: Number(u?.vout ?? u?.index ?? u?.output_index ?? 0),
+      value: Number(
+        u?.value ?? u?.satoshis ?? (Number.isFinite(u?.amount) ? Math.floor((u?.amount || 0) * 100000000) : 0)
+      ),
+    }))
+    .filter((u: Utxo) => !!u.txid && Number.isFinite(u.vout) && Number.isFinite(u.value));
+
+    if (!data) return [];
+    if (Array.isArray(data)) return asList(data);
+    if (Array.isArray(data.utxos)) return asList(data.utxos);
+    if (Array.isArray(data.data)) return asList(data.data);
+    const keyed = data?.data?.[address] || data?.data?.[Object.keys(data?.data || {})[0]];
+    if (Array.isArray(keyed?.utxo)) return asList(keyed.utxo);
+    return [];
+  };
+
+  // 1) Blockchair (optionally with API key to avoid rate limits)
   try {
-    const r = await fetch(`https://api.blockchair.com/zcash/dashboards/address/${address}`);
+    const key = process.env.BLOCKCHAIR_API_KEY;
+    const url = key
+      ? `https://api.blockchair.com/zcash/dashboards/address/${address}?key=${key}`
+      : `https://api.blockchair.com/zcash/dashboards/address/${address}`;
+    const r = await fetch(url);
     if (r.ok) {
       const j: any = await r.json();
-      // Expected shape: { data: { [address]: { utxo: [{ transaction_hash, index, value }, ...] } } }
-      const d = j?.data?.[address] || j?.data?.[Object.keys(j?.data || {})[0]];
-      const utxoArr: any[] = d?.utxo || [];
-      if (Array.isArray(utxoArr)) {
-        const mapped: Utxo[] = utxoArr.map((u: any) => ({
-          txid: u?.transaction_hash || u?.txid || u?.hash,
-          vout: Number(u?.index ?? u?.vout ?? 0),
-          value: Number(u?.value ?? 0),
-        })).filter((u: Utxo) => !!u.txid && Number.isFinite(u.vout) && Number.isFinite(u.value));
-        if (mapped.length > 0) return mapped;
-      }
+      const mapped = normalize(j);
+      return mapped; // may be empty when address has no UTXOs
     }
   } catch (_) {}
-  // Fallback to our UTXO helper service
-  const r2 = await fetch(`https://utxos.zerdinals.com/api/utxos/${address}`);
-  if (!r2.ok) throw new Error('UTXO fetch failed');
-  return r2.json() as Promise<Utxo[]>;
+
+  // 2) Zerdinals helper (returns array)
+  try {
+    const r2 = await fetch(`https://utxos.zerdinals.com/api/utxos/${address}`);
+    if (r2.ok) {
+      const j2 = await r2.json();
+      const mapped2 = normalize(j2);
+      return mapped2; // may be empty
+    }
+  } catch (_) {}
+
+  // 3) Public explorers (best-effort, no key)
+  const explorers = [
+    `https://zcashblockexplorer.com/api/addr/${address}/utxo`,
+    `https://api.zcha.in/v2/mainnet/accounts/${address}`,
+  ];
+  for (const url of explorers) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) continue;
+      const j = await r.json();
+      const mapped = normalize(j);
+      return mapped; // may be empty
+    } catch (_) { /* continue */ }
+  }
+
+  throw new Error('UTXO fetch failed');
 }
 // Check if a given outpoint is inscribed.
 // Primary: Zerdinals indexer. Fallback: Heuristic check via raw transaction
