@@ -382,22 +382,14 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
           ) : (
             /* Wallet connected state */
             <div className="space-y-6">
-              {/* Header with Address and Close */}
+              {/* Header with Close */}
               <div className="flex justify-between items-center">
-                <div className="flex items-center gap-3 flex-1 lg:flex-col lg:items-start lg:gap-0">
-                  <h2 className="text-xl text-gold-400 font-bold">WALLET</h2>
-                  <div
-                    onClick={handleCopyAddress}
-                    className="flex-1 lg:hidden cursor-pointer"
-                  >
-                    <p className="text-gold-300 font-mono text-xs truncate">{wallet.address.slice(0, 12)}...{wallet.address.slice(-6)}</p>
-                  </div>
-                </div>
+                <h2 className="text-xl text-gold-400 font-bold">WALLET</h2>
                 <button
                   onClick={onClose}
-                  className="text-gold-400 hover:text-gold-300 text-1xl mr-2"
+                  className="text-gold-400 hover:text-gold-300 text-1xl mr-3"
                 >
-                  \/
+               
                 </button>
               </div>
 
@@ -563,6 +555,22 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                   className="w-full px-6 py-2 text-gold-400/60 text-sm hover:text-gold-400 transition-all"
                 >
                   Disconnect (Forget) Wallet
+                </button>
+              </div>
+
+              {/* Address & Close - Mobile only at bottom */}
+              <div className="lg:hidden space-y-3 mt-6 pt-6 border-t border-gold-500/20">
+                <div
+                  onClick={handleCopyAddress}
+                  className="p-3 bg-black/40 rounded cursor-pointer hover:bg-black/60 transition-all"
+                >
+                  <p className="text-white font-mono text-xs text-center break-all">{wallet.address}</p>
+                </div>
+                <button
+                  onClick={onClose}
+                  className="w-full py-3 bg-black/60 backdrop-blur-sm text-gold-400 text-xl font-bold rounded hover:bg-black/80 transition-all"
+                >
+                  \/
                 </button>
               </div>
             </div>

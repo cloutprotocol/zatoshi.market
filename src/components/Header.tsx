@@ -63,7 +63,12 @@ export default function Header() {
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="text-gold-400 text-2xl p-2"
           >
-            ☰
+            {/* Hamburger icon */}
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" className="inline" xmlns="http://www.w3.org/2000/svg">
+              <rect y="6" width="28" height="3" rx="1.5" fill="currentColor"/>
+              <rect y="13" width="28" height="3" rx="1.5" fill="currentColor"/>
+              <rect y="20" width="28" height="3" rx="1.5" fill="currentColor"/>
+            </svg>
           </button>
         </div>
       </nav>
@@ -116,7 +121,7 @@ export default function Header() {
                       setIsMobileMenuOpen(false);
                       setIsWalletOpen(true);
                     }}
-                    className="w-[90%] max-w-md py-4 bg-gold-500/20 backdrop-blur-xl text-gold-400 border border-gold-500/30 font-mono active:bg-gold-500/40 transition-all rounded-xl text-sm shadow-lg"
+                    className="w-[90%] max-w-md py-4 bg-gold-500/20 backdrop-blur-xl text-gold-400 border border-gold-500/30 font-mono active:bg-gold-500/40 transition-all rounded-sm text-sm shadow-lg"
                   >
                     {wallet.address.slice(0, 8)}...{wallet.address.slice(-8)}
                   </button>

@@ -54,9 +54,9 @@ export default function Home() {
       <div className="fixed inset-0 w-full h-full bg-black/15 -z-5"></div>
 
       {/* Content */}
-      <div className="relative z-10">
+      <div className="relative z-10 container mx-auto px-4 sm:px-6 max-w-7xl">
         {/* Hero Section */}
-        <div className="container mx-auto px-6 py-24 md:py-20">
+        <section className="py-16 md:py-20">
           <div className="max-w-4xl">
             <h1 className="text-6xl md:text-8xl font-bold mb-8 leading-none text-gold-300">
               INSCRIPTION
@@ -85,37 +85,37 @@ export default function Home() {
               </a>
             </div>
           </div>
-        </div>
+        </section>
 
         {/* Features Grid */}
-        <div className="container mx-auto px-6 py-24">
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
+        <section className="py-16">
+          <div className="grid md:grid-cols-3 gap-6 md:gap-8">
+            <div className="p-6 md:p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
               <h3 className="text-2xl font-bold mb-4 text-gold-400">ZRC20 TOKENS</h3>
               <p className="text-gold-100/80">
                 Deploy, mint & trade ZRC20 tokens, the fungible token standard of Zerdinals.
               </p>
             </div>
 
-            <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
+            <div className="p-6 md:p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
               <h3 className="text-2xl font-bold mb-4 text-gold-400">ZMAPS</h3>
               <p className="text-gold-100/80">
                 Each ZMAP represents 100 Zcash blocks and can be used to mine ZORE tokens.
               </p>
             </div>
 
-            <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
+            <div className="p-6 md:p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
               <h3 className="text-2xl font-bold mb-4 text-gold-400">INSCRIPTIONS</h3>
               <p className="text-gold-100/80">
                 Digital art inscriptions on Zcash coming soon.
               </p>
             </div>
           </div>
-        </div>
+        </section>
 
         {/* Stats Section - Live Data */}
-        <div className="container mx-auto px-6 py-24">
-          <div className="p-8 md:p-12 bg-black/40 relative overflow-hidden">
+        <section className="py-16">
+          <div className="p-6 md:p-10 lg:p-12 bg-black/40 relative overflow-hidden">
             <div className="absolute inset-0 bg-liquid-glass opacity-60"></div>
             <div className="grid md:grid-cols-4 gap-6 md:gap-4 lg:gap-8 text-center relative z-10">
               <div>
@@ -140,13 +140,13 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
         {/* Footer */}
-        <footer className="container mx-auto px-6 py-12">
+        <footer className="py-12 mt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="text-2xl text-gold-400">zatoshi.market</div>
-            <div className="flex gap-6 text-gold-300/80">
+            <div className="flex gap-4 md:gap-6 text-sm md:text-base text-gold-300/80">
               <Link href="/inscribe" className="hover:text-gold-400 transition-all">
                 INSCRIBE
               </Link>
