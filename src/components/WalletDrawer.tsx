@@ -11,9 +11,11 @@ import { calculateZRC20Balances, formatZRC20Amount, type ZRC20Token } from '@/ut
 interface WalletDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  desktopExpanded: boolean;
+  setDesktopExpanded: (expanded: boolean) => void;
 }
 
-export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
+export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesktopExpanded }: WalletDrawerProps) {
   const { wallet, connectWallet, disconnectWallet, mounted, hasStoredKeystore, unlockWallet, saveEncrypted, lockWallet } = useWallet();
   const [balance, setBalance] = useState({ confirmed: 0, unconfirmed: 0 });
   const [usdPrice, setUsdPrice] = useState(0);
@@ -33,7 +35,6 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   const [zrc20Tokens, setZrc20Tokens] = useState<ZRC20Token[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasFetchedFresh, setHasFetchedFresh] = useState(false);
-  const [isDesktopExpanded, setIsDesktopExpanded] = useState(true);
 
   const fetchBalance = useCallback(async (forceRefresh: boolean = false) => {
     if (!wallet?.address) return;
@@ -312,14 +313,14 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
 
       {/* Desktop Toggle Button - always visible */}
       <button
-        onClick={() => setIsDesktopExpanded(!isDesktopExpanded)}
+        onClick={() => setDesktopExpanded(!desktopExpanded)}
         className={`hidden lg:flex fixed top-1/2 -translate-y-1/2 z-40
           w-8 h-16 bg-black/30 backdrop-blur-xl border border-gold-500/20
           items-center justify-center text-gold-400 hover:text-gold-300 hover:bg-black/50 transition-all duration-300
-          ${isDesktopExpanded ? 'right-[400px]' : 'right-0'}
+          ${desktopExpanded ? 'right-[400px]' : 'right-0'}
         `}
       >
-        {isDesktopExpanded ? '→' : '←'}
+        {desktopExpanded ? '→' : '←'}
       </button>
 
       {/* Drawer */}
@@ -330,7 +331,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
         lg:right-0 lg:left-auto lg:w-[400px]
         transition-all duration-300 flex flex-col
         lg:border-l lg:border-gold-500/20
-        ${!isDesktopExpanded ? 'lg:translate-x-full' : 'lg:translate-x-0'}
+        ${!desktopExpanded ? 'lg:translate-x-full' : 'lg:translate-x-0'}
       `}
       >
 
@@ -636,26 +637,28 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       )}
 
       {showReceive && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
-          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded max-w-md w-full p-8 text-center">
-            <h3 className="text-2xl font-bold text-gold-300 mb-6">RECEIVE ZEC</h3>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
+          <div className="backdrop-blur-xl bg-black/30 border border-gold-500/20 rounded max-w-md w-full p-6 text-center">
+            <h3 className="text-xl font-bold text-gold-400 mb-6 uppercase tracking-wide">RECEIVE ZEC</h3>
             {qrDataUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={qrDataUrl} alt="Wallet QR" className="mx-auto mb-6 rounded" />
+              <div className="bg-white p-4 rounded mb-6 inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qrDataUrl} alt="Wallet QR" className="w-64 h-64" />
+              </div>
             )}
-            <div className="bg-black/40 p-4 rounded mb-6">
-              <p className="text-gold-300 font-mono text-sm break-all">{wallet?.address}</p>
+            <div className="bg-black/40 p-3 rounded mb-6">
+              <p className="text-white font-mono text-xs break-all">{wallet?.address}</p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={handleCopyAddress}
-                className="px-6 py-3 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-all"
+                className="px-6 py-3 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-colors"
               >
                 COPY
               </button>
               <button
                 onClick={() => setShowReceive(false)}
-                className="px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded border border-gold-500/30 hover:bg-gold-500/30 transition-all"
+                className="px-6 py-3 bg-black/60 backdrop-blur-sm text-gold-400 font-bold rounded hover:bg-black/80 transition-colors"
               >
                 CLOSE
               </button>

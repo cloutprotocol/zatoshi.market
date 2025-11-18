@@ -12,6 +12,12 @@ export default function Header() {
   const { wallet, isConnected, mounted } = useWallet();
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [desktopExpanded, setDesktopExpanded] = useState(true);
+
+  const handleWalletClick = () => {
+    setIsWalletOpen(true);
+    setDesktopExpanded(true); // Always expand when clicking header button on desktop
+  };
 
   return (
     <>
@@ -42,14 +48,14 @@ export default function Header() {
             </button>
           ) : isConnected && wallet ? (
             <button
-              onClick={() => setIsWalletOpen(!isWalletOpen)}
+              onClick={handleWalletClick}
               className="px-4 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 font-mono text-sm hover:bg-gold-500/30 transition-all"
             >
               {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
             </button>
           ) : (
             <button
-              onClick={() => setIsWalletOpen(!isWalletOpen)}
+              onClick={handleWalletClick}
               className="px-6 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 font-bold hover:bg-gold-500/30 transition-all"
             >
               CONNECT WALLET
@@ -143,7 +149,12 @@ export default function Header() {
       )}
 
       {/* Wallet Drawer */}
-      <WalletDrawer isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} />
+      <WalletDrawer
+        isOpen={isWalletOpen}
+        onClose={() => setIsWalletOpen(false)}
+        desktopExpanded={desktopExpanded}
+        setDesktopExpanded={setDesktopExpanded}
+      />
     </>
   );
 }
