@@ -423,10 +423,10 @@ function InscribePageContent() {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 sm:px-6 h-full flex flex-col max-w-[1600px] pt-32 lg:pt-0">
-        <div className="flex flex-col lg:flex-row gap-4 h-full min-h-0">
+      <div className="mx-auto h-full flex flex-col lg:pr-[400px] pl-6 pt-32 lg:pt-0">
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 h-full min-h-0">
           {/* Left Sidebar - Tabs (Desktop only) */}
-          <div className="hidden lg:flex lg:w-56 flex-shrink-0 flex-col lg:overflow-y-auto">
+          <div className="hidden lg:flex lg:w-56 flex-shrink-0 flex-col lg:overflow-y-auto lg:pl-0">
             <div className="flex flex-col gap-2">
               <button
                 onClick={() => setActiveTab('names')}
@@ -538,14 +538,14 @@ function InscribePageContent() {
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 bg-black/40 border border-none rounded backdrop-blur-xl overflow-y-auto min-h-0">
+          <div className="flex-1 bg-black/40 border border-none rounded backdrop-blur-xl overflow-y-auto min-h-0 lg:min-w-[750px]">
             <div className="p-4 sm:p-6 lg:p-8 pt-6 lg:pt-8">
 
             {/* NAME REGISTRATION TAB */}
             {activeTab === 'names' && (
               <div className="max-w-2xl mx-auto">
                 <div className="text-center mb-6 sm:mb-7">
-                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2">Register Your Zcash Name</h2>
+                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">Register Your Zcash Name</h2>
                   <p className="text-gold-400/60 text-xs sm:text-sm">
                     Secure your .zec or .zcash identity on the blockchain
                   </p>
@@ -567,18 +567,23 @@ function InscribePageContent() {
                         placeholder="yourname"
                         disabled={loading}
                       />
-                      <select
-                        value={nameExtension}
-                        onChange={(e) => {
-                          setNameExtension(e.target.value as 'zec' | 'zcash');
-                          validateName(nameInput);
-                        }}
-                        className="bg-black/60 border-t sm:border-t-0 sm:border-l border-gold-500/30 pl-4 pr-10 py-2.5 sm:pl-6 sm:pr-12 sm:py-3 text-lg sm:text-xl font-mono text-gold-300 outline-none cursor-pointer"
-                        disabled={loading}
-                      >
-                        <option value="zec">.zec</option>
-                        <option value="zcash">.zcash</option>
-                      </select>
+                      <div className="relative">
+                        <select
+                          value={nameExtension}
+                          onChange={(e) => {
+                            setNameExtension(e.target.value as 'zec' | 'zcash');
+                            validateName(nameInput);
+                          }}
+                          className="appearance-none bg-black/60 border-t sm:border-t-0 sm:border-l border-gold-500/30 pl-4 pr-10 py-2.5 sm:pl-6 sm:pr-12 sm:py-3 text-lg sm:text-xl font-mono text-gold-300 outline-none cursor-pointer w-full"
+                          disabled={loading}
+                        >
+                          <option value="zec">.zec</option>
+                          <option value="zcash">.zcash</option>
+                        </select>
+                        <div className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gold-400 text-xs">
+                          \/
+                        </div>
+                      </div>
                     </div>
                     {nameError && (
                       <div className="absolute top-full mt-2 text-red-400 text-sm">
@@ -628,6 +633,44 @@ function InscribePageContent() {
                     </svg>
                   ) : `Register ${fullName}`}
                 </button>
+
+                {/* Success Display */}
+                {result && (
+                  <div className="mt-6 p-4 sm:p-6 bg-gold-500/10 border border-gold-500/30 rounded relative">
+                    <button
+                      onClick={() => setResult(null)}
+                      className="absolute top-3 right-3 text-gold-400/60 hover:text-gold-300 transition-colors"
+                      aria-label="Close"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                    <h3 className="text-gold-300 font-bold mb-4 text-base sm:text-lg">✓ Success!</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-gold-400/60 text-sm mb-1">Transaction ID</div>
+                        <a
+                          href={`https://mainnet.zcashexplorer.app/transactions/${result.txid}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
+                        >
+                          {result.txid}
+                        </a>
+                      </div>
+                      <div>
+                        <div className="text-gold-400/60 text-sm mb-1">Inscription ID</div>
+                        <div className="text-gold-300 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded">
+                          {result.inscriptionId}
+                        </div>
+                      </div>
+                      <div className="pt-3">
+                        <p className="text-xs text-gold-400/70">Note: New inscriptions may take up to ~5 minutes to appear in the public explorer.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -635,7 +678,7 @@ function InscribePageContent() {
             {activeTab === 'text' && (
               <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
                 <div className="text-center mb-4 sm:mb-6">
-                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2">Text Inscription</h2>
+                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">Text Inscription</h2>
                   <p className="text-gold-400/60 text-xs sm:text-sm">
                     Inscribe any text or data permanently on Zcash
                   </p>
@@ -643,17 +686,22 @@ function InscribePageContent() {
 
                 <div>
                   <label className="block text-gold-200/80 text-sm mb-2">Content Type</label>
-                  <select
-                    value={contentType}
-                    onChange={(e) => setContentType(e.target.value)}
-                    className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-gold-300 outline-none focus:border-gold-500/50"
-                    disabled={loading}
-                  >
-                    <option value="text/plain">Text (text/plain)</option>
-                    <option value="application/json">JSON (application/json)</option>
-                    <option value="text/html">HTML (text/html)</option>
-                    <option value="image/svg+xml">SVG (image/svg+xml)</option>
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={contentType}
+                      onChange={(e) => setContentType(e.target.value)}
+                      className="appearance-none w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-gold-300 outline-none focus:border-gold-500/50"
+                      disabled={loading}
+                    >
+                      <option value="text/plain">Text (text/plain)</option>
+                      <option value="application/json">JSON (application/json)</option>
+                      <option value="text/html">HTML (text/html)</option>
+                      <option value="image/svg+xml">SVG (image/svg+xml)</option>
+                    </select>
+                    <div className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gold-400 text-xs">
+                      \/
+                    </div>
+                  </div>
                 </div>
 
                 <div>
@@ -691,6 +739,44 @@ function InscribePageContent() {
                     </svg>
                   ) : 'Inscribe'}
                 </button>
+
+                {/* Success Display */}
+                {result && (
+                  <div className="mt-6 p-4 sm:p-6 bg-gold-500/10 border border-gold-500/30 rounded relative">
+                    <button
+                      onClick={() => setResult(null)}
+                      className="absolute top-3 right-3 text-gold-400/60 hover:text-gold-300 transition-colors"
+                      aria-label="Close"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                    <h3 className="text-gold-300 font-bold mb-4 text-base sm:text-lg">✓ Success!</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-gold-400/60 text-sm mb-1">Transaction ID</div>
+                        <a
+                          href={`https://mainnet.zcashexplorer.app/transactions/${result.txid}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
+                        >
+                          {result.txid}
+                        </a>
+                      </div>
+                      <div>
+                        <div className="text-gold-400/60 text-sm mb-1">Inscription ID</div>
+                        <div className="text-gold-300 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded">
+                          {result.inscriptionId}
+                        </div>
+                      </div>
+                      <div className="pt-3">
+                        <p className="text-xs text-gold-400/70">Note: New inscriptions may take up to ~5 minutes to appear in the public explorer.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -698,7 +784,7 @@ function InscribePageContent() {
             {activeTab === 'zrc20' && (
               <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
                 <div className="text-center mb-4 sm:mb-6">
-                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2">Mint ZRC-20 Token</h2>
+                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">Mint ZRC-20 Token</h2>
                   <p className="text-gold-400/60 text-xs sm:text-sm">
                     Mint tokens from deployed ZRC-20 contracts
                   </p>
@@ -721,16 +807,21 @@ function InscribePageContent() {
                 {/* Operation */}
                 <div>
                   <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Operation</label>
-                  <select
-                    value={zrcOp}
-                    onChange={(e)=>setZrcOp(e.target.value as any)}
-                    className="w-full bg-black/40 border border-gold-500/30 rounded pl-3 pr-10 py-2 sm:pl-4 sm:pr-10 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50"
-                    disabled={loading}
-                  >
-                    <option value="mint">Mint</option>
-                    <option value="deploy">Deploy</option>
-                    <option value="transfer">Transfer</option>
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={zrcOp}
+                      onChange={(e)=>setZrcOp(e.target.value as any)}
+                      className="appearance-none w-full bg-black/40 border border-gold-500/30 rounded pl-3 pr-10 py-2 sm:pl-4 sm:pr-10 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50"
+                      disabled={loading}
+                    >
+                      <option value="mint">Mint</option>
+                      <option value="deploy">Deploy</option>
+                      <option value="transfer">Transfer</option>
+                    </select>
+                    <div className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gold-400 text-xs">
+                      \/
+                    </div>
+                  </div>
                 </div>
 
                 <div>
@@ -972,36 +1063,66 @@ function InscribePageContent() {
             {activeTab === 'utxo' && (
               <div className="max-w-2xl mx-auto">
                 <div className="text-center mb-4 sm:mb-6">
-                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2">UTXO Management</h2>
+                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">UTXO Management</h2>
                   <p className="text-gold-400/60 text-xs sm:text-sm">
                     Split larger UTXOs into smaller ones to prepare funding for batch operations
                   </p>
                 </div>
 
                 <div className="bg-black/40 border border-gold-500/20 rounded p-4 sm:p-6">
+                  <div className="mb-4 p-3 bg-gold-500/10 border border-gold-500/20 rounded">
+                    <p className="text-gold-300 text-xs leading-relaxed">
+                      <strong>How it works:</strong> Split one large UTXO into {splitCount} smaller UTXOs of {targetAmount.toLocaleString()} zatoshis each. This prepares your wallet for batch inscriptions by creating multiple spendable outputs.
+                    </p>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-gold-200/80 text-xs mb-1">Split Count</label>
-                      <input type="number" value={splitCount} onChange={e=>setSplitCount(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                      <input type="number" min="2" max="25" value={splitCount} onChange={e=>setSplitCount(parseInt(e.target.value||'5'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                      <p className="text-gold-400/60 text-xs mt-1">2-25 outputs</p>
                     </div>
                     <div>
                       <label className="block text-gold-200/80 text-xs mb-1">Target Amount (zats)</label>
-                      <input type="number" value={targetAmount} onChange={e=>setTargetAmount(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                      <input type="number" min="10000" value={targetAmount} onChange={e=>setTargetAmount(parseInt(e.target.value||'70000'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                      <p className="text-gold-400/60 text-xs mt-1">{(targetAmount / 100000000).toFixed(8)} ZEC each</p>
                     </div>
                     <div>
-                      <label className="block text-gold-200/80 text-xs mb-1">Fee (zats)</label>
-                      <input type="number" value={splitFee} onChange={e=>setSplitFee(parseInt(e.target.value||'0'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                      <label className="block text-gold-200/80 text-xs mb-1">Network Fee (zats)</label>
+                      <input type="number" min="1000" value={splitFee} onChange={e=>setSplitFee(parseInt(e.target.value||'10000'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                      <p className="text-gold-400/60 text-xs mt-1">{(splitFee / 100000000).toFixed(8)} ZEC</p>
                     </div>
                   </div>
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <button onClick={handleSplit} disabled={loading || !isConnected} className="px-4 py-3 bg-black/60 border border-gold-500/40 rounded text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? (
+
+                  {/* Estimation */}
+                  <div className="mt-4 p-3 bg-black/40 border border-gold-500/20 rounded">
+                    <div className="text-xs space-y-1">
+                      <div className="flex justify-between text-gold-300">
+                        <span>Total output amount:</span>
+                        <span className="font-mono font-bold">{(splitCount * targetAmount).toLocaleString()} zats</span>
+                      </div>
+                      <div className="flex justify-between text-gold-300">
+                        <span>Network fee:</span>
+                        <span className="font-mono font-bold">{splitFee.toLocaleString()} zats</span>
+                      </div>
+                      <div className="flex justify-between text-gold-400 pt-1 border-t border-gold-500/20">
+                        <span className="font-bold">Required balance:</span>
+                        <span className="font-mono font-bold">{(splitCount * targetAmount + splitFee).toLocaleString()} zats ({((splitCount * targetAmount + splitFee) / 100000000).toFixed(8)} ZEC)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button onClick={handleSplit} disabled={loading || !isConnected} className="w-full mt-4 px-6 py-4 bg-black/30 backdrop-blur-xl border border-gold-500/30 rounded text-gold-400 font-bold text-lg hover:bg-gold-500/10 hover:border-gold-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed">{loading ? (
                       <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                     ) : 'Split UTXOs'}</button>
-                    {splitTxid && (<div className="text-xs text-gold-400/80">Split TXID: <span className="font-mono break-all">{splitTxid}</span></div>)}
-                  </div>
+                  {splitTxid && (
+                    <div className="mt-4 text-xs text-gold-400/80">
+                      Split TXID: <span className="font-mono break-all">{splitTxid}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1010,7 +1131,7 @@ function InscribePageContent() {
             {activeTab === 'history' && (
               <div className="max-w-5xl mx-auto">
                 <div className="text-center mb-4 sm:mb-6">
-                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2">Inscription History</h2>
+                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">Inscription History</h2>
                   <p className="text-gold-400/60 text-xs sm:text-sm">
                     Audit trail of your inscriptions on Zcash
                   </p>
@@ -1035,8 +1156,38 @@ function InscribePageContent() {
 
             {/* Error Display */}
             {error && (
-              <div className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded">
-                <p className="text-red-400 text-sm">{error}</p>
+              <div className="mt-6 p-4 sm:p-6 bg-red-500/10 border border-red-500/30 rounded relative">
+                <button
+                  onClick={() => setError(null)}
+                  className="absolute top-3 right-3 text-red-400/60 hover:text-red-300 transition-colors"
+                  aria-label="Close"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                <h3 className="text-red-300 font-bold mb-3 text-base">⚠ Transaction Error</h3>
+                {error.includes('mempool-conflict') ? (
+                  <p className="text-red-400 text-sm">
+                    A previous transaction is still pending. Wait a few minutes and try again, or use the{' '}
+                    <button
+                      onClick={() => {
+                        setActiveTab('utxo');
+                        setError(null);
+                      }}
+                      className="underline hover:text-red-300 font-bold transition-colors"
+                    >
+                      UTXO Management
+                    </button>{' '}
+                    tab to prepare fresh UTXOs.
+                  </p>
+                ) : error.includes('unpaid action limit exceeded') || error.includes('action limit exceeded') ? (
+                  <p className="text-red-400 text-sm">
+                    Transaction too complex. Try reducing the split count to 10 or fewer outputs, or ensure you have sufficient transparent ZEC balance.
+                  </p>
+                ) : (
+                  <p className="text-red-400 text-sm">{error}</p>
+                )}
               </div>
             )}
 

@@ -52,10 +52,10 @@ export function InscriptionHistory({ address, limit = 50 }: { address: string; l
           <thead className="bg-black/40">
             <tr>
               <th className="p-2">Time</th>
-              <th className="p-2">Inscription</th>
+              <th className="p-2">Tx</th>
               <th className="p-2">Type</th>
               <th className="p-2">Size</th>
-              <th className="p-2">Tx</th>
+              <th className="p-2">Inscription</th>
             </tr>
           </thead>
           <tbody>
@@ -69,12 +69,12 @@ export function InscriptionHistory({ address, limit = 50 }: { address: string; l
               <tr key={r._id} className="border-t border-gold-500/10">
                 <td className="p-2 whitespace-nowrap">{new Date(r.createdAt).toLocaleString()}</td>
                 <td className="p-2">
-                  <a className="underline" href={`https://zerdinals.com/zerdinals/${r.inscriptionId}`} target="_blank" rel="noreferrer">{r.inscriptionId}</a>
+                  <a className="underline" href={`https://blockchair.com/zcash/transaction/${r.txid}`} target="_blank" rel="noreferrer">{r.txid.slice(0,8)}…</a>
                 </td>
                 <td className="p-2 whitespace-nowrap">{r.type}</td>
                 <td className="p-2 whitespace-nowrap">{r.contentSize?.toLocaleString?.() || r.contentSize} B</td>
                 <td className="p-2">
-                  <a className="underline" href={`https://blockchair.com/zcash/transaction/${r.txid}`} target="_blank" rel="noreferrer">{r.txid.slice(0,12)}…</a>
+                  <a className="underline" href={`https://zerdinals.com/zerdinals/${r.inscriptionId}`} target="_blank" rel="noreferrer">{r.inscriptionId.slice(0,16)}…</a>
                 </td>
               </tr>
             ))}
