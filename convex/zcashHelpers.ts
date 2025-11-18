@@ -257,29 +257,62 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
 }
 
 export async function broadcastTransaction(hex: string, tatumKey?: string): Promise<string> {
-  // Primary: helper relay
+  const SIGNAL = timeoutSignal(8000);
+
+  // Helper to parse varied provider responses into a txid
+  const parseTxid = async (r: Response): Promise<string | null> => {
+    const ct = r.headers.get('content-type') || '';
+    try {
+      if (ct.includes('application/json')) {
+        const j: any = await r.json();
+        const t = j?.result || j?.txid || (typeof j === 'string' ? j : null);
+        return typeof t === 'string' ? t : null;
+      } else {
+        const text = await r.text();
+        const m = text.match(/[0-9a-fA-F]{64}/);
+        return m ? m[0] : null;
+      }
+    } catch { return null; }
+  };
+
+  // 1) Prefer your site proxy (Next.js) to avoid regional CF issues
+  {
+    const bases = [
+      process.env.NEXT_PUBLIC_SITE_URL,
+      process.env.PUBLIC_SITE_URL,
+      process.env.SITE_URL,
+      process.env.APP_ORIGIN,
+      process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
+      'https://zatoshi.market',
+    ].filter(Boolean) as string[];
+    for (const base of bases) {
+      try {
+        const origin = base.startsWith('http') ? base : `https://${base}`;
+        const url = `${origin.replace(/\/$/, '')}/api/zerdinals-utxos/send-transaction`;
+        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rawTransaction: hex }), signal: SIGNAL });
+        if (r.ok) {
+          const txid = await parseTxid(r);
+          if (txid) return txid;
+        }
+      } catch (_) { /* try next */ }
+    }
+  }
+
+  // 2) Zerdinals helper relay
   try {
-    const r = await fetch('https://utxos.zerdinals.com/api/send-transaction', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rawTransaction: hex })
-    });
+    const r = await fetch('https://utxos.zerdinals.com/api/send-transaction', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rawTransaction: hex }), signal: SIGNAL });
     if (r.ok) {
-      const ct = r.headers.get('content-type') || '';
-      const j = ct.includes('application/json') ? await r.json() : null;
-      const txid = j?.result || j?.txid || (typeof j === 'string' ? j : null);
-      if (txid && typeof txid === 'string') return txid;
+      const txid = await parseTxid(r);
+      if (txid) return txid;
     }
   } catch (_) {}
 
-  // Fallback: Tatum JSON-RPC
+  // 3) Tatum JSON-RPC fallback
   const r2 = await fetch('https://api.tatum.io/v3/blockchain/node/zcash-mainnet', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': tatumKey || process.env.TATUM_API_KEY || ''
-    },
-    body: JSON.stringify({ jsonrpc: '2.0', method: 'sendrawtransaction', params: [hex], id: 1 })
+    headers: { 'Content-Type': 'application/json', 'x-api-key': tatumKey || process.env.TATUM_API_KEY || '' },
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'sendrawtransaction', params: [hex], id: 1 }),
+    signal: SIGNAL,
   });
   let j2: any;
   try { j2 = await r2.json(); } catch {
