@@ -674,7 +674,7 @@ export default function ZmapsPage() {
   };
 
   return (
-    <main className="relative w-full h-screen overflow-hidden pt-20">
+    <main className="relative w-full h-screen overflow-hidden">
       {/* Dither Background */}
       <div className="fixed inset-0 w-full h-full opacity-10 -z-10">
         {mounted && (
@@ -692,7 +692,7 @@ export default function ZmapsPage() {
       </div>
 
       {/* Header */}
-      <header className="fixed top-0 left-0 w-full flex items-center justify-between px-6 py-4 backdrop-blur-xl bg-black/30 z-20 border-b border-gold-700/30">
+      <header className="fixed top-0 left-0 w-full flex items-center justify-between px-6 py-4 backdrop-blur-xl bg-black/30 z-20 border-b border-gold-500/20">
         <div className="flex items-center gap-6">
           <Link href="/" className="text-2xl text-gold-400">
             zatoshi.market
@@ -720,7 +720,7 @@ export default function ZmapsPage() {
           <button
             onClick={handleShowIntro}
             title="Show Help"
-            className="size-12 backdrop-blur-xl bg-black/30 border border-gold-700 text-gold-400 flex items-center justify-center text-xl font-bold"
+            className="size-12 backdrop-blur-xl bg-black/30 border border-gold-500/30 text-gold-400 flex items-center justify-center text-xl font-bold"
           >
             ?
           </button>
@@ -728,7 +728,7 @@ export default function ZmapsPage() {
         <button
           id="fit-btn"
           title="Fit to Screen"
-          className="size-12 backdrop-blur-xl bg-black/30 border border-gold-700 text-gold-400 flex items-center justify-center"
+          className="size-12 backdrop-blur-xl bg-black/30 border border-gold-500/30 text-gold-400 flex items-center justify-center"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -747,7 +747,7 @@ export default function ZmapsPage() {
         <button
           id="zoom-in-btn"
           title="Zoom In"
-          className="size-12 backdrop-blur-xl bg-black/30 border border-gold-700 text-gold-400 flex items-center justify-center"
+          className="size-12 backdrop-blur-xl bg-black/30 border border-gold-500/30 text-gold-400 flex items-center justify-center"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -767,7 +767,7 @@ export default function ZmapsPage() {
         <button
           id="zoom-out-btn"
           title="Zoom Out"
-          className="size-12 backdrop-blur-xl bg-black/30 border border-gold-700 text-gold-400 flex items-center justify-center"
+          className="size-12 backdrop-blur-xl bg-black/30 border border-gold-500/30 text-gold-400 flex items-center justify-center"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -786,7 +786,7 @@ export default function ZmapsPage() {
         <button
           id="reset-btn"
           title="Reset View"
-          className="size-12 backdrop-blur-xl bg-black/30 border border-gold-700 text-gold-400 flex items-center justify-center"
+          className="size-12 backdrop-blur-xl bg-black/30 border border-gold-500/30 text-gold-400 flex items-center justify-center"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -833,9 +833,9 @@ export default function ZmapsPage() {
       )}
 
       {/* Left Sidebar Cart */}
-      <div className={`fixed top-20 left-0 bottom-0 w-full sm:w-96 lg:w-[400px] backdrop-blur-xl bg-black/90 border-r border-gold-700/30 z-40 flex flex-col transition-transform duration-300 ${showCart ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      <div className={`fixed top-16 left-0 bottom-0 w-full sm:w-96 lg:w-[400px] backdrop-blur-xl bg-black/30 border-r border-gold-500/20 z-50 lg:z-40 flex flex-col transition-transform duration-300 ${showCart ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         {/* Cart Header */}
-        <div className="p-4 sm:p-6 border-b border-gold-700/30">
+        <div className="p-4 sm:p-6 border-b border-gold-500/20">
           <div className="flex justify-between items-start mb-4">
             <h3 className="text-xl sm:text-2xl font-bold text-gold-300">PARCELS</h3>
             <button
@@ -934,7 +934,7 @@ export default function ZmapsPage() {
 
         {/* Cart Footer */}
         {cartItems.length > 0 && (
-          <div className="p-4 sm:p-6 border-t border-gold-700/30 bg-black/60 space-y-4">
+          <div className="p-4 sm:p-6 border-t border-gold-500/20 bg-black/60 space-y-4">
             <div className="flex justify-between items-center text-lg">
               <span className="text-gold-400">Total</span>
               <span className="text-gold-300 font-bold">{(cartItems.length * ZMAP_PRICE).toFixed(4)} ZEC</span>
