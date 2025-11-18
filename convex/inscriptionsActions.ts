@@ -621,6 +621,32 @@ export const finalizeCommitAndGetRevealPreimageAction = action({
       }
       throw e;
     }
+    // Small propagation delay to restore previous reliability: give broadcasters time to
+    // see the commit before we ask the client to sign/broadcast the reveal. Historically
+    // our server-signed flow used 8-10s. We replicate that here and optionally poll Tatum
+    // if an API key is present (best-effort; we proceed even if polling fails).
+    try {
+      const tatumKey = process.env.TATUM_API_KEY || '';
+      const waitUntil = Date.now() + 8000; // 8s minimum wait
+      while (Date.now() < waitUntil) {
+        await new Promise(r => setTimeout(r, 250));
+      }
+      if (tatumKey) {
+        const rpc = 'https://api.tatum.io/v3/blockchain/node/zcash-mainnet';
+        const maxPolls = 5;
+        for (let i = 0; i < maxPolls; i++) {
+          try {
+            const r = await fetch(rpc, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-api-key': tatumKey },
+              body: JSON.stringify({ jsonrpc:'2.0', method:'getrawtransaction', params:[commitTxid, 1], id:1 })
+            });
+            if (r.ok) { const j:any = await r.json(); if (j?.result) break; }
+          } catch {}
+          await new Promise(r => setTimeout(r, 1500));
+        }
+      }
+    } catch {}
     const revealSigHash = buildRevealSighash({
       commitTxid,
       address: rec.address,
@@ -655,9 +681,21 @@ export const broadcastSignedRevealAction = action({
       signatureRaw64: hexToBytes(args.revealSignatureRawHex),
       consensusBranchId: rec.consensusBranchId,
     });
-    let revealTxid: string;
+    // Broadcast reveal with minimal retries to handle transient propagation races even after the
+    // above delay. We keep this gentle (3 attempts) to avoid hammering providers.
+    let revealTxid: string | undefined;
     try {
-      revealTxid = await broadcastTransaction(revealHex);
+      const attempts = 3;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          revealTxid = await broadcastTransaction(revealHex);
+          break;
+        } catch (err: any) {
+          if (i === attempts - 1) throw err;
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+      if (!revealTxid) throw new Error('Broadcast failed: reveal did not return txid');
     } catch (e: any) {
       // Always release lock on failure
       try { await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: rec.utxoTxid, vout: rec.utxoVout }); } catch {}

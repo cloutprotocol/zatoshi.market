@@ -87,6 +87,47 @@ function timeoutSignal(ms: number): AbortSignal | undefined {
   return undefined;
 }
 
+// Tolerant txid extraction: accepts nested JSON or plain text bodies containing a 64-hex txid.
+function is64Hex(v: any): v is string {
+  return typeof v === 'string' && /^[0-9a-fA-F]{64}$/.test(v);
+}
+function findTxidDeep(o: any): string | null {
+  if (o == null) return null;
+  if (is64Hex(o)) return o;
+  if (Array.isArray(o)) {
+    for (const it of o) { const f = findTxidDeep(it); if (f) return f; }
+    return null;
+  }
+  if (typeof o === 'object') {
+    const candidates = ['txid', 'txId', 'result', 'data', 'hash', 'transaction_hash', 'tx_hash', 'transactionId'];
+    for (const k of candidates) {
+      if (k in o) { const f = findTxidDeep(o[k]); if (f) return f; }
+    }
+    for (const k of Object.keys(o)) { const f = findTxidDeep(o[k]); if (f) return f; }
+  }
+  return null;
+}
+async function extractTxidFromResponse(provider: string, r: Response): Promise<{ txid: string | null; snippet: string; ct: string; status: number }>{
+  const ct = r.headers.get('content-type') || '';
+  const text = await r.text();
+  const snippet = text.slice(0, 240).replace(/[\n\r\t]+/g, ' ');
+  try {
+    const j = JSON.parse(text);
+    const deep = findTxidDeep(j);
+    if (deep) {
+      console.log(`[broadcast][${provider}] parsed txid from JSON`, { status: r.status, ct, txid: deep.slice(0, 16) + '…' });
+      return { txid: deep, snippet, ct, status: r.status };
+    }
+  } catch {}
+  const m = text.match(/[0-9a-fA-F]{64}/);
+  if (m) {
+    console.log(`[broadcast][${provider}] extracted txid via regex`, { status: r.status, ct, txid: m[0].slice(0, 16) + '…' });
+    return { txid: m[0], snippet, ct, status: r.status };
+  }
+  console.warn(`[broadcast][${provider}] no txid in response`, { status: r.status, ct, snippet });
+  return { txid: null, snippet, ct, status: r.status };
+}
+
 export function createRevealScript(pubKey: Uint8Array, inscriptionChunks: (Uint8Array|number)[]): Uint8Array {
   const parts: Uint8Array[] = [];
   parts.push(new Uint8Array([pubKey.length]), pubKey);
@@ -259,69 +300,49 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
 export async function broadcastTransaction(hex: string, tatumKey?: string): Promise<string> {
   const SIGNAL = timeoutSignal(8000);
 
-  // Helper to parse varied provider responses into a txid
-  const parseTxid = async (r: Response): Promise<string | null> => {
-    const ct = r.headers.get('content-type') || '';
-    try {
-      if (ct.includes('application/json')) {
-        const j: any = await r.json();
-        const t = j?.result || j?.txid || (typeof j === 'string' ? j : null);
-        return typeof t === 'string' ? t : null;
-      } else {
-        const text = await r.text();
-        const m = text.match(/[0-9a-fA-F]{64}/);
-        return m ? m[0] : null;
-      }
-    } catch { return null; }
-  };
-
-  // 1) Prefer your site proxy (Next.js) to avoid regional CF issues
-  {
-    const bases = [
-      process.env.NEXT_PUBLIC_SITE_URL,
-      process.env.PUBLIC_SITE_URL,
-      process.env.SITE_URL,
-      process.env.APP_ORIGIN,
-      process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
-      'https://zatoshi.market',
-    ].filter(Boolean) as string[];
-    for (const base of bases) {
-      try {
-        const origin = base.startsWith('http') ? base : `https://${base}`;
-        const url = `${origin.replace(/\/$/, '')}/api/zerdinals-utxos/send-transaction`;
-        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rawTransaction: hex }), signal: SIGNAL });
-        if (r.ok) {
-          const txid = await parseTxid(r);
-          if (txid) return txid;
-        }
-      } catch (_) { /* try next */ }
-    }
-  }
-
-  // 2) Zerdinals helper relay
+  // 1) Zerdinals helper relay (previous default) — most likely to accept reveal immediately
+  //    after commit because it sees the commit right away. We use this as the first option
+  //    to restore prior reliability during ongoing fee/platform changes.
   try {
-    const r = await fetch('https://utxos.zerdinals.com/api/send-transaction', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rawTransaction: hex }), signal: SIGNAL });
+    const r = await fetch('https://utxos.zerdinals.com/api/send-transaction', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rawTransaction: hex }), signal: SIGNAL
+    });
     if (r.ok) {
-      const txid = await parseTxid(r);
+      const { txid } = await extractTxidFromResponse('zerdinals', r);
       if (txid) return txid;
     }
   } catch (_) {}
 
   // 3) Tatum JSON-RPC fallback
-  const r2 = await fetch('https://api.tatum.io/v3/blockchain/node/zcash-mainnet', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': tatumKey || process.env.TATUM_API_KEY || '' },
-    body: JSON.stringify({ jsonrpc: '2.0', method: 'sendrawtransaction', params: [hex], id: 1 }),
-    signal: SIGNAL,
-  });
-  let j2: any;
-  try { j2 = await r2.json(); } catch {
-    throw new Error(`Broadcast failed: invalid response (${r2.status}) from provider`);
-  }
-  if (j2?.error) throw new Error(j2.error?.message || JSON.stringify(j2.error));
-  const txid2 = j2?.result || j2?.txid || (typeof j2 === 'string' ? j2 : null);
-  if (!txid2 || typeof txid2 !== 'string') throw new Error('Broadcast failed: missing txid from provider');
-  return txid2;
+  try {
+    const r = await fetch('https://api.tatum.io/v3/blockchain/node/zcash-mainnet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': tatumKey || process.env.TATUM_API_KEY || '' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'sendrawtransaction', params: [hex], id: 1 }),
+      signal: SIGNAL,
+    });
+    if (r.ok) {
+      const { txid } = await extractTxidFromResponse('tatum', r);
+      if (txid) return txid;
+      // fallthrough if we couldn't parse
+    }
+  } catch (_) {}
+
+  // 4) Blockchair push (if available)
+  try {
+    const key = process.env.BLOCKCHAIR_API_KEY;
+    const url = key
+      ? `https://api.blockchair.com/zcash/push/transaction?key=${key}`
+      : `https://api.blockchair.com/zcash/push/transaction`;
+    const body = new URLSearchParams({ data: hex });
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body, signal: SIGNAL });
+    if (r.ok) {
+      const { txid } = await extractTxidFromResponse('blockchair', r);
+      if (txid) return txid;
+    }
+  } catch (_) {}
+
+  throw new Error('Broadcast failed: all providers returned non-txid responses');
 }
 
 export async function buildCommitTxHex(params: {
@@ -399,120 +420,33 @@ export async function buildRevealTxHex(params: {
   return bytesToHex(raw);
 }
 
-/**
- * Fetch UTXOs for an address with multi-provider fallbacks.
- *
- * Invariants:
- * - Returns an array (possibly empty) on any HTTP 200 JSON response.
- * - Throws only if all providers fail to respond OK (network outage).
- * - Normalizes diverse response shapes to { txid, vout, value } in zatoshis.
- *
- * Providers (in order):
- * 1. Blockchair (optionally with BLOCKCHAIR_API_KEY)
- * 2. Zerdinals helper
- * 3. Public explorers (best-effort)
- */
+// Exact pre-change provider order: Blockchair first, fallback to Zerdinals helper.
 export async function fetchUtxos(address: string): Promise<Utxo[]> {
-  const FETCH_TIMEOUT_MS = 7000;
-  // Normalize various upstream formats to our local Utxo shape
-  const normalize = (data: any): Utxo[] => {
-    const asList = (arr: any[]): Utxo[] => (arr || []).map((u: any) => ({
-      txid: u?.txid || u?.tx_hash || u?.transaction_hash || u?.hash,
-      vout: Number(u?.vout ?? u?.index ?? u?.output_index ?? 0),
-      value: Number(
-        u?.value ?? u?.satoshis ?? (Number.isFinite(u?.amount) ? Math.floor((u?.amount || 0) * 100000000) : 0)
-      ),
-    }))
-    .filter((u: Utxo) => !!u.txid && Number.isFinite(u.vout) && Number.isFinite(u.value));
-
-    if (!data) return [];
-    // SoChain shape: { status: 'success', data: { txs: [{ txid, output_no, value, ...}] } }
-    if (data?.status === 'success' && Array.isArray(data?.data?.txs)) {
-      return asList(
-        data.data.txs.map((t: any) => ({
-          txid: t?.txid,
-          vout: t?.output_no,
-          // SoChain value is decimal ZEC string
-          value: Math.floor(parseFloat(String(t?.value || '0')) * 100000000),
-        }))
-      );
-    }
-    if (Array.isArray(data)) return asList(data);
-    if (Array.isArray(data.utxos)) return asList(data.utxos);
-    if (Array.isArray(data.data)) return asList(data.data);
-    const keyed = data?.data?.[address] || data?.data?.[Object.keys(data?.data || {})[0]];
-    if (Array.isArray(keyed?.utxo)) return asList(keyed.utxo);
-    return [];
-  };
-
-  // 1) Blockchair (optionally with API key to avoid rate limits)
-  // Rationale: fastest and most complete when API key is present.
+  // Blockchair first
   try {
     const key = process.env.BLOCKCHAIR_API_KEY;
     const url = key
       ? `https://api.blockchair.com/zcash/dashboards/address/${address}?key=${key}`
       : `https://api.blockchair.com/zcash/dashboards/address/${address}`;
-    const r = await fetch(url, { signal: timeoutSignal(FETCH_TIMEOUT_MS) });
+    const r = await fetch(url);
     if (r.ok) {
       const j: any = await r.json();
-      const mapped = normalize(j);
-      return mapped; // may be empty when address has no UTXOs
+      const d = j?.data?.[address] || j?.data?.[Object.keys(j?.data || {})[0]];
+      const utxoArr: any[] = d?.utxo || [];
+      if (Array.isArray(utxoArr)) {
+        const mapped: Utxo[] = utxoArr.map((u: any) => ({
+          txid: u?.transaction_hash || u?.txid || u?.hash,
+          vout: Number(u?.index ?? u?.vout ?? 0),
+          value: Number(u?.value ?? 0),
+        })).filter((u: Utxo) => !!u.txid && Number.isFinite(u.vout) && Number.isFinite(u.value));
+        if (mapped.length > 0) return mapped;
+      }
     }
   } catch (_) {}
-
-  // 2) Your own site proxy (Next.js API). Prefer this over third-party gateways to
-  //    bypass regional Cloudflare issues and consolidate provider logic server-side.
-  //    We accept several envs + a hard-coded fallback to the production site.
-  {
-    const baseCandidates = [
-      process.env.NEXT_PUBLIC_SITE_URL,
-      process.env.PUBLIC_SITE_URL,
-      process.env.SITE_URL,
-      process.env.NEXT_PUBLIC_BASE_URL,
-      process.env.APP_ORIGIN,
-      process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
-      'https://zatoshi.market',
-    ].filter(Boolean) as string[];
-    for (const base of baseCandidates) {
-      try {
-        const origin = base.startsWith('http') ? base : `https://${base}`;
-        const url = `${origin.replace(/\/$/, '')}/api/zcash/utxos/${address}`;
-        const r = await fetch(url, { signal: timeoutSignal(FETCH_TIMEOUT_MS) });
-        if (!r.ok) continue;
-        const j = await r.json();
-        const mapped = normalize(j?.utxos ?? j);
-        return mapped; // may be empty
-      } catch (_) { /* continue */ }
-    }
-  }
-
-  // 2) Zerdinals helper (returns array)
-  try {
-    const r2 = await fetch(`https://utxos.zerdinals.com/api/utxos/${address}` , { signal: timeoutSignal(FETCH_TIMEOUT_MS) });
-    if (r2.ok) {
-      const j2 = await r2.json();
-      const mapped2 = normalize(j2);
-      return mapped2; // may be empty
-    }
-  } catch (_) {}
-
-  // 3) Public explorers (best-effort, no key)
-  const explorers = [
-    `https://zcashblockexplorer.com/api/addr/${address}/utxo`,
-    `https://api.zcha.in/v2/mainnet/accounts/${address}`,
-    `https://sochain.com/api/v2/get_tx_unspent/ZEC/${address}`,
-  ];
-  for (const url of explorers) {
-    try {
-      const r = await fetch(url, { signal: timeoutSignal(FETCH_TIMEOUT_MS) });
-      if (!r.ok) continue;
-      const j = await r.json();
-      const mapped = normalize(j);
-      return mapped; // may be empty
-    } catch (_) { /* continue */ }
-  }
-
-  throw new Error('UTXO fetch failed');
+  // Fallback to Zerdinals helper service
+  const r2 = await fetch(`https://utxos.zerdinals.com/api/utxos/${address}`);
+  if (!r2.ok) throw new Error('UTXO fetch failed');
+  return r2.json() as Promise<Utxo[]>;
 }
 // Check if a given outpoint is inscribed.
 // Primary: Zerdinals indexer. Fallback: Heuristic check via raw transaction
