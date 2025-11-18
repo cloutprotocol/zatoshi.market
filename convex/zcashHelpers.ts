@@ -56,15 +56,32 @@ export function buildInscriptionChunks(contentType: string, data: string | Uint8
   return [utf8("ord"), 0x51, utf8(contentType), 0x00, (typeof data === 'string' ? utf8(data) : data)];
 }
 
+function pushData(data: Uint8Array): Uint8Array {
+  const len = data.length;
+  if (len <= 75) {
+    return concatBytes([new Uint8Array([len]), data]);
+  } else if (len <= 0xff) {
+    return concatBytes([new Uint8Array([0x4c, len]), data]);
+  } else if (len <= 0xffff) {
+    const lenBuf = new Uint8Array(2);
+    new DataView(lenBuf.buffer).setUint16(0, len, true);
+    return concatBytes([new Uint8Array([0x4d]), lenBuf, data]);
+  } else {
+    const lenBuf = new Uint8Array(4);
+    new DataView(lenBuf.buffer).setUint32(0, len, true);
+    return concatBytes([new Uint8Array([0x4e]), lenBuf, data]);
+  }
+}
+
 export function buildInscriptionDataBuffer(content: string | Uint8Array, contentType: string): Uint8Array {
   const body = (typeof content === 'string') ? utf8(content) : content;
   const mime = utf8(contentType);
   return concatBytes([
-    new Uint8Array([3]), utf8("ord"),
-    new Uint8Array([0x51]),
-    new Uint8Array([mime.length]), mime,
-    new Uint8Array([0x00]),
-    new Uint8Array([body.length]), body
+    pushData(utf8("ord")),
+    new Uint8Array([0x01, 0x51]),  // Push 1 byte: 0x51
+    pushData(mime),
+    new Uint8Array([0x01, 0x00]),  // Push 1 byte: 0x00
+    pushData(body)
   ]);
 }
 
@@ -434,11 +451,25 @@ export async function fetchUtxos(address: string): Promise<Utxo[]> {
       const d = j?.data?.[address] || j?.data?.[Object.keys(j?.data || {})[0]];
       const utxoArr: any[] = d?.utxo || [];
       if (Array.isArray(utxoArr)) {
-        const mapped: Utxo[] = utxoArr.map((u: any) => ({
-          txid: u?.transaction_hash || u?.txid || u?.hash,
-          vout: Number(u?.index ?? u?.vout ?? 0),
-          value: Number(u?.value ?? 0),
-        })).filter((u: Utxo) => !!u.txid && Number.isFinite(u.vout) && Number.isFinite(u.value));
+        const mapped: Utxo[] = utxoArr.map((u: any) => {
+          const rawVal = (u?.value ?? u?.satoshis ?? u?.amount);
+          let value: number;
+          if (typeof rawVal === 'string') {
+            const f = parseFloat(rawVal);
+            if (!Number.isFinite(f)) value = 0;
+            else if (rawVal.includes('.') || f < 1) value = Math.round(f * 1e8);
+            else value = Math.round(f);
+          } else if (typeof rawVal === 'number') {
+            if (Number.isInteger(rawVal)) value = rawVal;
+            else if (rawVal > 0 && rawVal < 1) value = Math.round(rawVal * 1e8);
+            else value = Math.round(rawVal);
+          } else {
+            value = 0;
+          }
+          const vout = Number(u?.index ?? u?.vout ?? u?.n ?? 0);
+          const txid = u?.transaction_hash || u?.txid || u?.hash || u?.tx_hash;
+          return { txid, vout, value } as Utxo;
+        }).filter((u: Utxo) => !!u.txid && Number.isFinite(u.vout) && Number.isFinite(u.value));
         if (mapped.length > 0) return mapped;
       }
     }
@@ -458,8 +489,15 @@ export async function checkInscriptionAt(location: string){
     if (!r.ok) throw new Error(`indexer status ${r.status}`);
     const j = await r.json();
     if (j?.code === 404) return false;
-    // Any result counts as inscribed
-    return true;
+    // Prefer explicit positive indicators; avoid treating empty/unknown JSON as inscribed.
+    const hasPositiveSignal = Boolean(
+      j?.inscriptionId ||
+      (Array.isArray(j?.inscriptions) && j.inscriptions.length > 0) ||
+      (Array.isArray(j?.locations) && j.locations.length > 0) ||
+      j?.inscribed === true ||
+      j?.result === 'ok' || j?.status === 'ok'
+    );
+    return hasPositiveSignal;
   } catch (_) {
     // Fallback to on-node heuristic via Tatum RPC
     try {
@@ -479,9 +517,8 @@ export async function checkInscriptionAt(location: string){
       if (hasOrd && vout === 0) return true;
       return false;
     } catch {
-      // When in doubt, be safe and assume inscribed is false to allow progress only when indexer is back
-      // However, our callers treat false as spendable; to avoid accidental burns, prefer to return true on failure
-      // But this would halt operations. We'll default to false here and rely on UI safety indicator.
+      // Default to not inscribed when we cannot verify; UI still warns users, and our reveal construction
+      // never consumes inscribed UTXOs created by our own flow.
       return false;
     }
   }

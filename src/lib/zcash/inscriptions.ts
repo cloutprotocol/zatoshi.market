@@ -36,15 +36,32 @@ export function buildInscriptionChunks(contentType: string, data: string | Buffe
   return [Buffer.from("ord","utf8"), 0x51, Buffer.from(contentType,"utf8"), 0x00, Buffer.isBuffer(data) ? data : Buffer.from(data, 'utf8')];
 }
 
+function pushData(data: Buffer): Buffer {
+  const len = data.length;
+  if (len <= 75) {
+    return Buffer.concat([Buffer.from([len]), data]);
+  } else if (len <= 0xff) {
+    return Buffer.concat([Buffer.from([0x4c, len]), data]);
+  } else if (len <= 0xffff) {
+    const lenBuf = Buffer.allocUnsafe(2);
+    lenBuf.writeUInt16LE(len);
+    return Buffer.concat([Buffer.from([0x4d]), lenBuf, data]);
+  } else {
+    const lenBuf = Buffer.allocUnsafe(4);
+    lenBuf.writeUInt32LE(len);
+    return Buffer.concat([Buffer.from([0x4e]), lenBuf, data]);
+  }
+}
+
 export function buildInscriptionDataBuffer(content: string | Buffer, contentType: string): Buffer {
   const body = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf8');
   const mime = Buffer.from(contentType, 'utf8');
   return Buffer.concat([
-    Buffer.from([3]), Buffer.from("ord","utf8"),
-    Buffer.from([0x51]),
-    Buffer.from([mime.length]), mime,
-    Buffer.from([0x00]),
-    Buffer.from([body.length]), body
+    pushData(Buffer.from("ord","utf8")),
+    Buffer.from([0x01, 0x51]),  // Push 1 byte: 0x51
+    pushData(mime),
+    Buffer.from([0x01, 0x00]),  // Push 1 byte: 0x00
+    pushData(body)
   ]);
 }
 

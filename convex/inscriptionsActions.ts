@@ -89,6 +89,11 @@ export const mintInscriptionAction = action({
       const required = inscriptionAmount + fee + platformFeeZats;
       // Filter safe (non-inscribed) UTXOs first; if indexer fails, abort
       currentStep = "filtering UTXOs";
+      try {
+        const maxVal = utxos.reduce((m:any,u:any)=>Math.max(m, u?.value||0), 0);
+        const minVal = utxos.reduce((m:any,u:any)=>Math.min(m, u?.value||0), (utxos[0]?.value ?? 0)||0);
+        console.log(`[utxo][mint] ${args.address} total=${utxos.length} required=${required} max=${maxVal} min=${minVal}`);
+      } catch {}
       const candidates = utxos.filter(u => u.value >= required);
       const safe: typeof candidates = [];
 
@@ -117,7 +122,8 @@ export const mintInscriptionAction = action({
         throw new Error(
           `Not enough spendable funds for this inscription. ` +
           `You need at least ${required} zats available in a single input. ` +
-          `Fresh deposits work best. Inputs holding inscriptions are protected and won't be used.`
+          `Inputs holding inscriptions are protected and won't be used. ` +
+          `Deposit a fresh UTXO of ≥ ${required} zats, or use the Split UTXOs tool to prepare one.`
         );
       }
 
@@ -171,9 +177,16 @@ export const mintInscriptionAction = action({
       try {
         currentStep = "broadcasting commit tx";
         commitTxid = await broadcastTransaction(commitRebuilt.hex);
-      } catch (e) {
+      } catch (e: any) {
         // unlock on failure
         await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxo.txid, vout: utxo.vout });
+        const msg = e?.message ? String(e.message) : String(e);
+        if (msg.toLowerCase().includes('unpaid action')) {
+          throw new Error('Network rejected TX due to ZIP-317 fee policy. Increase fee to at least 50,000 zats and retry.');
+        }
+        if (msg.toLowerCase().includes('insufficient fee') || msg.toLowerCase().includes('min fee')) {
+          throw new Error('Broadcast rejected for insufficient fee. Bump your fee (≥ 50,000 zats recommended) and retry.');
+        }
         throw e;
       }
 
@@ -194,7 +207,21 @@ export const mintInscriptionAction = action({
       });
 
       currentStep = "broadcasting reveal tx";
-      const revealTxid = await broadcastTransaction(revealHex);
+      let revealTxid: string;
+      try {
+        revealTxid = await broadcastTransaction(revealHex);
+      } catch (e: any) {
+        // Always release lock on failure
+        try { await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxo.txid, vout: utxo.vout }); } catch {}
+        const msg = e?.message ? String(e.message) : String(e);
+        if (msg.toLowerCase().includes('unpaid action')) {
+          throw new Error('Network rejected TX due to ZIP-317 fee policy. Increase fee to at least 50,000 zats and retry.');
+        }
+        if (msg.toLowerCase().includes('insufficient fee') || msg.toLowerCase().includes('min fee')) {
+          throw new Error('Broadcast rejected for insufficient fee. Bump your fee (≥ 50,000 zats recommended) and retry.');
+        }
+        throw e;
+      }
       const inscriptionId = `${revealTxid}i0`;
 
       // Optionally release lock now, or leave to confirmation watchdog
@@ -324,8 +351,12 @@ export const buildUnsignedSplitAction = action({
     const minSplitFee = 50000; // fixed floor to satisfy mempool policy
     const effectiveFee = Math.max(args.fee, minSplitFee);
     const required = args.splitCount * args.targetAmount + effectiveFee;
+    try {
+      const maxVal = utxos.reduce((m:any,u:any)=>Math.max(m, u?.value||0), 0);
+      console.log(`[utxo][split] ${address} total=${utxos.length} required=${required} max=${maxVal}`);
+    } catch {}
 
-    // SIMPLE SPLIT: pick a single, sufficiently large, non-inscribed UTXO from Blockchair data
+    // Gather spendable (non-inscribed) UTXOs
     const spendable: typeof utxos = [];
     for (const u of utxos) {
       const hasInsc = await checkInscriptionAt(`${u.txid}:${u.vout}`);
@@ -334,15 +365,20 @@ export const buildUnsignedSplitAction = action({
     if (spendable.length === 0) {
       throw new Error('Not enough spendable funds. All available UTXOs are inscribed.');
     }
-    // Choose the smallest UTXO that still meets the requirement to minimize change
-    const single = spendable
-      .filter(u => u.value >= required)
-      .sort((a,b) => a.value - b.value)[0];
-    if (!single) {
-      throw new Error(`Need a single UTXO with at least ${required} zats. Consolidate or add funds.`);
+    // Multi-input selection: choose the smallest set of UTXOs (greedy by largest first) to meet the requirement
+    const sorted = spendable.slice().sort((a,b)=>b.value - a.value);
+    const selected: typeof spendable = [];
+    let total = 0;
+    for (const u of sorted) {
+      if (total >= required) break;
+      selected.push(u);
+      total += u.value;
     }
-    const selected: typeof spendable = [single];
-    const total = single.value;
+    if (total < required) {
+      const have = total;
+      const need = required;
+      throw new Error(`Not enough spendable funds to split. Need ${need} zats total; only ${have} zats available in clean UTXOs.`);
+    }
 
     // Create a context id up front so we can tag locks and make retries idempotent
     const contextId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -516,6 +552,11 @@ export const buildUnsignedCommitAction = action({
       throw new Error('Unable to check your spendable funds right now. Please try again in a few seconds.');
     }
     const required = inscriptionAmount + fee + platformFeeZats;
+    try {
+      const maxVal = utxos.reduce((m:any,u:any)=>Math.max(m, u?.value||0), 0);
+      const minVal = utxos.reduce((m:any,u:any)=>Math.min(m, u?.value||0), (utxos[0]?.value ?? 0)||0);
+      console.log(`[utxo][unsigned-commit] ${args.address} total=${utxos.length} required=${required} max=${maxVal} min=${minVal}`);
+    } catch {}
     const candidates = utxos.filter(u => u.value >= required);
     let utxo = undefined as undefined | typeof candidates[number];
     for (const c of candidates) {
@@ -526,7 +567,8 @@ export const buildUnsignedCommitAction = action({
       throw new Error(
         `Not enough spendable funds for this inscription. ` +
         `You need at least ${required} zats available in a single input. ` +
-        `Fresh deposits work best. Inputs holding inscriptions are protected and won't be used.`
+        `Inputs holding inscriptions are protected and won't be used. ` +
+        `Deposit a fresh UTXO of ≥ ${required} zats, or use the Split UTXOs tool to prepare one.`
       );
     }
 

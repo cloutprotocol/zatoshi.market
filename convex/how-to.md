@@ -95,6 +95,12 @@ See: `convex/schema.ts` for definitions.
 - Output Order (commit): `[inscription P2SH, platform fee P2PKH, change (if > 546)]`.
 - Reveal Wait: after broadcasting commit, wait ~8 seconds before reveal to avoid propagation races.
 
+### Funding & UTXO Requirements
+
+- Default minimum single‑input for a mint = `inscriptionAmount (60k)` + `fee (≥ 50k)` + `platform fee (100k)` = `≥ 210,000` zats.
+- Selection requires a single clean (non‑inscribed) UTXO ≥ required. Multiple small UTXOs will not be combined.
+- Best practice: deposit one fresh UTXO ≥ the requirement, or use the Split UTXOs tool to prepare exact‑sized inputs.
+
 ---
 
 ## Provider Behavior
@@ -128,6 +134,8 @@ See: `convex/schema.ts` for definitions.
 - Network rejected due to ZIP‑317: increase fee to `≥ 50,000` zats.
 - Broadcast failed: non‑txid: check broadcast logs; if commit is new, wait 8–15s and retry reveal; tolerant parser logs will show the response snippet.
 - Missing fee output: ensure commit assembly includes platform fee; see `convex/treasury.config.ts` and commit assembly in `convex/zcashHelpers.ts`.
+- Need a single UTXO with at least X zats: prepare one UTXO ≥ required (fresh deposit recommended) or use the Split UTXOs tool; inputs with inscriptions are intentionally excluded.
+- Not enough spendable funds for this inscription: same as above; ensure a clean UTXO ≥ required (inscribed UTXOs are protected and won’t be used).
 
 ---
 
@@ -157,4 +165,3 @@ See: `convex/schema.ts` for definitions.
 - [ ] `npx convex push` (schema/functions up to date)
 - [ ] `npx convex deploy`
 - [ ] Smoke test: commit has 2 outputs (inscription + fee), reveal has 1 output, inscription record persisted
-
