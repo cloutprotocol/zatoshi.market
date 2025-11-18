@@ -18,6 +18,7 @@ import {
   PLATFORM_FEES,
   TREASURY_WALLET,
   calculateTotalCost,
+  calculateImageInscriptionFees,
   formatZEC,
   formatUSD,
   isValidZcashName,
@@ -36,7 +37,7 @@ function InscribePageContent() {
   }
   const { wallet, isConnected } = useWallet();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'names' | 'text' | 'zrc20' | 'utxo' | 'history'>('names');
+  const [activeTab, setActiveTab] = useState<'names' | 'text' | 'images' | 'zrc20' | 'utxo' | 'history'>('names');
 
   // Name registration form
   const [nameInput, setNameInput] = useState('');
@@ -46,6 +47,11 @@ function InscribePageContent() {
   // Text inscription form
   const [textContent, setTextContent] = useState('');
   const [contentType, setContentType] = useState('text/plain');
+
+  // Image inscription form
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // ZRC-20 form
   const [zrcOp, setZrcOp] = useState<'deploy'|'mint'|'transfer'>('mint');
@@ -165,6 +171,103 @@ function InscribePageContent() {
       console.error('Inscription error:', err);
       setError(err instanceof Error ? err.message : 'Failed to create inscription');
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFileSelect = async (file: File) => {
+    // Validate file type
+    const validTypes = ['image/png', 'image/svg+xml'];
+    if (!validTypes.includes(file.type)) {
+      setError('Please upload a PNG or SVG file');
+      return;
+    }
+
+    // Validate file size (max 4MB, but recommend <400KB)
+    const maxSize = 4 * 1024 * 1024; // 4MB
+    if (file.size > maxSize) {
+      setError('File size must be less than 4MB');
+      return;
+    }
+
+    setImageFile(file);
+    setError(null);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setImagePreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleImageInscription = async () => {
+    if (!wallet?.privateKey || !wallet?.address) {
+      setError('Please connect your wallet first');
+      return;
+    }
+
+    if (!imageFile) {
+      setError('Please select an image to inscribe');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      // Calculate fees based on file size
+      const fees = calculateImageInscriptionFees(imageFile.size);
+
+      // Read file as base64
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const base64 = e.target?.result as string;
+          // Remove data URL prefix to get just the base64 content
+          const base64Data = base64.split(',')[1];
+
+          const mimeType = imageFile.type;
+          setConfirmTitle(`Confirm ${imageFile.type === 'image/svg+xml' ? 'SVG' : 'PNG'} Inscription`);
+          setPendingArgs({
+            content: base64Data,
+            contentType: mimeType,
+            type: 'image',
+            inscriptionAmount: fees.inscriptionOutput,
+            fee: fees.networkFee
+          });
+          setConfirmOpen(true);
+        } catch (err) {
+          console.error('Image processing error:', err);
+          setError(err instanceof Error ? err.message : 'Failed to process image');
+        } finally {
+          setLoading(false);
+        }
+      };
+      reader.readAsDataURL(imageFile);
+    } catch (err) {
+      console.error('Image inscription error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create inscription');
       setLoading(false);
     }
   };
@@ -511,6 +614,17 @@ function InscribePageContent() {
           </button>
 
           <button
+            onClick={() => setActiveTab('images')}
+            className={`flex-1 min-w-0 px-3 py-2 font-bold transition-colors ${
+              activeTab === 'images'
+                ? 'bg-gold-500 text-black'
+                : 'bg-black/40 border border-gold-500/30 text-gold-400'
+            }`}
+          >
+            <div className="text-xs whitespace-nowrap">Images</div>
+          </button>
+
+          <button
             onClick={() => setActiveTab('zrc20')}
             className={`flex-1 min-w-0 px-3 py-2 font-bold transition-colors ${
               activeTab === 'zrc20'
@@ -572,6 +686,18 @@ function InscribePageContent() {
               >
                 <div className="text-base">Text</div>
                 <div className="text-xs opacity-75">Inscriptions</div>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('images')}
+                className={`w-full text-left px-5 py-2.5 rounded font-bold transition-all ${
+                  activeTab === 'images'
+                    ? 'bg-gold-500 text-black'
+                    : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
+                }`}
+              >
+                <div className="text-base">Images</div>
+                <div className="text-xs opacity-75">PNG • SVG</div>
               </button>
 
               <button
@@ -891,6 +1017,194 @@ function InscribePageContent() {
                         <div className="text-gold-400/60 text-sm mb-1">Inscription ID</div>
                         <div className="text-gold-300 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded">
                           {result.inscriptionId}
+                        </div>
+                      </div>
+                      <div className="pt-3">
+                        <p className="text-xs text-gold-400/70">Note: New inscriptions may take up to ~5 minutes to appear in the public explorer.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* IMAGES INSCRIPTION TAB */}
+            {activeTab === 'images' && (
+              <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
+                <div className="text-center mb-4 sm:mb-6">
+                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">Image Inscription</h2>
+                  <p className="text-gold-400/60 text-xs sm:text-sm">
+                    Inscribe PNG or SVG images permanently on Zcash
+                  </p>
+                </div>
+
+                <div className="bg-black/40 border border-gold-500/30 rounded-lg p-4 sm:p-6">
+                  {/* Drag and Drop Area */}
+                  <div
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+                      isDragging
+                        ? 'border-gold-500 bg-gold-500/10'
+                        : 'border-gold-500/30 hover:border-gold-500/50'
+                    }`}
+                  >
+                    <input
+                      type="file"
+                      accept="image/png,image/svg+xml"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileSelect(file);
+                      }}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+
+                    {!imagePreview ? (
+                      <div className="space-y-4">
+                        <div className="mx-auto w-16 h-16 flex items-center justify-center bg-gold-500/10 rounded-full">
+                          <svg
+                            className="w-8 h-8 text-gold-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                            />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-gold-300 font-medium mb-1">
+                            Drop your image here or click to browse
+                          </p>
+                          <p className="text-gold-400/60 text-sm">
+                            PNG or SVG files • Max 4MB
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="relative mx-auto max-w-sm">
+                          <img
+                            src={imagePreview}
+                            alt="Preview"
+                            className="max-h-64 mx-auto rounded border border-gold-500/30"
+                          />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setImageFile(null);
+                              setImagePreview(null);
+                            }}
+                            className="absolute top-2 right-2 bg-black/80 hover:bg-black text-gold-400 hover:text-gold-300 p-2 rounded-full transition-colors"
+                          >
+                            <svg
+                              className="w-5 h-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                        <div className="text-sm space-y-1">
+                          <p className="text-gold-300 font-medium">{imageFile?.name}</p>
+                          <p className="text-gold-400/60">
+                            {imageFile?.type} • {((imageFile?.size || 0) / 1024).toFixed(2)} KB
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Fee Breakdown */}
+                  {imageFile && (() => {
+                    const fees = calculateImageInscriptionFees(imageFile.size);
+                    const isLargeFile = fees.fileSizeKB > 100;
+                    return (
+                      <div className="mt-4 space-y-3">
+                        <div className="p-3 bg-black/20 border border-gold-500/20 rounded">
+                          <div className="text-xs text-gold-400/80 space-y-1">
+                            <div className="flex justify-between">
+                              <span>File Size:</span>
+                              <span className="font-medium text-gold-300">{fees.fileSizeKB.toFixed(2)} KB</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Estimated TX Size:</span>
+                              <span className="font-medium text-gold-300">{((500 + imageFile.size + 200) / 1024).toFixed(2)} KB</span>
+                            </div>
+                          </div>
+                        </div>
+                        {isLargeFile && (
+                          <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded">
+                            <div className="flex items-start gap-2">
+                              <svg className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <div className="text-xs text-yellow-400/90">
+                                <p className="font-medium mb-1">Large File Notice</p>
+                                <p className="text-yellow-400/70">This file is {fees.fileSizeKB.toFixed(0)}KB. Network fees increase with file size. Consider optimizing your image to reduce costs.</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        <FeeBreakdown
+                          platformFee={fees.platformFee}
+                          networkFee={fees.networkFee}
+                          inscriptionOutput={fees.inscriptionOutput}
+                          total={fees.total}
+                        />
+                      </div>
+                    );
+                  })()}
+
+                  {/* Inscribe Button */}
+                  <button
+                    onClick={handleImageInscription}
+                    disabled={loading || !isConnected || !imageFile}
+                    className="w-full mt-4 px-4 py-2.5 sm:px-5 sm:py-3 bg-gold-500 text-black font-bold text-sm sm:text-base rounded hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loading ? (
+                      <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : 'Inscribe Image'}
+                  </button>
+                </div>
+
+                {/* Success Message */}
+                {result && (
+                  <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-green-400">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="font-bold">Image Inscribed Successfully!</span>
+                      </div>
+                      <div className="text-sm space-y-1">
+                        <div className="text-gold-400/80">
+                          <span className="font-medium">Transaction ID:</span>
+                          <div className="font-mono text-xs break-all mt-1 text-gold-300">
+                            {result.txid}
+                          </div>
+                        </div>
+                        <div className="text-gold-400/80">
+                          <span className="font-medium">Inscription ID:</span>
+                          <div className="font-mono text-xs break-all mt-1 text-gold-300">
+                            {result.inscriptionId}
+                          </div>
                         </div>
                       </div>
                       <div className="pt-3">

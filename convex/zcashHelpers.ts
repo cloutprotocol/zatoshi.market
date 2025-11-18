@@ -20,6 +20,14 @@ export type Utxo = { txid: string; vout: number; value: number };
 // Uint8Array utilities
 const TE = new TextEncoder();
 export function utf8(s: string): Uint8Array { return TE.encode(s); }
+export function base64ToBytes(base64: string): Uint8Array {
+  // Remove whitespace and handle URL-safe base64
+  const cleaned = base64.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+  // Add padding if needed
+  const padded = cleaned + '=='.slice(0, (4 - (cleaned.length % 4)) % 4);
+  // Decode using Buffer (available in Convex Node runtime)
+  return new Uint8Array(Buffer.from(padded, 'base64'));
+}
 export function hexToBytes(hex: string): Uint8Array {
   const h = hex.length % 2 === 0 ? hex : `0${hex}`;
   const arr = new Uint8Array(h.length / 2);
@@ -76,11 +84,13 @@ function pushData(data: Uint8Array): Uint8Array {
 export function buildInscriptionDataBuffer(content: string | Uint8Array, contentType: string): Uint8Array {
   const body = (typeof content === 'string') ? utf8(content) : content;
   const mime = utf8(contentType);
+  // Ordinals envelope format (as used by Zerdinals):
+  // OP_PUSH "ord" | OP_PUSH 0x01 | OP_PUSH <mime> | OP_PUSH 0x00 | OP_PUSH <content>
   return concatBytes([
     pushData(utf8("ord")),
-    new Uint8Array([0x01, 0x51]),  // Push 1 byte: 0x51
+    pushData(new Uint8Array([0x01])),  // Content type field tag (byte value 0x01)
     pushData(mime),
-    new Uint8Array([0x01, 0x00]),  // Push 1 byte: 0x00
+    pushData(new Uint8Array([0x00])),  // Content field tag (byte value 0x00)
     pushData(body)
   ]);
 }

@@ -56,11 +56,13 @@ function pushData(data: Buffer): Buffer {
 export function buildInscriptionDataBuffer(content: string | Buffer, contentType: string): Buffer {
   const body = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf8');
   const mime = Buffer.from(contentType, 'utf8');
+  // Ordinals envelope format (as used by Zerdinals):
+  // OP_PUSH "ord" | OP_PUSH 0x01 | OP_PUSH <mime> | OP_PUSH 0x00 | OP_PUSH <content>
   return Buffer.concat([
     pushData(Buffer.from("ord","utf8")),
-    Buffer.from([0x01, 0x51]),  // Push 1 byte: 0x51
+    pushData(Buffer.from([0x01])),  // Content type field tag (byte value 0x01)
     pushData(mime),
-    Buffer.from([0x01, 0x00]),  // Push 1 byte: 0x00
+    pushData(Buffer.from([0x00])),  // Content field tag (byte value 0x00)
     pushData(body)
   ]);
 }

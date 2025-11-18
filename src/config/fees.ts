@@ -26,6 +26,9 @@ export const PLATFORM_FEES = {
  */
 import { TREASURY_ADDRESS, PLATFORM_FEE_ZATS } from './treasury.config';
 
+// Re-export for convenience
+export { PLATFORM_FEE_ZATS };
+
 export const TREASURY_WALLET = {
   address: TREASURY_ADDRESS,
   isDev: process.env.NODE_ENV === 'development',
@@ -45,6 +48,48 @@ export const calculateTotalCost = (platformFee: number): {
   inscriptionOutput: PLATFORM_FEES.INSCRIPTION_OUTPUT,
   total: platformFee + PLATFORM_FEES.NETWORK_FEE_ESTIMATE + PLATFORM_FEES.INSCRIPTION_OUTPUT,
 });
+
+/**
+ * Calculate fees for image inscriptions based on file size
+ * Implements ZIP-317 fee calculation with minimum floor
+ *
+ * @param fileSizeBytes - Size of the image file in bytes
+ * @returns Fee breakdown with network fee based on transaction size
+ */
+export const calculateImageInscriptionFees = (fileSizeBytes: number): {
+  platformFee: number;
+  networkFee: number;
+  inscriptionOutput: number;
+  total: number;
+  fileSizeKB: number;
+} => {
+  const fileSizeKB = fileSizeBytes / 1024;
+
+  // ZIP-317 fee calculation
+  // Base tx overhead: ~500 bytes (version, inputs, outputs, etc.)
+  // Inscription data: fileSizeBytes
+  // Witness/script overhead: ~200 bytes
+  const estimatedTxSize = 500 + fileSizeBytes + 200;
+
+  // ZIP-317: 1000 zats per 1000 bytes (1 zat/byte minimum)
+  // But we need to account for mempool policy - use 10 zats/byte for safety
+  const calculatedFee = Math.ceil(estimatedTxSize * 10);
+
+  // Enforce minimum fee floor (50,000 zats) to avoid "unpaid action limit exceeded"
+  const ZIP_317_FLOOR = 50000;
+  const networkFee = Math.max(calculatedFee, ZIP_317_FLOOR);
+
+  const platformFee = PLATFORM_FEE_ZATS; // 100,000 zats
+  const inscriptionOutput = 60000; // Standard inscription output
+
+  return {
+    platformFee,
+    networkFee,
+    inscriptionOutput,
+    total: platformFee + networkFee + inscriptionOutput,
+    fileSizeKB,
+  };
+};
 
 /**
  * Convert zatoshis to ZEC

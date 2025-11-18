@@ -35,6 +35,7 @@ import {
   buildSplitSighashes,
   assembleSplitTxHexMulti,
   utf8,
+  base64ToBytes,
 } from "./zcashHelpers";
 import { PLATFORM_FEE_ZATS, TREASURY_ADDRESS } from './treasury.config';
 import { hmac } from "@noble/hashes/hmac";
@@ -574,7 +575,9 @@ export const buildUnsignedCommitAction = action({
 
     // Build scripts/data
     const pubKey = hexToBytes(args.pubKeyHex);
-    const chunks = buildInscriptionChunks(contentType, contentStr);
+    // For images, decode base64 to bytes; for text/json, use string as-is
+    const contentData = args.type === 'image' ? base64ToBytes(contentStr) : contentStr;
+    const chunks = buildInscriptionChunks(contentType, contentData);
     const redeemScript = createRevealScript(pubKey, chunks);
     const p2sh = p2shFromRedeem(redeemScript);
     let consensusBranchId: number;
@@ -613,7 +616,7 @@ export const buildUnsignedCommitAction = action({
       pubKeyHex: args.pubKeyHex,
       redeemScriptHex: bytesToHex(redeemScript),
       p2shScriptHex: bytesToHex(p2sh.script),
-      inscriptionDataHex: bytesToHex(buildInscriptionDataBuffer(contentStr, contentType)),
+      inscriptionDataHex: bytesToHex(buildInscriptionDataBuffer(contentData, contentType)),
       contentType,
       contentStr,
       type: args.type,
