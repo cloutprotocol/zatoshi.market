@@ -32,6 +32,8 @@ import {
   assembleRevealTxHex,
   buildSplitSighash,
   assembleSplitTxHex,
+  buildSplitSighashes,
+  assembleSplitTxHexMulti,
   utf8,
 } from "./zcashHelpers";
 import { hmac } from "@noble/hashes/hmac";
@@ -307,76 +309,142 @@ export const buildUnsignedSplitAction = action({
     fee: v.number(),
   },
   handler: async (ctx, args) => {
+    // Prune stale locks first to avoid deadlocks from old contexts
+    try { await ctx.runMutation(internal.utxoLocks.pruneStaleLocks, {} as any); } catch {}
+
     let utxos;
     try { utxos = await fetchUtxos(args.address); }
     catch (_) { throw new Error('Unable to check your spendable funds right now. Please try again in a few seconds.'); }
-    const required = args.splitCount * args.targetAmount + args.fee;
-    const src = utxos.find(u => u.value >= required);
-    if (!src) throw new Error(`Not enough spendable funds. Need at least ${required} zats to proceed. Add funds and try again.`);
-    // lock
-    const lock = await ctx.runMutation(internal.utxoLocks.lockUtxo, { txid: src.txid, vout: src.vout, address: args.address });
-    if (!lock.locked) throw new Error('UTXO lock failed; retry later');
+    const minSplitFee = 50000; // fixed floor to satisfy mempool policy
+    const effectiveFee = Math.max(args.fee, minSplitFee);
+    const required = args.splitCount * args.targetAmount + effectiveFee;
+
+    // SIMPLE SPLIT: pick a single, sufficiently large, non-inscribed UTXO from Blockchair data
+    const spendable: typeof utxos = [];
+    for (const u of utxos) {
+      const hasInsc = await checkInscriptionAt(`${u.txid}:${u.vout}`);
+      if (!hasInsc) spendable.push(u);
+    }
+    if (spendable.length === 0) {
+      throw new Error('Not enough spendable funds. All available UTXOs are inscribed.');
+    }
+    // Choose the smallest UTXO that still meets the requirement to minimize change
+    const single = spendable
+      .filter(u => u.value >= required)
+      .sort((a,b) => a.value - b.value)[0];
+    if (!single) {
+      throw new Error(`Need a single UTXO with at least ${required} zats. Consolidate or add funds.`);
+    }
+    const selected: typeof spendable = [single];
+    const total = single.value;
+
+    // Create a context id up front so we can tag locks and make retries idempotent
+    const contextId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+    // Lock all selected inputs atomically, attributed to this context
+    const lockRes = await ctx.runMutation(internal.utxoLocks.lockUtxos, { items: selected.map(s=>({txid:s.txid, vout:s.vout})), address: args.address, lockedBy: contextId } as any);
+    if (!lockRes?.success) throw new Error('UTXO lock failed; retry later');
 
     const pkh = addressToPkh(args.address);
     const outputs: { value: number; scriptPubKey: Uint8Array }[] = [];
     for (let i=0;i<args.splitCount;i++) outputs.push({ value: args.targetAmount, scriptPubKey: buildP2PKHScript(pkh) });
-    const change = src.value - required;
+    const change = total - required;
     if (change > 546) outputs.push({ value: change, scriptPubKey: buildP2PKHScript(pkh) });
-    const consensusBranchId = await getConsensusBranchId();
-    const sigHash = buildSplitSighash({ utxo: src, address: args.address, outputs, consensusBranchId });
+    try {
+      const consensusBranchId = await getConsensusBranchId();
+      const sighashes = buildSplitSighashes({ inputs: selected, address: args.address, outputs, consensusBranchId });
 
-    const contextId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-    await ctx.runMutation(internal.txContexts.create, {
-      contextId,
-      status: 'split_prepared',
-      utxoTxid: src.txid,
-      utxoVout: src.vout,
-      utxoValue: src.value,
-      address: args.address,
-      consensusBranchId,
-      inscriptionAmount: 0,
-      fee: args.fee,
-      platformFeeZats: 0,
-      platformTreasuryAddress: undefined,
-      pubKeyHex: args.pubKeyHex,
-      redeemScriptHex: '',
-      p2shScriptHex: '',
-      inscriptionDataHex: bytesToHex(utf8(JSON.stringify({ splitCount: args.splitCount, targetAmount: args.targetAmount }))),
-      contentType: 'split',
-      contentStr: 'split',
-      type: 'split',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      commitTxid: undefined,
-    });
-    return { contextId, splitSigHashHex: bytesToHex(sigHash) };
+      await ctx.runMutation(internal.txContexts.create, {
+        contextId,
+        status: 'split_prepared',
+        utxoTxid: selected[0].txid,
+        utxoVout: selected[0].vout,
+        utxoValue: selected[0].value,
+        address: args.address,
+        consensusBranchId,
+        inscriptionAmount: 0,
+        fee: effectiveFee,
+        platformFeeZats: 0,
+        platformTreasuryAddress: undefined,
+        pubKeyHex: args.pubKeyHex,
+        redeemScriptHex: '',
+        p2shScriptHex: '',
+        inscriptionDataHex: bytesToHex(utf8(JSON.stringify({ splitCount: args.splitCount, targetAmount: args.targetAmount, inputs: selected.map(s=>({ txid: s.txid, vout: s.vout, value: s.value })) }))),
+        contentType: 'split',
+        contentStr: 'split',
+        type: 'split',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        commitTxid: undefined,
+      });
+      return { contextId, splitSigHashHexes: sighashes.map(bytesToHex) } as any;
+    } catch (e) {
+      // If anything fails after locking, release locks so we don't strand them
+      try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: selected.map(s=>({txid:s.txid, vout:s.vout})) }); } catch {}
+      throw e;
+    }
+  }
+});
+
+// Admin: force unlock all locks for an address (temporary utility; remove or protect in production)
+export const adminUnlockAddressAction = action({
+  args: { address: v.string() },
+  handler: async (ctx, args) => {
+    const locks = await ctx.runQuery(internal.utxoLocks.getLocksForAddress, { address: args.address });
+    for (const l of locks) {
+      await ctx.runMutation(internal.utxoLocks.forceUnlockUtxo, { lockId: l._id });
+    }
+    return { success: true, unlocked: locks.length };
   }
 });
 
 export const broadcastSignedSplitAction = action({
-  args: { contextId: v.string(), splitSignatureRawHex: v.string() },
+  args: { contextId: v.string(), splitSignaturesRawHex: v.array(v.string()) },
   handler: async (ctx, args) => {
     const rec = await ctx.runQuery(internal.txContexts.getByContextId, { contextId: args.contextId });
     if (!rec) throw new Error('Context not found');
     if (rec.status !== 'split_prepared') throw new Error(`Invalid context status: ${rec.status}`);
     const splitParams = JSON.parse(new TextDecoder().decode(hexToBytes(rec.inscriptionDataHex)));
+    const inputs = (splitParams.inputs || []) as { txid: string; vout: number; value: number }[];
+    if (!Array.isArray(inputs) || inputs.length === 0) throw new Error('Split context missing inputs');
+    if (args.splitSignaturesRawHex.length !== inputs.length) throw new Error('Signature count mismatch for split inputs');
+
     const pkh = addressToPkh(rec.address);
     const outputs: { value: number; scriptPubKey: Uint8Array }[] = [];
     for (let i=0;i<splitParams.splitCount;i++) outputs.push({ value: splitParams.targetAmount, scriptPubKey: buildP2PKHScript(pkh) });
-    const change = rec.utxoValue - (splitParams.splitCount * splitParams.targetAmount) - rec.fee;
+    const totalIn = inputs.reduce((s,u)=>s+u.value,0);
+    const change = totalIn - (splitParams.splitCount * splitParams.targetAmount) - rec.fee;
     if (change > 546) outputs.push({ value: change, scriptPubKey: buildP2PKHScript(pkh) });
-    const txHex = assembleSplitTxHex({
-      utxo: { txid: rec.utxoTxid, vout: rec.utxoVout, value: rec.utxoValue },
+    const txHex = assembleSplitTxHexMulti({
+      inputs,
       address: rec.address,
       pubKey: hexToBytes(rec.pubKeyHex),
       outputs,
-      signatureRaw64: hexToBytes(args.splitSignatureRawHex),
+      signaturesRaw64: args.splitSignaturesRawHex.map(hexToBytes),
       consensusBranchId: rec.consensusBranchId,
     });
-    const txid = await broadcastTransaction(txHex);
-    await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: rec.utxoTxid, vout: rec.utxoVout });
+    let txid: string;
+    try {
+      txid = await broadcastTransaction(txHex);
+    } catch (e: any) {
+      // ensure we unlock any locked inputs (strip extra fields for validator)
+      try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: inputs.map((i:any)=>({ txid: i.txid, vout: i.vout })) }); } catch {}
+      const msg = e?.message ? String(e.message) : String(e);
+      if (msg.toLowerCase().includes('unpaid action limit exceeded')) {
+        throw new Error('Network rejected TX due to ZIP-317 fee policy. Increase fee to at least 50,000 zats and retry.');
+      }
+      throw e;
+    }
+    try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: inputs.map((i:any)=>({ txid: i.txid, vout: i.vout })) }); } catch {}
     await ctx.runMutation(internal.txContexts.patch, { _id: rec._id, status: 'completed', updatedAt: Date.now() });
-    return { txid };
+    return {
+      txid,
+      splitCount: splitParams.splitCount,
+      targetAmount: splitParams.targetAmount,
+      fee: rec.fee,
+      change: Math.max(0, change),
+      inputCount: inputs.length,
+    } as any;
   }
 });
 
@@ -517,7 +585,14 @@ export const finalizeCommitAndGetRevealPreimageAction = action({
       platformFeeZats: rec.platformFeeZats,
       platformTreasuryAddress: rec.platformTreasuryAddress,
     });
-    const commitTxid = await broadcastTransaction(commitHex);
+    let commitTxid: string;
+    try {
+      commitTxid = await broadcastTransaction(commitHex);
+    } catch (e) {
+      try { await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: rec.utxoTxid, vout: rec.utxoVout }); } catch {}
+      try { await ctx.runMutation(internal.txContexts.patch, { _id: rec._id, status: 'failed', updatedAt: Date.now() }); } catch {}
+      throw e;
+    }
     const revealSigHash = buildRevealSighash({
       commitTxid,
       address: rec.address,
@@ -552,11 +627,17 @@ export const broadcastSignedRevealAction = action({
       signatureRaw64: hexToBytes(args.revealSignatureRawHex),
       consensusBranchId: rec.consensusBranchId,
     });
-    const revealTxid = await broadcastTransaction(revealHex);
+    let revealTxid: string;
+    try {
+      revealTxid = await broadcastTransaction(revealHex);
+    } catch (e) {
+      // Always release lock on failure
+      try { await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: rec.utxoTxid, vout: rec.utxoVout }); } catch {}
+      throw e;
+    }
     const inscriptionId = `${revealTxid}i0`;
-
-    // unlock UTXO
-    await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: rec.utxoTxid, vout: rec.utxoVout });
+    // Unlock after success, too
+    try { await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: rec.utxoTxid, vout: rec.utxoVout }); } catch {}
 
     // Parse preview + zrc20 details
     const preview = rec.contentStr.slice(0, 200);

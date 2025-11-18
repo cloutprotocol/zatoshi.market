@@ -31,6 +31,7 @@ export async function GET(
   { params }: { params: { address: string } }
 ) {
   const { address } = params;
+  const forceRefresh = request.nextUrl.searchParams.get('refresh') === 'true';
 
   try {
     // Note: Tatum's listUnspent() is NOT available on their public gateway
@@ -40,7 +41,8 @@ export async function GET(
 
     // Try Blockchair if API key is available
     if (blockchairKey) {
-      const url = `https://api.blockchair.com/zcash/dashboards/address/${address}?key=${blockchairKey}`;
+      const cacheBust = forceRefresh ? `&_t=${Date.now()}` : '';
+      const url = `https://api.blockchair.com/zcash/dashboards/address/${address}?key=${blockchairKey}${cacheBust}`;
       const response = await fetch(url);
 
       if (response.ok) {
@@ -56,7 +58,7 @@ export async function GET(
           amount: utxo.value / 100000000, // zatoshis to ZEC
           satoshis: utxo.value,
           height: utxo.block_id,
-          confirmations: utxo.confirmations || 0
+          confirmations: utxo.confirmations || (utxo.block_id ? 1 : 0)
         }));
 
         return NextResponse.json({ utxos: formattedUtxos });
@@ -69,7 +71,8 @@ export async function GET(
       `https://zcashblockexplorer.com/api/addr/${address}/utxo`
     ];
 
-    for (const explorerUrl of explorers) {
+    for (const explorer of explorers) {
+      const explorerUrl = forceRefresh ? `${explorer}?_=${Date.now()}` : explorer;
       try {
         const response = await fetch(explorerUrl, {
           signal: AbortSignal.timeout(5000)

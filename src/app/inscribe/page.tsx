@@ -209,9 +209,16 @@ function InscribePageContent() {
   // Split UTXOs UI state
   const [splitCount, setSplitCount] = useState(2);
   const [targetAmount, setTargetAmount] = useState(70000);
-  const [splitFee, setSplitFee] = useState(10000);
+  // Fixed frontend floor to align with backend policy (no env var required)
+  const MIN_SPLIT_FEE = 50000;
+  const [splitFee, setSplitFee] = useState(MIN_SPLIT_FEE);
   const [splitTxid, setSplitTxid] = useState<string | null>(null);
+  const [splitResult, setSplitResult] = useState<{ txid: string; splitCount: number; targetAmount: number; fee: number; change: number } | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [splitBalance, setSplitBalance] = useState<{ confirmed: number; unconfirmed: number } | null>(null);
+  const [utxoList, setUtxoList] = useState<any[]>([]);
+  const [loadingUtxos, setLoadingUtxos] = useState(false);
+  // Integrated UTXO view; no toggle needed
   const [batchCount, setBatchCount] = useState(5);
   const [batchJobId, setBatchJobId] = useState<string | null>(null);
   const [batchStatus, setBatchStatus] = useState<{ status: string; completed: number; total: number; ids: string[] } | null>(null);
@@ -223,14 +230,42 @@ function InscribePageContent() {
   const [blockHeight, setBlockHeight] = useState<number | null>(null);
   const [zecPrice, setZecPrice] = useState<number | null>(null);
 
-  // Ping indexer to display safety status
+  // Manual reload for Advanced UTXO view
+  const reloadUtxos = async () => {
+    if (!wallet?.address) return;
+    setLoadingUtxos(true);
+    try {
+      const [utxos, inscriptions] = await Promise.all([
+        zcashRPC.getUTXOs(wallet.address, true),
+        zcashRPC.getInscriptions(wallet.address, true)
+      ]);
+      const inscribedLocations = new Set(inscriptions.inscribedLocations || []);
+      const utxosWithInscriptionFlag = utxos.map(utxo => {
+        let zats = (utxo as any).satoshis ?? (utxo as any).value ?? (typeof (utxo as any).amount === 'number' ? Math.round((utxo as any).amount * 1e8) : 0);
+        if (!Number.isFinite(zats) || zats < 0) zats = 0;
+        return {
+          ...utxo,
+          value: zats,
+          inscribed: inscribedLocations.has(`${utxo.txid}:${utxo.vout}`),
+          confirmations: utxo.confirmations ?? 1,
+        };
+      });
+      setUtxoList(utxosWithInscriptionFlag);
+    } catch {
+      setUtxoList([]);
+    } finally {
+      setLoadingUtxos(false);
+    }
+  };
+
+  // Ping indexer to display safety status (mark ON on any reachable response)
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch('https://indexer.zerdinals.com/location/0:0');
-        if (!cancelled) setSafety(r.status === 404 ? 'on' : 'on');
-      } catch {
+        const r = await fetch('https://indexer.zerdinals.com/location/0:0', { signal: AbortSignal.timeout(5000) });
+        if (!cancelled) setSafety(r.ok || r.status === 404 ? 'on' : 'off');
+      } catch (e) {
         if (!cancelled) setSafety('off');
       }
     })();
@@ -239,7 +274,7 @@ function InscribePageContent() {
 
   // Clear split TXID when leaving UTXO tab
   useEffect(() => {
-    if (activeTab !== 'utxo' && splitTxid) setSplitTxid(null);
+    if (activeTab !== 'utxo') { if (splitTxid) setSplitTxid(null); if (splitResult) setSplitResult(null); }
   }, [activeTab]);
 
   // Fetch wallet balance on UTXO tab
@@ -257,6 +292,42 @@ function InscribePageContent() {
     })();
     return () => { cancelled = true; };
   }, [activeTab, wallet?.address]);
+
+  // Fetch UTXOs only when Advanced is opened the first time
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (activeTab === 'utxo' && wallet?.address && advancedOpen && utxoList.length === 0) {
+        try {
+          setLoadingUtxos(true);
+          const [utxos, inscriptions] = await Promise.all([
+            zcashRPC.getUTXOs(wallet.address, true),
+            zcashRPC.getInscriptions(wallet.address, true)
+          ]);
+          const inscribedLocations = new Set(inscriptions.inscribedLocations || []);
+          const utxosWithInscriptionFlag = utxos.map(utxo => {
+            let zats =
+              (utxo as any).satoshis ??
+              (utxo as any).value ??
+              (typeof (utxo as any).amount === 'number' ? Math.round((utxo as any).amount * 1e8) : 0);
+            if (!Number.isFinite(zats) || zats < 0) zats = 0;
+            return {
+              ...utxo,
+              value: zats,
+              inscribed: inscribedLocations.has(`${utxo.txid}:${utxo.vout}`),
+              confirmations: utxo.confirmations ?? 1,
+            };
+          });
+          if (!cancelled) setUtxoList(utxosWithInscriptionFlag);
+        } catch {
+          if (!cancelled) setUtxoList([]);
+        } finally {
+          if (!cancelled) setLoadingUtxos(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeTab, wallet?.address, advancedOpen]);
 
   // Fetch block height and ZEC price
   useEffect(() => {
@@ -294,8 +365,35 @@ function InscribePageContent() {
   const handleSplit = async () => {
     if (!wallet?.privateKey || !wallet?.address) { setError('Please connect your wallet first'); return; }
     setConfirmTitle('Confirm UTXO Split');
-    setPendingArgs({ contentType: 'split', inscriptionAmount: 0, fee: splitFee });
+    setPendingArgs({ contentType: 'split', inscriptionAmount: 0, fee: Math.max(splitFee, MIN_SPLIT_FEE) });
     setConfirmOpen(true);
+  };
+
+  const handleUnlockAddress = async () => {
+    if (!wallet?.address) { setError('Please connect your wallet first'); return; }
+    const confirmed = confirm(
+      'Force unlock all UTXOs for your address?\n\n' +
+      'This will clear any stuck locks from failed transactions.\n' +
+      'Only use this if you have pending operations that won\'t complete.\n\n' +
+      'Continue?'
+    );
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      const convex = getConvexClient();
+      if (!convex) throw new Error('Convex client not available');
+
+      const result = await convex.action(api.inscriptionsActions.adminUnlockAddressAction, {
+        address: wallet.address,
+      } as any);
+
+      alert(`✓ Unlocked ${result.unlockedCount} UTXO(s) for your address.\n\nYou can now retry your transaction.`);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const runClientSigningDemo = async () => {
@@ -1086,12 +1184,14 @@ function InscribePageContent() {
             {/* UTXO TAB */}
             {activeTab === 'utxo' && (
               <div className="max-w-2xl mx-auto">
-                <div className="text-center mb-4 sm:mb-6">
+                <div className="text-center mb-4 sm:mb-4">
                   <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">UTXO Management</h2>
                   <p className="text-gold-400/60 text-xs sm:text-sm">
                     Split larger UTXOs into smaller ones to prepare funding for batch operations
                   </p>
                 </div>
+
+                
 
                 <div className="bg-black/40 border border-gold-500/20 rounded p-4 sm:p-6">
                   <div className="mb-4 p-3 bg-gold-500/10 border border-gold-500/20 rounded">
@@ -1116,8 +1216,11 @@ function InscribePageContent() {
                     </div>
                     <div>
                       <label className="block text-gold-200/80 text-xs mb-1">Network Fee (zats)</label>
-                      <input type="number" min="1000" value={splitFee} onChange={e=>setSplitFee(parseInt(e.target.value||'10000'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
-                      <p className="text-gold-400/60 text-xs mt-1">{(splitFee / 100000000).toFixed(8)} ZEC</p>
+                      <input type="number" min={MIN_SPLIT_FEE} value={splitFee} onChange={e=>{
+                        const v = parseInt(e.target.value || String(MIN_SPLIT_FEE));
+                        setSplitFee(Number.isFinite(v) ? Math.max(v, MIN_SPLIT_FEE) : MIN_SPLIT_FEE);
+                      }} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                      <p className="text-gold-400/60 text-xs mt-1">{(Math.max(splitFee, MIN_SPLIT_FEE) / 100000000).toFixed(8)} ZEC</p>
                     </div>
                   </div>
 
@@ -1130,20 +1233,31 @@ function InscribePageContent() {
                       </div>
                       <div className="flex justify-between text-gold-300">
                         <span>Network fee:</span>
-                        <span className="font-mono font-bold">{splitFee.toLocaleString()} zats</span>
+                        <span className="font-mono font-bold">{Math.max(splitFee, MIN_SPLIT_FEE).toLocaleString()} zats</span>
                       </div>
                       <div className="flex justify-between text-gold-400 pt-1 border-t border-gold-500/20">
                         <span className="font-bold">Required balance:</span>
-                        <span className="font-mono font-bold">{(splitCount * targetAmount + splitFee).toLocaleString()} zats ({((splitCount * targetAmount + splitFee) / 100000000).toFixed(8)} ZEC)</span>
+                        <span className="font-mono font-bold">{(splitCount * targetAmount + Math.max(splitFee, MIN_SPLIT_FEE)).toLocaleString()} zats ({((splitCount * targetAmount + Math.max(splitFee, MIN_SPLIT_FEE)) / 100000000).toFixed(8)} ZEC)</span>
                       </div>
-                      {splitBalance && (
+                      {/* Show spendable total only after Advanced is opened; otherwise show wallet balance */}
+                      {advancedOpen && utxoList.length > 0 ? (
                         <div className="flex justify-between text-gold-300">
-                          <span>Available balance:</span>
+                          <span>Spendable UTXOs total:</span>
                           <span className="font-mono font-bold">
-                            {(splitBalance.confirmed + splitBalance.unconfirmed).toFixed(8)} ZEC
-                            <span className="opacity-60"> (conf: {splitBalance.confirmed.toFixed(8)}, unconf: {splitBalance.unconfirmed.toFixed(8)})</span>
+                            {utxoList.filter(u=>!u.inscribed).reduce((s,u)=>s+(u.value||0),0).toLocaleString()} zats
+                            <span className="opacity-60"> ({(utxoList.filter(u=>!u.inscribed).reduce((s,u)=>s+(u.value||0),0)/100000000).toFixed(8)} ZEC)</span>
                           </span>
                         </div>
+                      ) : (
+                        splitBalance && (
+                          <div className="flex justify-between text-gold-300">
+                            <span>Available balance:</span>
+                            <span className="font-mono font-bold">
+                              {(splitBalance.confirmed + splitBalance.unconfirmed).toFixed(8)} ZEC
+                              <span className="opacity-60"> (conf: {splitBalance.confirmed.toFixed(8)}, unconf: {splitBalance.unconfirmed.toFixed(8)})</span>
+                            </span>
+                          </div>
+                        )
                       )}
                     </div>
                   </div>
@@ -1154,12 +1268,134 @@ function InscribePageContent() {
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                     ) : 'Split UTXOs'}</button>
-                  {splitTxid && (
-                    <div className="mt-4 text-xs text-gold-400/80">
-                      Split TXID: <a className="font-mono break-all underline hover:text-gold-300" href={`https://blockchair.com/zcash/transaction/${splitTxid}`} target="_blank" rel="noopener noreferrer">{splitTxid}</a>
+                  {splitResult && (
+                    <div className="mt-6 p-4 sm:p-6 bg-gold-500/10 border border-gold-500/30 rounded relative">
+                      <button
+                        onClick={() => { setSplitResult(null); setSplitTxid(null); }}
+                        className="absolute top-3 right-3 text-gold-400/60 hover:text-gold-300 transition-colors"
+                        aria-label="Close"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                      <h3 className="text-gold-300 font-bold mb-4 text-base sm:text-lg">✓ Success!</h3>
+                      <div className="space-y-3">
+                        <div>
+                          <div className="text-gold-400/60 text-sm mb-1">Transaction ID</div>
+                          <a
+                            href={`https://mainnet.zcashexplorer.app/transactions/${splitResult.txid}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
+                          >
+                            {splitResult.txid}
+                          </a>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <div className="text-gold-400/60 text-xs mb-1">Outputs Created</div>
+                            <div className="text-gold-300 font-mono text-xs sm:text-sm bg-black/40 p-2 rounded">
+                              {splitResult.splitCount} × {splitResult.targetAmount.toLocaleString()} zats
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-gold-400/60 text-xs mb-1">Total Outputs</div>
+                            <div className="text-gold-300 font-mono text-xs sm:text-sm bg-black/40 p-2 rounded">
+                              {(splitResult.splitCount * splitResult.targetAmount).toLocaleString()} zats ({((splitResult.splitCount * splitResult.targetAmount) / 100000000).toFixed(8)} ZEC)
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-gold-400/60 text-xs mb-1">Network Fee</div>
+                            <div className="text-gold-300 font-mono text-xs sm:text-sm bg-black/40 p-2 rounded">
+                              {splitResult.fee.toLocaleString()} zats ({(splitResult.fee / 100000000).toFixed(8)} ZEC)
+                            </div>
+                          </div>
+                          {splitResult.change > 0 && (
+                            <div>
+                              <div className="text-gold-400/60 text-xs mb-1">Change Returned</div>
+                              <div className="text-gold-300 font-mono text-xs sm:text-sm bg-black/40 p-2 rounded">
+                                {splitResult.change.toLocaleString()} zats ({(splitResult.change / 100000000).toFixed(8)} ZEC)
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="pt-3">
+                          <p className="text-xs text-gold-400/70">Note: It may take a few minutes for outputs to appear in explorers and wallets.</p>
+                        </div>
+                      </div>
                     </div>
                   )}
+                  {/* Advanced section */}
+                  <div className="mt-6">
+                    <button
+                      onClick={() => setAdvancedOpen(!advancedOpen)}
+                      className="w-full p-3 bg-black/20 border border-gold-500/10 rounded flex items-center justify-between hover:bg-black/30 transition-all"
+                    >
+                      <span className="text-sm font-bold text-gold-400">Advanced</span>
+                      <svg className={`w-5 h-5 text-gold-400 transition-transform ${advancedOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    {advancedOpen && (
+                      <div className="mt-3">
+                        {(() => {
+                          const spendable = utxoList.filter(u => !u.inscribed);
+                          const spendableTotal = spendable.reduce((s,u)=>s + (u.value || 0), 0);
+                          const largest = spendable.reduce((m,u)=>Math.max(m, u.value || 0), 0);
+                          return (
+                            <div className="grid grid-cols-3 gap-3 mb-3">
+                              <div className="bg-black/30 border border-gold-500/20 rounded p-3 text-center">
+                                <div className="text-[11px] text-gold-400/60">Spendable total</div>
+                                <div className="font-mono text-gold-200 text-sm mt-1">{spendableTotal.toLocaleString()} zats</div>
+                                <div className="text-[10px] text-gold-400/50">{(spendableTotal/100000000).toFixed(8)} ZEC</div>
+                              </div>
+                              <div className="bg-black/30 border border-gold-500/20 rounded p-3 text-center">
+                                <div className="text-[11px] text-gold-400/60">Largest UTXO</div>
+                                <div className="font-mono text-gold-200 text-sm mt-1">{largest.toLocaleString()} zats</div>
+                                <div className="text-[10px] text-gold-400/50">{(largest/100000000).toFixed(8)} ZEC</div>
+                              </div>
+                              <div className="bg-black/30 border border-gold-500/20 rounded p-3 text-center">
+                                <div className="text-[11px] text-gold-400/60">Spendable count</div>
+                                <div className="font-mono text-gold-200 text-sm mt-1">{spendable.length}</div>
+                                <div className="text-[10px] text-gold-400/50">of {utxoList.length} total</div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        <div className="bg-black/20 border border-gold-500/10 rounded p-3">
+                          <div className="flex items-center justify-between mb-2 gap-2">
+                            <h4 className="text-sm font-bold text-gold-400">Your UTXOs</h4>
+                            <div className="flex items-center gap-3">
+                              <div className="text-xs text-gold-400/60">{utxoList.length} total • {utxoList.filter(u=>!u.inscribed).length} spendable</div>
+                              <button onClick={reloadUtxos} disabled={loadingUtxos} className="text-xs px-2 py-1 border border-gold-500/30 rounded text-gold-300 hover:bg-gold-500/10 disabled:opacity-50">{loadingUtxos ? 'Refreshing…' : 'Refresh'}</button>
+                            </div>
+                          </div>
+                          {loadingUtxos ? (
+                            <div className="text-center py-6 text-gold-400/60 text-sm">Loading UTXOs...</div>
+                          ) : utxoList.length === 0 ? (
+                            <div className="text-center py-6 text-gold-400/60 text-sm">No UTXOs found. Send some ZEC to your wallet.</div>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <div className="flex gap-2 pb-1">
+                                {utxoList.map((u, idx) => (
+                                  <div key={idx} className={`min-w-[120px] p-2 rounded border ${u.inscribed ? 'border-gold-500/10 bg-black/40' : 'border-gold-500/30 bg-black/60'} `}>
+                                    <div className="flex items-center justify-between">
+                                      <span className={`w-1.5 h-1.5 rounded-full ${u.inscribed ? 'bg-gold-400/40' : 'bg-gold-400'}`}></span>
+                                      <span className="text-[10px] uppercase tracking-wide text-gold-400/60">{u.inscribed ? 'INS' : 'OK'}</span>
+                                    </div>
+                                    <div className="mt-2 font-mono text-xs text-gold-200 break-all">{(u.value || 0).toLocaleString()} zats</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                {/* Troubleshooting panel intentionally hidden */}
               </div>
             )}
 
@@ -1219,11 +1455,15 @@ function InscribePageContent() {
                   </p>
                 ) : error.includes('unpaid action limit exceeded') || error.includes('action limit exceeded') ? (
                   <p className="text-red-400 text-sm">
-                    Transaction too complex. Try reducing the split count to 10 or fewer outputs, or ensure you have sufficient transparent ZEC balance.
+                    Provider rate limit hit or transaction too complex. Please wait a moment and try again, or reduce outputs to 10 or fewer and ensure sufficient transparent ZEC balance.
                   </p>
                 ) : error.includes('UTXO lock failed') ? (
                   <p className="text-red-400 text-sm">
                     Your UTXOs are currently locked by another operation. Please wait a moment and try again.
+                  </p>
+                ) : (error.includes('non-inscribed UTXO') || error.includes('All available UTXOs are inscribed')) ? (
+                  <p className="text-red-400 text-sm">
+                    Split failed: A single, non-inscribed UTXO large enough for the split was not found. Please send a fresh, clean UTXO to your wallet and try again.
                   </p>
                 ) : error.includes('finalizeCommitAndGetRevealPreimageAction') || error.includes('buildUnsignedCommitAction') ? (
                   <p className="text-red-400 text-sm">
@@ -1255,10 +1495,10 @@ function InscribePageContent() {
                 ]
               : [{ label: 'Inscription output', valueZats: pendingArgs.inscriptionAmount } as any]),
             // Numeric item(s) included in total:
-            { label: 'Network fee', valueZats: pendingArgs.fee } as any,
+            { label: 'Network fee', valueZats: Math.max(pendingArgs.fee, MIN_SPLIT_FEE) } as any,
             ...(pendingArgs.contentType === 'split'
               ? [
-                  { label: 'Required input balance', valueText: `${(splitCount * targetAmount + splitFee).toLocaleString()} zats (${(((splitCount * targetAmount) + splitFee) / 100000000).toFixed(8)} ZEC)` } as any,
+                  { label: 'Required input balance', valueText: `${(splitCount * targetAmount + Math.max(splitFee, MIN_SPLIT_FEE)).toLocaleString()} zats (${(((splitCount * targetAmount) + Math.max(splitFee, MIN_SPLIT_FEE)) / 100000000).toFixed(8)} ZEC)` } as any,
                 ]
               : [{ label: 'Platform fee', valueZats: Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_ZATS || '100000'), hidden: (process.env.NEXT_PUBLIC_PLATFORM_FEE_ENABLED || '').toLowerCase() !== 'true' } as any]),
           ]}
@@ -1288,7 +1528,7 @@ function InscribePageContent() {
                       pubKeyHex,
                       splitCount,
                       targetAmount,
-                      fee: splitFee,
+                      fee: Math.max(splitFee, MIN_SPLIT_FEE),
                     } as any);
                     break;
                   } catch (e: any) {
@@ -1302,12 +1542,24 @@ function InscribePageContent() {
                   }
                 }
                 if (!step1) throw lastErr || new Error('Failed to prepare split transaction');
-                const splitSignatureRawHex = await walletSigner(step1.splitSigHashHex);
+                const sigHashes: string[] = step1.splitSigHashHexes || (step1.splitSigHashHex ? [step1.splitSigHashHex] : []);
+                if (!Array.isArray(sigHashes) || sigHashes.length === 0) throw new Error('No split sighashes returned');
+                const splitSignaturesRawHex: string[] = [];
+                for (const h of sigHashes) {
+                  splitSignaturesRawHex.push(await walletSigner(h));
+                }
                 const res = await convex.action(api.inscriptionsActions.broadcastSignedSplitAction, {
                   contextId: step1.contextId,
-                  splitSignatureRawHex,
-                });
+                  splitSignaturesRawHex,
+                } as any);
                 setSplitTxid(res.txid);
+                setSplitResult({
+                  txid: res.txid,
+                  splitCount: (res as any).splitCount ?? splitCount,
+                  targetAmount: (res as any).targetAmount ?? targetAmount,
+                  fee: (res as any).fee ?? splitFee,
+                  change: (res as any).change ?? 0,
+                });
               } else {
                 const { revealTxid, inscriptionId } = await safeMintInscription(
                   { address: wallet.address, pubKeyHex, ...pendingArgs },

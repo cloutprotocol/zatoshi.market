@@ -191,7 +191,24 @@
       } catch (e) { qs('#recentOut').textContent = `ERROR: ${e.message}`; }
     }
 
-    window.addEventListener('DOMContentLoaded', () => { window.initDefaults(); });
+    window.addEventListener('DOMContentLoaded', () => {
+      window.initDefaults();
+      const btn = document.getElementById('adminUnlockBtn');
+      if (btn) {
+        btn.addEventListener('click', async () => {
+          try {
+            await ensureClient();
+            const address = document.getElementById('adminAddress').value.trim();
+            if (!address) { appendLog('Address is required.'); return; }
+            appendLog(`Admin: unlocking all UTXO locks for ${address}...`);
+            const res = await client.action("inscriptionsActions:adminUnlockAddressAction", { address });
+            appendLog(`Admin: unlocked ${res.unlocked} lock(s) for ${address}.`);
+          } catch (e) {
+            appendLog(`Admin unlock failed: ${e?.message || e}`);
+          }
+        });
+      }
+    });
   </script>
 </head>
 <body>
@@ -285,6 +302,18 @@
           <label>Output</label>
           <pre id="jobOut"></pre>
           <pre id="recentOut"></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0 0 8px 0;">Admin Utilities</h2>
+      <div>
+        <label for="adminAddress">Address to unlock</label>
+        <input id="adminAddress" placeholder="t1..." style="max-width:360px" />
+        <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+          <button id="adminUnlockBtn">Force Unlock Address</button>
+          <span class="muted">Calls inscriptionsActions:adminUnlockAddressAction to clear locks for this address</span>
         </div>
       </div>
     </section>

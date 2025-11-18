@@ -52,7 +52,7 @@ export const runNextMint = action({
       );
     }
     // Try lock
-    const lockRes = await ctx.runMutation(internal.utxoLocks.lockUtxo, { txid: utxo.txid, vout: utxo.vout, address: p.address });
+    const lockRes = await ctx.runMutation(internal.utxoLocks.lockUtxo, { txid: utxo.txid, vout: utxo.vout, address: p.address, lockedBy: String(args.jobId) });
     if (!lockRes.locked) throw new Error("UTXO lock failed; retry later");
 
     try {

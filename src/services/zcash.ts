@@ -279,9 +279,10 @@ class ZcashRPCService {
    * Get UTXOs for an address (Tatum RPC)
    * Use ONLY when building inscription transactions
    */
-  async getUTXOs(address: string): Promise<any[]> {
+  async getUTXOs(address: string, refresh: boolean = false): Promise<any[]> {
     try {
-      const response = await fetch(`/api/zcash/utxos/${address}`);
+      const url = refresh ? `/api/zcash/utxos/${address}?refresh=true` : `/api/zcash/utxos/${address}`;
+      const response = await fetch(url);
       const data = await response.json();
       return data.utxos || [];
     } catch (error) {
