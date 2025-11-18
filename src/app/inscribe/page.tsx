@@ -217,6 +217,8 @@ function InscribePageContent() {
   const [demoContent, setDemoContent] = useState('hello from client-signing demo');
   const [demoRunning, setDemoRunning] = useState(false);
   const [demoLog, setDemoLog] = useState<string[]>([]);
+  const [blockHeight, setBlockHeight] = useState<number | null>(null);
+  const [zecPrice, setZecPrice] = useState<number | null>(null);
 
   // Ping indexer to display safety status
   useEffect(() => {
@@ -230,6 +232,39 @@ function InscribePageContent() {
       }
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  // Fetch block height and ZEC price
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchData() {
+      // Fetch block height
+      try {
+        const blockResponse = await fetch('https://api.blockchair.com/zcash/stats');
+        const blockData = await blockResponse.json();
+        if (!cancelled) setBlockHeight(blockData.data.best_block_height);
+      } catch (error) {
+        console.error('Failed to fetch block height:', error);
+      }
+
+      // Fetch ZEC price
+      try {
+        const priceResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=zcash&vs_currencies=usd');
+        const priceData = await priceResponse.json();
+        if (!cancelled && priceData.zcash?.usd) setZecPrice(priceData.zcash.usd);
+      } catch (error) {
+        console.error('Failed to fetch ZEC price:', error);
+      }
+    }
+
+    fetchData();
+    const interval = setInterval(fetchData, 30000); // Update every 30 seconds
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   const handleSplit = async () => {
@@ -327,89 +362,184 @@ function InscribePageContent() {
   const zrc20Cost = calculateTotalCost(PLATFORM_FEES.INSCRIPTION);
 
   return (
-    <main className="min-h-screen h-screen bg-black text-gold-300 pt-20 pb-4 overflow-hidden">
-      <div className="container mx-auto px-4 sm:px-6 h-full flex flex-col max-w-[1600px]">
+    <main className="min-h-screen h-screen bg-black text-gold-300 lg:pt-20 pb-4 overflow-hidden">
+      {/* Mobile Tab Bar - Integrated with header */}
+      <div className="fixed top-16 left-0 right-0 z-40 lg:hidden bg-black/95 backdrop-blur-xl border-b border-gold-500/20">
+        <div className="flex gap-1 px-2 py-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <button
+            onClick={() => setActiveTab('names')}
+            className={`flex-1 min-w-0 px-3 py-2 font-bold transition-colors ${
+              activeTab === 'names'
+                ? 'bg-gold-500 text-black'
+                : 'bg-black/40 border border-gold-500/30 text-gold-400'
+            }`}
+          >
+            <div className="text-xs whitespace-nowrap">Names</div>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('text')}
+            className={`flex-1 min-w-0 px-3 py-2 font-bold transition-colors ${
+              activeTab === 'text'
+                ? 'bg-gold-500 text-black'
+                : 'bg-black/40 border border-gold-500/30 text-gold-400'
+            }`}
+          >
+            <div className="text-xs whitespace-nowrap">Text</div>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('zrc20')}
+            className={`flex-1 min-w-0 px-3 py-2 font-bold transition-colors ${
+              activeTab === 'zrc20'
+                ? 'bg-gold-500 text-black'
+                : 'bg-black/40 border border-gold-500/30 text-gold-400'
+            }`}
+          >
+            <div className="text-xs whitespace-nowrap">ZRC-20</div>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('utxo')}
+            className={`flex-1 min-w-0 px-3 py-2 font-bold transition-colors ${
+              activeTab === 'utxo'
+                ? 'bg-gold-500 text-black'
+                : 'bg-black/40 border border-gold-500/30 text-gold-400'
+            }`}
+          >
+            <div className="text-xs whitespace-nowrap">UTXO</div>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`flex-1 min-w-0 px-3 py-2 font-bold transition-colors ${
+              activeTab === 'history'
+                ? 'bg-gold-500 text-black'
+                : 'bg-black/40 border border-gold-500/30 text-gold-400'
+            }`}
+          >
+            <div className="text-xs whitespace-nowrap">History</div>
+          </button>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-4 sm:px-6 h-full flex flex-col max-w-[1600px] pt-32 lg:pt-0">
         <div className="flex flex-col lg:flex-row gap-4 h-full min-h-0">
-          {/* Left Sidebar - Tabs */}
-          <div className="lg:w-56 flex-shrink-0 flex flex-col lg:overflow-y-auto">
-            {/* Mobile: Horizontal Scrolling Tabs */}
-            <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0 -mx-4 px-4 lg:mx-0 lg:px-0 scrollbar-hide">
+          {/* Left Sidebar - Tabs (Desktop only) */}
+          <div className="hidden lg:flex lg:w-56 flex-shrink-0 flex-col lg:overflow-y-auto">
+            <div className="flex flex-col gap-2">
               <button
                 onClick={() => setActiveTab('names')}
-                className={`flex-shrink-0 lg:w-full text-left px-5 py-2.5 sm:px-5 sm:py-3 rounded-lg font-bold transition-all ${
+                className={`w-full text-left px-5 py-2.5 rounded font-bold transition-all ${
                   activeTab === 'names'
-                    ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
+                    ? 'bg-gold-500 text-black'
                     : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
                 }`}
               >
-                <div className="text-sm sm:text-sm lg:text-base whitespace-nowrap lg:whitespace-normal">Names</div>
-                <div className="text-xs opacity-75 hidden sm:block">.zec • .zcash</div>
+                <div className="text-base">Names</div>
+                <div className="text-xs opacity-75">.zec • .zcash</div>
               </button>
 
               <button
                 onClick={() => setActiveTab('text')}
-                className={`flex-shrink-0 lg:w-full text-left px-5 py-2.5 sm:px-5 sm:py-3 rounded-lg font-bold transition-all ${
+                className={`w-full text-left px-5 py-2.5 rounded font-bold transition-all ${
                   activeTab === 'text'
-                    ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
+                    ? 'bg-gold-500 text-black'
                     : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
                 }`}
               >
-                <div className="text-sm sm:text-sm lg:text-base whitespace-nowrap lg:whitespace-normal">Text</div>
-                <div className="text-xs opacity-75 hidden sm:block">Inscriptions</div>
+                <div className="text-base">Text</div>
+                <div className="text-xs opacity-75">Inscriptions</div>
               </button>
 
               <button
                 onClick={() => setActiveTab('zrc20')}
-                className={`flex-shrink-0 lg:w-full text-left px-5 py-2.5 sm:px-5 sm:py-3 rounded-lg font-bold transition-all ${
+                className={`w-full text-left px-5 py-2.5 rounded font-bold transition-all ${
                   activeTab === 'zrc20'
-                    ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
+                    ? 'bg-gold-500 text-black'
                     : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
                 }`}
               >
-                <div className="text-sm sm:text-sm lg:text-base whitespace-nowrap lg:whitespace-normal">ZRC-20</div>
-                <div className="text-xs opacity-75 hidden sm:block">Token Mint</div>
+                <div className="text-base">ZRC-20</div>
+                <div className="text-xs opacity-75">Token Mint</div>
               </button>
 
               <button
                 onClick={() => setActiveTab('utxo')}
-                className={`flex-shrink-0 lg:w-full text-left px-5 py-2.5 sm:px-5 sm:py-3 rounded-lg font-bold transition-all ${
+                className={`w-full text-left px-5 py-2.5 rounded font-bold transition-all ${
                   activeTab === 'utxo'
-                    ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
+                    ? 'bg-gold-500 text-black'
                     : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
                 }`}
               >
-                <div className="text-sm sm:text-sm lg:text-base whitespace-nowrap lg:whitespace-normal">UTXO</div>
-                <div className="text-xs opacity-75 hidden sm:block">UTXO Management</div>
+                <div className="text-base">UTXO</div>
+                <div className="text-xs opacity-75">UTXO Management</div>
               </button>
 
               <button
                 onClick={() => setActiveTab('history')}
-                className={`flex-shrink-0 lg:w-full text-left px-5 py-2.5 sm:px-5 sm:py-3 rounded-lg font-bold transition-all ${
+                className={`w-full text-left px-5 py-2.5 rounded font-bold transition-all ${
                   activeTab === 'history'
-                    ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
+                    ? 'bg-gold-500 text-black'
                     : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
                 }`}
               >
-                <div className="text-sm sm:text-sm lg:text-base whitespace-nowrap lg:whitespace-normal">History</div>
-                <div className="text-xs opacity-75 hidden sm:block">Inscription History</div>
+                <div className="text-base">History</div>
+                <div className="text-xs opacity-75">Inscription History</div>
               </button>
             </div>
 
-            {/* Fee Info - Hidden on mobile */}
-            <div className="hidden lg:block mt-8 p-4 bg-black/40 border border-gold-500/20 rounded-lg">
-              <div className="text-xs text-gold-400/60 mb-2">Platform Fees</div>
-              <div className="space-y-1 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-gold-400/80">Inscriptions</span>
-                  <span className="text-gold-300 font-mono">{formatZEC(PLATFORM_FEES.INSCRIPTION)}</span>
+            {/* Info Panel - Hidden on mobile */}
+            <div className="hidden lg:block mt-8 bg-black/60 border border-gold-500/10 rounded shadow-inner">
+              <div className="text-xs text-gold-400/50 px-3 py-2 border-b border-gold-500/10">
+                Platform Info
+              </div>
+
+              {/* Platform Fee */}
+              <div className="px-3 py-2 border-b border-gold-500/5">
+                <div className="text-xs text-gold-400/60 mb-0.5">Platform Fee</div>
+                <div className="text-xs font-mono text-gold-300">{formatZEC(PLATFORM_FEES.INSCRIPTION)}</div>
+              </div>
+
+              {/* ZCash Block */}
+              <div className="px-3 py-2 border-b border-gold-500/5">
+                <div className="text-xs text-gold-400/60 mb-0.5">ZCash Block</div>
+                <div className="text-xs font-mono text-gold-300">
+                  {blockHeight !== null ? blockHeight.toLocaleString() : '...'}
+                </div>
+              </div>
+
+              {/* Current Price */}
+              <div className="px-3 py-2 border-b border-gold-500/5">
+                <div className="text-xs text-gold-400/60 mb-0.5">ZEC Price</div>
+                <div className="text-xs font-mono text-gold-300">
+                  {zecPrice !== null ? `$${zecPrice.toFixed(2)}` : '...'}
+                </div>
+              </div>
+
+              {/* Safety Status */}
+              <div className="px-3 py-2 relative group">
+                <div className="text-xs text-gold-400/60 mb-0.5">Safety</div>
+                <div className="text-xs font-mono">
+                  {safety === 'on' ? (
+                    <span className="text-green-400">ON</span>
+                  ) : safety === 'off' ? (
+                    <span className="text-red-400">OFF</span>
+                  ) : (
+                    <span className="text-gold-400/60">...</span>
+                  )}
+                </div>
+                {/* Hover tooltip */}
+                <div className="absolute left-full ml-2 top-0 w-48 px-3 py-2 bg-black/90 border border-gold-500/30 rounded text-xs text-gold-300 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
+                  UTXO protection prevents accidental inscription burning by tracking on-chain states
                 </div>
               </div>
             </div>
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 bg-black/40 border border-none rounded-xl sm:rounded-2xl backdrop-blur-xl overflow-y-auto min-h-0">
-            <div className="p-4 sm:p-6 lg:p-8">
+          <div className="flex-1 bg-black/40 border border-none rounded backdrop-blur-xl overflow-y-auto min-h-0">
+            <div className="p-4 sm:p-6 lg:p-8 pt-6 lg:pt-8">
 
             {/* NAME REGISTRATION TAB */}
             {activeTab === 'names' && (
@@ -424,7 +554,7 @@ function InscribePageContent() {
                 {/* Name Search Box */}
                 <div className="mb-4 sm:mb-6">
                   <div className="relative">
-                    <div className="flex flex-col sm:flex-row gap-0 bg-black/60 border-2 border-gold-500/50 rounded-xl overflow-hidden focus-within:border-gold-500 transition-all">
+                    <div className="flex flex-col sm:flex-row gap-0 bg-black/60 border-2 border-gold-500/50 rounded overflow-hidden focus-within:border-gold-500 transition-all">
                       <input
                         type="text"
                         value={nameInput}
@@ -433,7 +563,7 @@ function InscribePageContent() {
                           setNameInput(value);
                           validateName(value);
                         }}
-                        className="flex-1 bg-transparent px-4 py-3 sm:px-6 sm:py-4 text-lg sm:text-xl font-mono text-gold-300 placeholder-gold-500/40 outline-none"
+                        className="flex-1 bg-transparent px-4 py-2.5 sm:px-6 sm:py-3 text-lg sm:text-xl font-mono text-gold-300 placeholder-gold-500/40 outline-none"
                         placeholder="yourname"
                         disabled={loading}
                       />
@@ -443,7 +573,7 @@ function InscribePageContent() {
                           setNameExtension(e.target.value as 'zec' | 'zcash');
                           validateName(nameInput);
                         }}
-                        className="bg-black/60 border-t sm:border-t-0 sm:border-l border-gold-500/30 pl-4 pr-10 py-3 sm:pl-6 sm:pr-12 sm:py-4 text-lg sm:text-xl font-mono text-gold-300 outline-none cursor-pointer"
+                        className="bg-black/60 border-t sm:border-t-0 sm:border-l border-gold-500/30 pl-4 pr-10 py-2.5 sm:pl-6 sm:pr-12 sm:py-3 text-lg sm:text-xl font-mono text-gold-300 outline-none cursor-pointer"
                         disabled={loading}
                       >
                         <option value="zec">.zec</option>
@@ -460,7 +590,7 @@ function InscribePageContent() {
 
                 {/* Name Preview */}
                 {nameInput && !nameError && (
-                  <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-gold-500/10 border border-gold-500/30 rounded-xl">
+                  <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-gold-500/10 border border-gold-500/30 rounded">
                     <div className="flex items-center justify-between mb-2 sm:mb-3">
                       <div className="flex-1 min-w-0">
                         <div className="text-xs text-gold-400/60 mb-1">Your Name</div>
@@ -489,7 +619,7 @@ function InscribePageContent() {
                 <button
                   onClick={handleNameRegistration}
                   disabled={loading || !isConnected || !nameInput.trim() || !!nameError}
-                  className="w-full px-4 py-2.5 sm:px-5 sm:py-3 bg-gold-500 text-black font-bold text-sm sm:text-base rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-gold-500/20"
+                  className="w-full px-4 py-2.5 sm:px-5 sm:py-3 bg-gold-500 text-black font-bold text-sm sm:text-base rounded hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-gold-500/20"
                 >
                   {loading ? (
                     <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -505,8 +635,8 @@ function InscribePageContent() {
             {activeTab === 'text' && (
               <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
                 <div className="text-center mb-4 sm:mb-6">
-                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">Text Inscription</h2>
-                  <p className="text-gold-400/60 text-xs sm:text-sm lg:text-base">
+                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2">Text Inscription</h2>
+                  <p className="text-gold-400/60 text-xs sm:text-sm">
                     Inscribe any text or data permanently on Zcash
                   </p>
                 </div>
@@ -516,7 +646,7 @@ function InscribePageContent() {
                   <select
                     value={contentType}
                     onChange={(e) => setContentType(e.target.value)}
-                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg pl-4 pr-10 py-3 text-gold-300 outline-none focus:border-gold-500/50"
+                    className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-gold-300 outline-none focus:border-gold-500/50"
                     disabled={loading}
                   >
                     <option value="text/plain">Text (text/plain)</option>
@@ -533,7 +663,7 @@ function InscribePageContent() {
                   <textarea
                     value={textContent}
                     onChange={(e) => setTextContent(e.target.value)}
-                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-3 py-2 sm:px-4 sm:py-3 text-gold-300 font-mono text-xs sm:text-sm min-h-[180px] sm:min-h-[240px] outline-none focus:border-gold-500/50 resize-none"
+                    className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-gold-300 font-mono text-xs sm:text-sm min-h-[180px] sm:min-h-[240px] outline-none focus:border-gold-500/50 resize-none"
                     placeholder="Enter your inscription content..."
                     disabled={loading}
                   />
@@ -552,7 +682,7 @@ function InscribePageContent() {
                 <button
                   onClick={handleTextInscription}
                   disabled={loading || !isConnected || !textContent.trim()}
-                  className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-2.5 sm:px-5 sm:py-3 bg-gold-500 text-black font-bold text-sm sm:text-base rounded hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? (
                     <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -567,23 +697,14 @@ function InscribePageContent() {
             {/* ZRC-20 TAB */}
             {activeTab === 'zrc20' && (
               <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
-                {/* Safety + Fee Status */}
-                <div className="flex items-center justify-end mb-2 sm:mb-3 gap-2">
-                  <div className="text-gold-400/70 text-xs flex items-center gap-3 flex-shrink-0">
-                    <span>Safety: {safety === 'on' ? <span className="text-green-400">ON</span> : safety === 'off' ? <span className="text-red-400">OFF</span> : '…'}</span>
-                    <span>Fee: {(process.env.NEXT_PUBLIC_PLATFORM_FEE_ENABLED || '').toLowerCase()==='true' ? <span className="text-green-400">ON</span> : <span className="text-gold-400/60">OFF</span>} { (process.env.NEXT_PUBLIC_PLATFORM_FEE_ENABLED || '').toLowerCase()==='true' ? `(${(Number(process.env.NEXT_PUBLIC_PLATFORM_FEE_ZATS||'100000')/1e8).toFixed(3)} ZEC)` : '' }</span>
-                  </div>
-                </div>
-
-
                 <div className="text-center mb-4 sm:mb-6">
-                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">Mint ZRC-20 Token</h2>
-                  <p className="text-gold-400/60 text-xs sm:text-sm lg:text-base">
+                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2">Mint ZRC-20 Token</h2>
+                  <p className="text-gold-400/60 text-xs sm:text-sm">
                     Mint tokens from deployed ZRC-20 contracts
                   </p>
                 </div>
 
-                <div className="bg-gold-500/10 p-3 sm:p-4 rounded-lg border border-gold-500/30 mb-4 sm:mb-6">
+                <div className="bg-gold-500/10 p-3 sm:p-4 rounded border border-gold-500/30 mb-4 sm:mb-6">
                   <p className="text-gold-300 text-xs sm:text-sm">
                     <strong>Note:</strong> Make sure the token has been deployed first and check the minting limits on{' '}
                     <a
@@ -603,7 +724,7 @@ function InscribePageContent() {
                   <select
                     value={zrcOp}
                     onChange={(e)=>setZrcOp(e.target.value as any)}
-                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg pl-3 pr-10 py-2 sm:pl-4 sm:pr-10 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50"
+                    className="w-full bg-black/40 border border-gold-500/30 rounded pl-3 pr-10 py-2 sm:pl-4 sm:pr-10 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50"
                     disabled={loading}
                   >
                     <option value="mint">Mint</option>
@@ -618,7 +739,7 @@ function InscribePageContent() {
                     type="text"
                     value={tick}
                     onChange={(e) => setTick(e.target.value.toUpperCase())}
-                    className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 font-mono uppercase outline-none focus:border-gold-500/50"
+                    className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 font-mono uppercase outline-none focus:border-gold-500/50"
                     placeholder="ZERO"
                     maxLength={4}
                     disabled={loading}
@@ -628,23 +749,23 @@ function InscribePageContent() {
                 {zrcOp !== 'deploy' && (
                   <div>
                     <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Amount</label>
-                    <input type="number" value={amount} onChange={(e)=>setAmount(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
+                    <input type="number" value={amount} onChange={(e)=>setAmount(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
                   </div>
                 )}
                 {zrcOp === 'deploy' && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Max Supply</label>
-                      <input type="number" value={maxSupply} onChange={(e)=>setMaxSupply(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="21000000" disabled={loading} />
+                      <input type="number" value={maxSupply} onChange={(e)=>setMaxSupply(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="21000000" disabled={loading} />
                     </div>
                     <div>
                       <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Mint Limit</label>
-                      <input type="number" value={mintLimit} onChange={(e)=>setMintLimit(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded-lg px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
+                      <input type="number" value={mintLimit} onChange={(e)=>setMintLimit(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
                     </div>
                   </div>
                 )}
 
-                <div className="bg-black/40 p-2.5 sm:p-3 rounded-lg border border-gold-500/20">
+                <div className="bg-black/40 p-2.5 sm:p-3 rounded border border-gold-500/20">
                   <p className="text-gold-400/60 text-xs mb-1.5">Preview:</p>
                   <pre className="text-gold-300 text-xs font-mono overflow-x-auto">
                     {JSON.stringify(
@@ -666,7 +787,7 @@ function InscribePageContent() {
                   total={zrc20Cost.total}
                 />
 
-                <button onClick={handleZRC20Mint} disabled={loading || !isConnected || !tick.trim() || (zrcOp !== 'deploy' && !amount.trim()) || (zrcOp === 'deploy' && (!maxSupply.trim() || !mintLimit.trim()))} className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed">{loading ? (
+                <button onClick={handleZRC20Mint} disabled={loading || !isConnected || !tick.trim() || (zrcOp !== 'deploy' && !amount.trim()) || (zrcOp === 'deploy' && (!maxSupply.trim() || !mintLimit.trim()))} className="w-full px-4 py-2.5 sm:px-5 sm:py-3 bg-gold-500 text-black font-bold text-sm sm:text-base rounded hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed">{loading ? (
                     <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -675,7 +796,7 @@ function InscribePageContent() {
 
                 {/* Success Display */}
                 {result && (
-                  <div className="mt-6 p-4 sm:p-6 bg-gold-500/10 border border-gold-500/30 rounded-lg relative">
+                  <div className="mt-6 p-4 sm:p-6 bg-gold-500/10 border border-gold-500/30 rounded relative">
                     <button
                       onClick={() => setResult(null)}
                       className="absolute top-3 right-3 text-gold-400/60 hover:text-gold-300 transition-colors"
@@ -712,14 +833,14 @@ function InscribePageContent() {
                 )}
 
                 {/* Batch Mint - Enhanced liquid glass design */}
-                <div className="mt-8 p-6 sm:p-8 rounded-2xl border-2 border-gold-500/40 bg-gradient-to-br from-gold-500/10 via-transparent to-gold-500/5 backdrop-blur-2xl shadow-xl shadow-gold-500/10 space-y-5 relative overflow-hidden isolate">
+                <div className="mt-8 p-6 sm:p-8 rounded border-2 border-gold-500/40 bg-gradient-to-br from-gold-500/10 via-transparent to-gold-500/5 backdrop-blur-2xl shadow-xl shadow-gold-500/10 space-y-5 relative overflow-hidden isolate">
                   {/* Liquid Glass Overlay */}
-                  <div className="absolute inset-0 rounded-2xl z-10 flex flex-col items-center justify-center border border-black/30" style={{ backdropFilter: 'blur(64px) saturate(180%)', WebkitBackdropFilter: 'blur(64px) saturate(180%)' }}>
-                    <div className="absolute inset-0 bg-black/50 rounded-2xl"></div>
-                    <div className="absolute inset-0 bg-liquid-glass opacity-50 rounded-2xl"></div>
-                    <div className="absolute inset-0 bg-gradient-to-br from-black/30 via-black/10 to-black/30 rounded-2xl"></div>
-                    <div className="absolute inset-0 backdrop-blur-3xl rounded-2xl"></div>
-                    <div className="absolute inset-0 border border-gold-500/5 rounded-2xl"></div>
+                  <div className="absolute inset-0 rounded z-10 flex flex-col items-center justify-center border border-black/30" style={{ backdropFilter: 'blur(64px) saturate(180%)', WebkitBackdropFilter: 'blur(64px) saturate(180%)' }}>
+                    <div className="absolute inset-0 bg-black/50 rounded"></div>
+                    <div className="absolute inset-0 bg-liquid-glass opacity-50 rounded"></div>
+                    <div className="absolute inset-0 bg-gradient-to-br from-black/30 via-black/10 to-black/30 rounded"></div>
+                    <div className="absolute inset-0 backdrop-blur-3xl rounded"></div>
+                    <div className="absolute inset-0 border border-gold-500/5 rounded"></div>
                     <div className="relative z-20 text-center group">
                       <style dangerouslySetInnerHTML={{__html: `
                         @keyframes holographic-lock {
@@ -751,9 +872,9 @@ function InscribePageContent() {
                           z-index: 1;
                         }
                       `}} />
-                      <div className="relative inline-block p-5 rounded-2xl bg-black/80 backdrop-blur-xl shadow-2xl border border-black/40 transition-all duration-300 holographic-lock-hover hover:border-gold-500/40 hover:shadow-gold-500/20">
-                        <div className="absolute inset-0 bg-liquid-glass opacity-50 rounded-2xl"></div>
-                        <div className="absolute inset-0 border border-gold-500/10 rounded-2xl group-hover:border-gold-500/30 transition-all duration-300"></div>
+                      <div className="relative inline-block p-5 rounded bg-black/80 backdrop-blur-xl shadow-2xl border border-black/40 transition-all duration-300 holographic-lock-hover hover:border-gold-500/40 hover:shadow-gold-500/20">
+                        <div className="absolute inset-0 bg-liquid-glass opacity-50 rounded"></div>
+                        <div className="absolute inset-0 border border-gold-500/10 rounded group-hover:border-gold-500/30 transition-all duration-300"></div>
                         <svg className="w-12 h-12 mx-auto relative z-10 text-gold-400/70 group-hover:text-gold-400 transition-all duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                         </svg>
@@ -770,7 +891,7 @@ function InscribePageContent() {
                   <div className="max-w-md mx-auto">
                     <label className="block text-gold-200/80 text-sm font-medium mb-3 text-center">Count</label>
                     <div className="flex items-center justify-center mb-4">
-                      <div className="w-28 h-20 bg-black/60 rounded-lg flex items-center justify-center">
+                      <div className="w-28 h-20 bg-black/60 rounded flex items-center justify-center">
                         <input
                           type="number"
                           min={1}
@@ -797,7 +918,7 @@ function InscribePageContent() {
                   </p>
 
                   {/* Batch Fee Summary */}
-                  <div className="text-sm text-gold-400/90 bg-black/30 rounded-lg p-4 border border-gold-500/20">
+                  <div className="text-sm text-gold-400/90 bg-black/30 rounded p-4 border border-gold-500/20">
                     {(() => {
                       const singleTotal = zrc20Cost.total;
                       const batchTotal = singleTotal * Math.max(1, batchCount);
@@ -814,7 +935,7 @@ function InscribePageContent() {
                   <button
                     onClick={handleBatchMint}
                     disabled={loading || !isConnected || !tick.trim() || !amount.trim()}
-                    className="relative w-full px-6 py-4 bg-gradient-to-r from-gold-500 via-yellow-400 to-gold-500 text-black font-bold text-lg rounded-xl transition-all duration-300 shadow-lg shadow-gold-500/30 hover:shadow-2xl hover:shadow-gold-500/60 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-lg border-2 border-gold-400/50 overflow-hidden before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-white/30 before:to-transparent before:-translate-x-full hover:before:translate-x-full before:transition-transform before:duration-700"
+                    className="relative w-full px-6 py-4 bg-gradient-to-r from-gold-500 via-yellow-400 to-gold-500 text-black font-bold text-lg rounded transition-all duration-300 shadow-lg shadow-gold-500/30 hover:shadow-2xl hover:shadow-gold-500/60 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-lg border-2 border-gold-400/50 overflow-hidden before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-white/30 before:to-transparent before:-translate-x-full hover:before:translate-x-full before:transition-transform before:duration-700"
                   >
                     <span className="relative z-10">{loading ? (
                       <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -828,7 +949,7 @@ function InscribePageContent() {
                     <div className="text-xs text-gold-400/80 text-center">Job ID: <span className="font-mono break-all">{batchJobId}</span></div>
                   )}
                   {batchStatus && (
-                    <div className="space-y-3 bg-black/40 rounded-lg p-4 border border-gold-500/20">
+                    <div className="space-y-3 bg-black/40 rounded p-4 border border-gold-500/20">
                       <div className="flex items-center justify-between text-sm text-gold-300 font-semibold">
                         <span>Status: {batchStatus.status}</span>
                         <span>{batchStatus.completed}/{batchStatus.total}</span>
@@ -851,13 +972,13 @@ function InscribePageContent() {
             {activeTab === 'utxo' && (
               <div className="max-w-2xl mx-auto">
                 <div className="text-center mb-4 sm:mb-6">
-                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">UTXO Management</h2>
-                  <p className="text-gold-400/60 text-xs sm:text-sm lg:text-base">
+                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2">UTXO Management</h2>
+                  <p className="text-gold-400/60 text-xs sm:text-sm">
                     Split larger UTXOs into smaller ones to prepare funding for batch operations
                   </p>
                 </div>
 
-                <div className="bg-black/40 border border-gold-500/20 rounded-2xl p-4 sm:p-6">
+                <div className="bg-black/40 border border-gold-500/20 rounded p-4 sm:p-6">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-gold-200/80 text-xs mb-1">Split Count</label>
@@ -873,7 +994,7 @@ function InscribePageContent() {
                     </div>
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-3">
-                    <button onClick={handleSplit} disabled={loading || !isConnected} className="px-4 py-3 bg-black/60 border border-gold-500/40 rounded-lg text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? (
+                    <button onClick={handleSplit} disabled={loading || !isConnected} className="px-4 py-3 bg-black/60 border border-gold-500/40 rounded text-gold-300 hover:border-gold-500/60 disabled:opacity-50">{loading ? (
                       <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -889,20 +1010,14 @@ function InscribePageContent() {
             {activeTab === 'history' && (
               <div className="max-w-5xl mx-auto">
                 <div className="text-center mb-4 sm:mb-6">
-                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">Inscription History</h2>
-                  <p className="text-gold-400/60 text-xs sm:text-sm lg:text-base">
+                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2">Inscription History</h2>
+                  <p className="text-gold-400/60 text-xs sm:text-sm">
                     Audit trail of your inscriptions on Zcash
                   </p>
                 </div>
 
-                {isConnected && wallet?.address ? (
+                {isConnected && wallet?.address && (
                   <InscriptionHistory address={wallet.address} />
-                ) : (
-                  <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                    <p className="text-yellow-400 text-sm text-center">
-                      ⚠️ Please connect your wallet to view history
-                    </p>
-                  </div>
                 )}
               </div>
             )}
@@ -910,7 +1025,7 @@ function InscribePageContent() {
             {/* Connection Warning */}
             {!isConnected && (
               <div className="w-full m-auto max-w-2xl mt-6 flex justify-center">
-                <div className="w-full p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                <div className="w-full p-4 bg-yellow-500/10 border border-yellow-500/30 rounded">
                   <p className="text-yellow-400 text-sm text-center">
                     ⚠️ Please connect your wallet to continue
                   </p>
@@ -920,7 +1035,7 @@ function InscribePageContent() {
 
             {/* Error Display */}
             {error && (
-              <div className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <div className="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded">
                 <p className="text-red-400 text-sm">{error}</p>
               </div>
             )}

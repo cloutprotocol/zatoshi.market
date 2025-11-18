@@ -7,8 +7,31 @@ import dynamic from 'next/dynamic';
 // Client-only Dither to avoid SSR/hydration mismatch
 const Dither = dynamic(() => import('@/components/Dither'), { ssr: false, loading: () => null });
 
-export default function MinePage() {
-  const [mounted, setMounted] = useState(true);
+export default function ZorePage() {
+  const [blockHeight, setBlockHeight] = useState<number | null>(null);
+
+  // Fetch block height
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchBlockHeight() {
+      try {
+        const response = await fetch('https://api.blockchair.com/zcash/stats');
+        const data = await response.json();
+        if (!cancelled) setBlockHeight(data.data.best_block_height);
+      } catch (error) {
+        console.error('Failed to fetch block height:', error);
+      }
+    }
+
+    fetchBlockHeight();
+    const interval = setInterval(fetchBlockHeight, 30000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   return (
     <main className="relative min-h-screen text-gold-100">

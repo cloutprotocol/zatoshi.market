@@ -47,3 +47,7 @@ body {
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
 }
+
+.pt-20{
+  padding-top:4.5rem !important;
+}

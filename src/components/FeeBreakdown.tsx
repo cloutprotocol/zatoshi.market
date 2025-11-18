@@ -16,7 +16,7 @@ export function FeeBreakdown({
   label = 'Cost Breakdown',
 }: FeeBreakdownProps) {
   return (
-    <div className="p-4 bg-black/40 border border-gold-500/20 rounded-xl">
+    <div className="p-4 bg-black/40 border border-gold-500/20 rounded">
       <div className="text-xs text-gold-400/50 mb-3">{label}</div>
       <div className="space-y-2">
         <div className="flex justify-between">

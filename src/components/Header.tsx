@@ -12,8 +12,6 @@ export default function Header() {
   const { wallet, isConnected, mounted } = useWallet();
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const feeEnabled = (process.env.NEXT_PUBLIC_PLATFORM_FEE_ENABLED || '').toLowerCase() === 'true';
-  const convexEnv = (process.env.NEXT_PUBLIC_CONVEX_ENV || (process.env.NEXT_PUBLIC_CONVEX_URL_PROD ? 'prod' : 'dev')).toUpperCase();
 
   return (
     <>
@@ -31,71 +29,36 @@ export default function Header() {
             INSCRIBE
           </Link>
           <Link href="/mine" className="px-4 py-2 text-gold-400 hover:text-gold-300">
-            MINE ZORE
+            ZORE
           </Link>
           <Link href="/tokens" className="px-4 py-2 text-gold-400 hover:text-gold-300">
             ZRC20
           </Link>
           {!mounted ? (
             <button
-              className="px-6 py-2 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-all"
+              className="px-6 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 font-bold hover:bg-gold-500/30 transition-all"
             >
               CONNECT WALLET
             </button>
           ) : isConnected && wallet ? (
             <button
               onClick={() => setIsWalletOpen(true)}
-              className="px-4 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 rounded font-mono text-sm hover:bg-gold-500/30 transition-all"
+              className="px-4 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 font-mono text-sm hover:bg-gold-500/30 transition-all"
             >
               {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
             </button>
           ) : (
             <button
               onClick={() => setIsWalletOpen(true)}
-              className="px-6 py-2 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-all"
+              className="px-6 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 font-bold hover:bg-gold-500/30 transition-all"
             >
               CONNECT WALLET
             </button>
           )}
-          {/* Fee badge */}
-          <span
-            title={feeEnabled ? 'Platform fee is enabled' : 'Platform fee is disabled'}
-            className={`px-2 py-1 text-xs rounded border ${feeEnabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800/60 text-zinc-300 border-zinc-600/50'}`}
-          >
-            {feeEnabled ? 'FEE ON' : 'FEE OFF'}
-          </span>
-          {/* Env badge */}
-          <span
-            title={`Convex environment: ${convexEnv}`}
-            className={`px-2 py-1 text-xs rounded border ${convexEnv==='PROD' ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-blue-500/20 text-blue-300 border-blue-500/30'}`}
-          >
-            {convexEnv}
-          </span>
         </div>
 
         {/* Mobile Navigation */}
         <div className="flex lg:hidden items-center gap-3">
-          {!mounted ? (
-            <button
-              className="px-4 py-2 bg-gold-500 text-black font-bold rounded text-sm"
-            >
-              CONNECT
-            </button>
-          ) : isConnected && wallet ? (
-            <button
-              onClick={() => setIsWalletOpen(true)}
-              className="px-3 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 rounded text-sm font-mono"
-            >
-              {wallet.address.slice(0, 4)}...
-            </button>
-          ) : (
-            <button
-              onClick={() => setIsWalletOpen(true)}
-              className="px-4 py-2 bg-gold-500 text-black font-bold rounded text-sm"
-            >
-              CONNECT
-            </button>
-          )}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="text-gold-400 text-2xl p-2"
@@ -109,41 +72,71 @@ export default function Header() {
       {isMobileMenuOpen && (
         <>
           <div
-            className="fixed inset-0 bg-black/60 z-30 lg:hidden top-20"
+            className="fixed inset-0 bg-black/60 z-30 lg:hidden"
             onClick={() => setIsMobileMenuOpen(false)}
           />
-          <div className="fixed top-20 left-0 right-0 z-40 lg:hidden backdrop-blur-xl bg-black/90 border-b border-gold-500/20">
-            <div className="px-6 py-4 space-y-3">
-            <Link
-              href="/zmaps"
-              className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              ZMAPS
-            </Link>
-            <Link
-              href="/inscribe"
-              className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              INSCRIBE
-            </Link>
-            <Link
-              href="/mine"
-              className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              MINE ZORE
-            </Link>
-            <Link
-              href="/tokens"
-              className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              ZRC20
-            </Link>
+          <div className="fixed top-20 -mt-5 left-0 right-0 bottom-0 z-40 lg:hidden backdrop-blur-xl bg-black/90">
+            <div className="h-full flex flex-col">
+              <div className="flex-1 px-6 py-4 space-y-2 pt-20">
+                {/* Connected Wallet Info */}
+                {isConnected && wallet && (
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      setIsWalletOpen(true);
+                    }}
+                    className="w-full mb-4 px-4 py-3 bg-gold-500/20 text-gold-400 border border-gold-500/30 font-mono text-sm hover:bg-gold-500/30 transition-all rounded"
+                  >
+                    {wallet.address.slice(0, 8)}...{wallet.address.slice(-8)}
+                  </button>
+                )}
+
+                <Link
+                  href="/zmaps"
+                  className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  ZMAPS
+                </Link>
+                <Link
+                  href="/inscribe"
+                  className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  INSCRIBE
+                </Link>
+                <Link
+                  href="/mine"
+                  className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  ZORE
+                </Link>
+                <Link
+                  href="/tokens"
+                  className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  ZRC20
+                </Link>
+              </div>
+
+              {/* Connect Button - Bottom of screen on mobile when not connected */}
+              {!isConnected && (
+                <div className="flex justify-center px-6 pb-8 pt-4" style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}>
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      setIsWalletOpen(true);
+                    }}
+                    className="w-[90%] max-w-md py-4 bg-gold-500/20 backdrop-blur-xl text-gold-400 border border-gold-500/30 font-bold active:bg-gold-500/40 transition-all rounded-xl text-base shadow-lg"
+                  >
+                    CONNECT WALLET
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
         </>
       )}
 

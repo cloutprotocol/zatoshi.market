@@ -368,7 +368,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
         </div>
 
         {/* Scrollable Content Area */}
-        <div className="p-6 overflow-y-auto flex-1 no-overscroll">
+        <div className="p-6 overflow-y-auto flex-1 no-overscroll mt-20">
           {/* Close button */}
           <button
             onClick={onClose}
@@ -642,7 +642,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       {/* Modals */}
       {showMnemonic && wallet && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6 overflow-y-auto">
-          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded-lg max-w-3xl w-full p-8 my-8">
+          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded max-w-3xl w-full p-8 my-8">
             <h3 className="text-2xl font-bold text-gold-300 mb-4">WALLET CREATED - BACKUP NOW</h3>
             <div className="bg-gold-500/10 border border-gold-500/30 rounded p-4 mb-6">
               <p className="text-sm text-gold-300">
@@ -698,11 +698,11 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
 
       {showReceive && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
-          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded-lg max-w-md w-full p-8 text-center">
+          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded max-w-md w-full p-8 text-center">
             <h3 className="text-2xl font-bold text-gold-300 mb-6">RECEIVE ZEC</h3>
             {qrDataUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={qrDataUrl} alt="Wallet QR" className="mx-auto mb-6 rounded-lg" />
+              <img src={qrDataUrl} alt="Wallet QR" className="mx-auto mb-6 rounded" />
             )}
             <div className="bg-black/40 p-4 rounded mb-6">
               <p className="text-gold-300 font-mono text-sm break-all">{wallet?.address}</p>
@@ -727,7 +727,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
 
       {showSend && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
-          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded-lg max-w-md w-full p-8">
+          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded max-w-md w-full p-8">
             <h3 className="text-2xl font-bold text-gold-300 mb-6">SEND ZEC</h3>
             <div className="space-y-4 mb-6">
               <div>
@@ -780,7 +780,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       {/* Export Choice Modal */}
       {showExport && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
-          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded-lg max-w-md w-full p-8">
+          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded max-w-md w-full p-8">
             <h3 className="text-2xl font-bold text-gold-300 mb-4">EXPORT OPTIONS</h3>
             <div className="bg-gold-500/10 border border-gold-500/30 rounded p-4 mb-6">
               <p className="text-sm text-gold-300">
@@ -832,7 +832,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       {/* Private Key Modal */}
       {showPrivateKey && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
-          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded-lg max-w-md w-full p-8">
+          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded max-w-md w-full p-8">
             <h3 className="text-2xl font-bold text-gold-300 mb-4">PRIVATE KEY (WIF)</h3>
             <div className="bg-gold-500/10 border border-gold-500/30 rounded p-4 mb-4">
               <p className="text-sm text-gold-300 mb-2">
@@ -873,7 +873,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
       {/* Mnemonic Export Modal */}
       {showMnemonicExport && wallet && wallet.mnemonic && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
-          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded-lg max-w-2xl w-full p-8">
+          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded max-w-2xl w-full p-8">
             <h3 className="text-2xl font-bold text-gold-300 mb-4">12-WORD RECOVERY PHRASE</h3>
             <div className="bg-gold-500/10 border border-gold-500/30 rounded p-4 mb-6">
               <p className="text-sm text-gold-300">

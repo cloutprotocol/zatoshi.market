@@ -827,7 +827,7 @@ export default function ZmapsPage() {
       {/* Mobile Cart Backdrop */}
       {showCart && (
         <div
-          className="fixed inset-0 bg-black/60 z-30 lg:hidden top-20"
+          className="fixed inset-0 bg-black/60 z-30 lg:hidden"
           onClick={() => setShowCart(false)}
         />
       )}

@@ -52,7 +52,7 @@ export function ConfirmTransaction(props: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70" onClick={onCancel} />
-      <div className="relative z-10 w-full max-w-lg bg-black/90 border border-gold-500/30 rounded-xl p-6">
+      <div className="relative z-10 w-full max-w-lg bg-black/90 border border-gold-500/30 rounded p-6">
         <h3 className="text-xl font-bold mb-4 text-gold-300">{title}</h3>
         <div className="space-y-2 text-sm">
           {visible.map((i, idx) => (

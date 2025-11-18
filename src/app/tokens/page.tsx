@@ -350,7 +350,7 @@ export default function TokenListPage() {
 
               {paginatedTokens.length === 0 && !loading && (
                 <div className="text-center py-12 text-gold-300/60">
-                  No tokens found matching "{searchQuery}"
+                  No tokens found matching &quot;{searchQuery}&quot;
                 </div>
               )}
             </div>
