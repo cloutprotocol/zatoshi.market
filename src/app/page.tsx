@@ -1,167 +1,188 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import dynamic from 'next/dynamic';
-import { zcashRPC } from '@/services/zcash';
 
-// Load Dither only on the client to avoid SSR/hydration issues
-const Dither = dynamic(() => import('@/components/Dither'), { ssr: false, loading: () => null });
-
-export default function Home() {
-  const [blockHeight, setBlockHeight] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
+export default function BRBPage() {
+  const [blockHeight, setBlockHeight] = useState<number | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+  });
 
   useEffect(() => {
-    async function fetchData() {
+    // Hide header/nav globally
+    const nav = document.querySelector('nav');
+    if (nav) {
+      (nav as HTMLElement).style.display = 'none';
+    }
+
+    // Fetch Zcash block height
+    async function fetchBlockHeight() {
       try {
-        const height = await zcashRPC.getBlockCount();
-        setBlockHeight(height);
+        // Use Blockchair API (same as the rest of the app)
+        const response = await fetch('https://api.blockchair.com/zcash/stats');
+        const data = await response.json();
+        setBlockHeight(data.data.best_block_height);
       } catch (error) {
         console.error('Failed to fetch block height:', error);
-      } finally {
-        setLoading(false);
+        // Fallback estimation
+        const estimatedBlock = 3138817 + Math.floor((Date.now() - 1731906683000) / 150000);
+        setBlockHeight(estimatedBlock);
       }
     }
-    fetchData();
-    // Refresh every 2 minutes
-    const interval = setInterval(fetchData, 120000);
-    return () => clearInterval(interval);
+    fetchBlockHeight();
+    const blockInterval = setInterval(fetchBlockHeight, 30000); // Every 30 seconds
+
+    // Update countdown timer
+    function updateCountdown() {
+      // Target date: NOV 18 2025 12:00PM PST
+      const targetDate = new Date('2025-11-18T20:00:00Z'); // 12PM PST = 8PM UTC
+      const now = new Date();
+      const diff = targetDate.getTime() - now.getTime();
+
+      if (diff > 0) {
+        setTimeRemaining({
+          days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+          hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+          minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+          seconds: Math.floor((diff % (1000 * 60)) / 1000),
+        });
+      } else {
+        setTimeRemaining({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+      }
+    }
+    updateCountdown();
+    const countdownInterval = setInterval(updateCountdown, 1000);
+
+    return () => {
+      clearInterval(blockInterval);
+      clearInterval(countdownInterval);
+      // Restore nav on cleanup
+      if (nav) {
+        (nav as HTMLElement).style.display = '';
+      }
+    };
   }, []);
 
-  const totalZmaps = Math.ceil(blockHeight / 100);
-
   return (
-    <main className="relative min-h-screen pt-20">
-      {/* Dither Background */}
+    <main className="relative min-h-screen w-full overflow-hidden">
+      {/* Full Screen Video Background */}
       <div className="fixed inset-0 w-full h-full -z-10">
-        <Dither
-          waveColor={[0.8, 0.6, 0.2]}
-          disableAnimation={false}
-          enableMouseInteraction={true}
-          mouseRadius={0.3}
-          colorNum={4}
-          waveAmplitude={0.3}
-          waveFrequency={3}
-          waveSpeed={0.05}
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover opacity-40"
+        >
+          <source src="/zordi.mp4" type="video/mp4" />
+        </video>
+
+        {/* Gold Grid Overlay */}
+        <div
+          className="absolute inset-0 opacity-20"
+          style={{
+            backgroundImage: `
+              linear-gradient(rgba(255, 200, 55, 0.3) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(255, 200, 55, 0.3) 1px, transparent 1px)
+            `,
+            backgroundSize: '100px 100px',
+          }}
         />
+
+        {/* Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/80" />
       </div>
 
       {/* Content */}
-      <div className="relative z-10">
-        {/* Hero Section */}
-        <div className="container mx-auto px-6 py-24 md:py-32">
-          <div className="max-w-4xl">
-            <h1 className="text-6xl md:text-8xl font-bold mb-8 leading-none text-gold-300">
-              ZORDINALS
-              <br />
-              MARKETPLACE
-              <br />
-              ON <span className="text-gold-400">ZCASH</span>
-            </h1>
-            <p className="text-xl md:text-2xl mb-12 max-w-2xl text-gold-100/80">
-              Deploy, mint & trade ZRC20 tokens, ZMAPS, and Zordinal Inscriptions on Zcash.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Link
-                href="/inscribe"
-                className="px-8 py-4 bg-gold-500 text-black text-lg font-bold text-center"
-              >
-                INSCRIBE
-              </Link>
-              <a
-                href="https://zerdinals.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-8 py-4 bg-gold-500/10 text-gold-400 text-lg font-bold text-center"
-              >
-                VIEW EXPLORER
-              </a>
-            </div>
-          </div>
-        </div>
+      <div className="relative z-10 flex items-center justify-center min-h-screen px-6">
+        <div className="max-w-4xl w-full">
+          {/* Main Glass Container */}
+          <div className="relative overflow-hidden rounded-none border border-gold-500/30 bg-black/60 backdrop-blur-xl p-12 md:p-16">
+            {/* Liquid Glass Effect */}
+            <div className="absolute inset-0 bg-liquid-glass opacity-30" />
 
-        {/* Features Grid */}
-        <div className="container mx-auto px-6 py-24">
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
-              <h3 className="text-2xl font-bold mb-4 text-gold-400">ZRC20 TOKENS</h3>
-              <p className="text-gold-100/80">
-                Deploy, mint & trade ZRC20 tokens, the fungible token standard of Zerdinals.
-              </p>
-            </div>
+            {/* Content */}
+            <div className="relative z-10">
+              {/* Logo/Brand */}
+              <div className="text-center mb-12">
+                <h1 className="text-5xl md:text-7xl font-bold text-gold-300 mb-4 tracking-wider">
+                  ZATOSHI.MARKET
+                </h1>
+              </div>
 
-            <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
-              <h3 className="text-2xl font-bold mb-4 text-gold-400">ZMAPS</h3>
-              <p className="text-gold-100/80">
-                Each ZMAP represents 100 Zcash blocks and can be used to mine ZORE tokens.
-              </p>
-            </div>
-
-            <div className="p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
-              <h3 className="text-2xl font-bold mb-4 text-gold-400">ZERDINAL INSCRIPTIONS</h3>
-              <p className="text-gold-100/80">
-                Digital art inscriptions on Zcash coming soon.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats Section - Live Data */}
-        <div className="container mx-auto px-6 py-24">
-          <div className="p-12 bg-black/40 relative overflow-hidden">
-            <div className="absolute inset-0 bg-liquid-glass opacity-60"></div>
-            <div className="grid md:grid-cols-4 gap-8 text-center relative z-10">
-              <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">
-                  {loading ? '...' : blockHeight.toLocaleString()}
+              {/* Zcash Block Height */}
+              <div className="text-center mb-12 p-6 bg-black/40 border border-gold-500/20 rounded-none">
+                <div className="text-gold-200/60 text-sm uppercase tracking-widest mb-2">
+                  Current Zcash Block
                 </div>
-                <div className="text-gold-200/80 text-sm">ZCASH BLOCKS</div>
-              </div>
-              <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">
-                  {loading ? '...' : totalZmaps.toLocaleString()}
+                <div className="text-4xl md:text-5xl font-bold text-gold-400 font-mono">
+                  {blockHeight !== null ? blockHeight.toLocaleString() : 'Loading...'}
                 </div>
-                <div className="text-gold-200/80 text-sm">TOTAL ZMAPS</div>
               </div>
-              <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">...</div>
-                <div className="text-gold-200/80 text-sm">INSCRIBED ZMAPS</div>
+
+              {/* Countdown Timer */}
+              <div className="text-center">
+                <div className="text-gold-200/60 text-sm uppercase tracking-widest mb-6">
+                  Launching In
+                </div>
+                <div className="grid grid-cols-4 gap-4 md:gap-8">
+                  {/* Days */}
+                  <div className="bg-black/60 border border-gold-500/30 p-6 rounded-none backdrop-blur-sm">
+                    <div className="text-4xl md:text-6xl font-bold text-gold-400 font-mono mb-2">
+                      {String(timeRemaining.days).padStart(2, '0')}
+                    </div>
+                    <div className="text-gold-200/60 text-xs md:text-sm uppercase tracking-wider">
+                      Days
+                    </div>
+                  </div>
+
+                  {/* Hours */}
+                  <div className="bg-black/60 border border-gold-500/30 p-6 rounded-none backdrop-blur-sm">
+                    <div className="text-4xl md:text-6xl font-bold text-gold-400 font-mono mb-2">
+                      {String(timeRemaining.hours).padStart(2, '0')}
+                    </div>
+                    <div className="text-gold-200/60 text-xs md:text-sm uppercase tracking-wider">
+                      Hours
+                    </div>
+                  </div>
+
+                  {/* Minutes */}
+                  <div className="bg-black/60 border border-gold-500/30 p-6 rounded-none backdrop-blur-sm">
+                    <div className="text-4xl md:text-6xl font-bold text-gold-400 font-mono mb-2">
+                      {String(timeRemaining.minutes).padStart(2, '0')}
+                    </div>
+                    <div className="text-gold-200/60 text-xs md:text-sm uppercase tracking-wider">
+                      Minutes
+                    </div>
+                  </div>
+
+                  {/* Seconds */}
+                  <div className="bg-black/60 border border-gold-500/30 p-6 rounded-none backdrop-blur-sm">
+                    <div className="text-4xl md:text-6xl font-bold text-gold-400 font-mono mb-2">
+                      {String(timeRemaining.seconds).padStart(2, '0')}
+                    </div>
+                    <div className="text-gold-200/60 text-xs md:text-sm uppercase tracking-wider">
+                      Seconds
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div>
-                <div className="text-5xl font-bold mb-2 text-gold-400">0.002</div>
-                <div className="text-gold-200/80 text-sm">ZEC PER ZMAP</div>
-              </div>
+
+            </div>
+          </div>
+
+          {/* Bottom Accent */}
+          <div className="mt-8 text-center">
+            <div className="inline-flex items-center gap-2 text-gold-300/40 text-xs uppercase tracking-widest">
+              <div className="w-8 h-px bg-gold-500/40" />
+              <span>Preparing Something Special</span>
+              <div className="w-8 h-px bg-gold-500/40" />
             </div>
           </div>
         </div>
-
-        {/* Footer */}
-        <footer className="container mx-auto px-6 py-12">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="text-2xl text-gold-400">zatoshi.market</div>
-            <div className="flex gap-6 text-gold-300/80">
-              <Link href="/wallet" className="hover:text-gold-400 transition-all">
-                WALLET
-              </Link>
-              <a href="https://zerdinals.com/" target="_blank" rel="noopener noreferrer" className="hover:text-gold-400 transition-all">
-                EXPLORER
-              </a>
-              <Link href="/zmaps" className="hover:text-gold-400 transition-all">
-                ZMAPS
-              </Link>
-              <Link href="/token/zore" className="hover:text-gold-400 transition-all">
-                ZORE
-              </Link>
-              <a href="https://twitter.com/zatoshimarket" target="_blank" rel="noopener noreferrer" className="hover:text-gold-400 transition-all">
-                TWITTER
-              </a>
-            </div>
-          </div>
-          <div className="text-center mt-8 text-gold-200/60">
-            ZRC20 tokens, ZMAPS, and Zerdinal inscriptions on Zcash
-          </div>
-        </footer>
       </div>
     </main>
   );

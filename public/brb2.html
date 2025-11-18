@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zatoshi Market - Coming Soon</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .video-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+
+        .video-background video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .glass-app-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px 0;
+            z-index: 100;
+        }
+
+        .countdown-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 60px;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .countdown-title {
+            font-size: 14px;
+            font-weight: 300;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.8);
+            white-space: nowrap;
+        }
+
+        .countdown {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+        }
+
+        .countdown-item {
+            text-align: center;
+            min-width: 60px;
+        }
+
+        .countdown-number {
+            font-size: 28px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+        }
+
+        .countdown-label {
+            font-size: 10px;
+            font-weight: 300;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-top: 4px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .countdown-separator {
+            font-size: 24px;
+            font-weight: 300;
+            color: rgba(255, 255, 255, 0.3);
+            margin: 0 -10px;
+        }
+
+        .block-height {
+            font-size: 12px;
+            font-weight: 400;
+            color: rgba(255, 255, 255, 0.7);
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: 1px;
+            white-space: nowrap;
+        }
+
+        .block-height span {
+            color: #fbbf24;
+            font-weight: 600;
+        }
+
+        .grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(251, 191, 36, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(251, 191, 36, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .logo {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: 700;
+            letter-spacing: 4px;
+            color: #fbbf24;
+            z-index: 10;
+            text-shadow: 0 0 30px rgba(251, 191, 36, 0.5);
+        }
+
+        @media (max-width: 768px) {
+        .countdown-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 10;
+            text-align: center;
+            padding: 20px 0;
+        }
+            
+            .countdown {
+                gap: 15px;
+            }
+            
+            .countdown-number {
+                font-size: 24px;
+            }
+            
+            .logo {
+                font-size: 36px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="video-background">
+        <video autoplay muted loop playsinline>
+            <source src="zordi.mp4" type="video/mp4">
+        </video>
+        <div class="grid-overlay"></div>
+    </div>
+
+    <div class="content">
+        <div class="glass-container">
+            <div class="logo">ZATOSHI MARKET</div>
+            <div class="subtitle">The Future of Zcash Trading</div>
+            
+    <div class="glass-app-bar">
+        <div class="countdown-container">
+            <div class="countdown-title">Launching In</div>
+            <div class="countdown">
+                <div class="countdown-item">
+                    <div class="countdown-number" id="days">00</div>
+                    <div class="countdown-label">Days</div>
+                </div>
+                <div class="countdown-separator">:</div>
+                <div class="countdown-item">
+                    <div class="countdown-number" id="hours">00</div>
+                    <div class="countdown-label">Hours</div>
+                </div>
+                <div class="countdown-separator">:</div>
+                <div class="countdown-item">
+                    <div class="countdown-number" id="minutes">00</div>
+                    <div class="countdown-label">Minutes</div>
+                </div>
+                <div class="countdown-separator">:</div>
+                <div class="countdown-item">
+                    <div class="countdown-number" id="seconds">00</div>
+                    <div class="countdown-label">Seconds</div>
+                </div>
+            </div>
+            <div class="block-height">
+                Block: <span id="blockHeight">Loading...</span>
+            </div>
+        </div>
+    </div>
+                <div class="countdown-item">
+                    <div class="countdown-number" id="hours">00</div>
+                    <div class="countdown-label">Hours</div>
+                </div>
+                <div class="countdown-item">
+                    <div class="countdown-number" id="minutes">00</div>
+                    <div class="countdown-label">Minutes</div>
+                </div>
+                <div class="countdown-item">
+                    <div class="countdown-number" id="seconds">00</div>
+                    <div class="countdown-label">Seconds</div>
+                </div>
+            </div>
+            <div class="block-height">
+                Block: <span id="blockHeight">Loading...</span>
+            </div>
+        </div>
+    </div>
+                    <div class="countdown-item">
+                        <div class="countdown-value" id="hours">00</div>
+                        <div class="countdown-unit">Hours</div>
+                    </div>
+                    <div class="countdown-item">
+                        <div class="countdown-value" id="minutes">00</div>
+                        <div class="countdown-unit">Minutes</div>
+                    </div>
+                    <div class="countdown-item">
+                        <div class="countdown-value" id="seconds">00</div>
+                        <div class="countdown-unit">Seconds</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="block-info">
+                <div class="block-label">Current Zcash Block Height</div>
+                <div class="block-height" id="blockHeight">Loading...</div>
+            </div>
+
+            <div class="coming-soon">Revolutionary Zcash trading experience coming soon</div>
+        </div>
+    </div>
+
+    <script>
+        // Countdown timer
+        function updateCountdown() {
+            const targetDate = new Date('2025-11-18T12:00:00-08:00'); // PST timezone
+            const now = new Date();
+            const difference = targetDate - now;
+
+            if (difference > 0) {
+                const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((difference % (1000 * 60)) / 1000);
+
+                document.getElementById('days').textContent = String(days).padStart(2, '0');
+                document.getElementById('hours').textContent = String(hours).padStart(2, '0');
+                document.getElementById('minutes').textContent = String(minutes).padStart(2, '0');
+                document.getElementById('seconds').textContent = String(seconds).padStart(2, '0');
+            } else {
+                document.getElementById('countdown').innerHTML = '<div style="font-size: 2rem; color: #FFD700;">LAUNCHED!</div>';
+            }
+        }
+
+        // Fetch Zcash block height
+        async function fetchBlockHeight() {
+            try {
+                const response = await fetch('https://api.zcha.in/v2/mainnet/network');
+                const data = await response.json();
+                document.getElementById('blockHeight').textContent = data.height.toLocaleString();
+            } catch (error) {
+                console.error('Error fetching block height:', error);
+                document.getElementById('blockHeight').textContent = 'Network Offline';
+            }
+        }
+
+        // Fallback block height if API fails
+        function setFallbackBlockHeight() {
+            const baseHeight = 2765000; // Approximate current height
+            const blocksPerDay = 576; // Zcash blocks per day
+            const daysSince = Math.floor((Date.now() - new Date('2024-11-17').getTime()) / (1000 * 60 * 60 * 24));
+            const estimatedHeight = baseHeight + (daysSince * blocksPerDay);
+            document.getElementById('blockHeight').textContent = estimatedHeight.toLocaleString();
+        }
+
+        // Initialize
+        updateCountdown();
+        fetchBlockHeight().catch(setFallbackBlockHeight);
+
+        // Update every second
+        setInterval(updateCountdown, 1000);
+        
+        // Update block height every 30 seconds
+        setInterval(() => {
+            fetchBlockHeight().catch(setFallbackBlockHeight);
+        }, 30000);
+
+        // Add subtle parallax effect to grid
+        document.addEventListener('mousemove', (e) => {
+            const grid = document.querySelector('.grid-overlay');
+            const x = (e.clientX / window.innerWidth) * 100;
+            const y = (e.clientY / window.innerHeight) * 100;
+            grid.style.transform = `translate(${x * 0.05}px, ${y * 0.05}px)`;
+        });
+    </script>
+</body>
+</html>
