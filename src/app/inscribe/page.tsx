@@ -328,7 +328,7 @@ function InscribePageContent() {
 
   return (
     <main className="min-h-screen h-screen bg-black text-gold-300 pt-20 pb-4 overflow-hidden">
-      <div className="container mx-auto px-4 sm:px-6 h-full flex flex-col max-w-7xl">
+      <div className="container mx-auto px-4 sm:px-6 h-full flex flex-col max-w-[1600px]">
         <div className="flex flex-col lg:flex-row gap-4 h-full min-h-0">
           {/* Left Sidebar - Tabs */}
           <div className="lg:w-56 flex-shrink-0 flex flex-col lg:overflow-y-auto">
@@ -336,61 +336,61 @@ function InscribePageContent() {
             <div className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0 -mx-4 px-4 lg:mx-0 lg:px-0 scrollbar-hide">
               <button
                 onClick={() => setActiveTab('names')}
-                className={`flex-shrink-0 lg:w-full text-left px-6 py-3 sm:px-6 sm:py-4 rounded-lg font-bold transition-all ${
+                className={`flex-shrink-0 lg:w-full text-left px-5 py-2.5 sm:px-5 sm:py-3 rounded-lg font-bold transition-all ${
                   activeTab === 'names'
                     ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
                     : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
                 }`}
               >
-                <div className="text-sm sm:text-base lg:text-lg whitespace-nowrap lg:whitespace-normal">Names</div>
+                <div className="text-sm sm:text-sm lg:text-base whitespace-nowrap lg:whitespace-normal">Names</div>
                 <div className="text-xs opacity-75 hidden sm:block">.zec • .zcash</div>
               </button>
 
               <button
                 onClick={() => setActiveTab('text')}
-                className={`flex-shrink-0 lg:w-full text-left px-6 py-3 sm:px-6 sm:py-4 rounded-lg font-bold transition-all ${
+                className={`flex-shrink-0 lg:w-full text-left px-5 py-2.5 sm:px-5 sm:py-3 rounded-lg font-bold transition-all ${
                   activeTab === 'text'
                     ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
                     : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
                 }`}
               >
-                <div className="text-sm sm:text-base lg:text-lg whitespace-nowrap lg:whitespace-normal">Text</div>
+                <div className="text-sm sm:text-sm lg:text-base whitespace-nowrap lg:whitespace-normal">Text</div>
                 <div className="text-xs opacity-75 hidden sm:block">Inscriptions</div>
               </button>
 
               <button
                 onClick={() => setActiveTab('zrc20')}
-                className={`flex-shrink-0 lg:w-full text-left px-6 py-3 sm:px-6 sm:py-4 rounded-lg font-bold transition-all ${
+                className={`flex-shrink-0 lg:w-full text-left px-5 py-2.5 sm:px-5 sm:py-3 rounded-lg font-bold transition-all ${
                   activeTab === 'zrc20'
                     ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
                     : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
                 }`}
               >
-                <div className="text-sm sm:text-base lg:text-lg whitespace-nowrap lg:whitespace-normal">ZRC-20</div>
+                <div className="text-sm sm:text-sm lg:text-base whitespace-nowrap lg:whitespace-normal">ZRC-20</div>
                 <div className="text-xs opacity-75 hidden sm:block">Token Mint</div>
               </button>
 
               <button
                 onClick={() => setActiveTab('utxo')}
-                className={`flex-shrink-0 lg:w-full text-left px-6 py-3 sm:px-6 sm:py-4 rounded-lg font-bold transition-all ${
+                className={`flex-shrink-0 lg:w-full text-left px-5 py-2.5 sm:px-5 sm:py-3 rounded-lg font-bold transition-all ${
                   activeTab === 'utxo'
                     ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
                     : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
                 }`}
               >
-                <div className="text-sm sm:text-base lg:text-lg whitespace-nowrap lg:whitespace-normal">UTXO</div>
-                <div className="text-xs opacity-75 hidden sm:block">UTXO MANAGEMENT</div>
+                <div className="text-sm sm:text-sm lg:text-base whitespace-nowrap lg:whitespace-normal">UTXO</div>
+                <div className="text-xs opacity-75 hidden sm:block">UTXO Management</div>
               </button>
 
               <button
                 onClick={() => setActiveTab('history')}
-                className={`flex-shrink-0 lg:w-full text-left px-6 py-3 sm:px-6 sm:py-4 rounded-lg font-bold transition-all ${
+                className={`flex-shrink-0 lg:w-full text-left px-5 py-2.5 sm:px-5 sm:py-3 rounded-lg font-bold transition-all ${
                   activeTab === 'history'
                     ? 'bg-gold-500 text-black shadow-sm shadow-gold-500/50'
                     : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
                 }`}
               >
-                <div className="text-sm sm:text-base lg:text-lg whitespace-nowrap lg:whitespace-normal">History</div>
+                <div className="text-sm sm:text-sm lg:text-base whitespace-nowrap lg:whitespace-normal">History</div>
                 <div className="text-xs opacity-75 hidden sm:block">Inscription History</div>
               </button>
             </div>
@@ -414,9 +414,9 @@ function InscribePageContent() {
             {/* NAME REGISTRATION TAB */}
             {activeTab === 'names' && (
               <div className="max-w-2xl mx-auto">
-                <div className="text-center mb-6 sm:mb-8 lg:mb-10">
-                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">Register Your Zcash Name</h2>
-                  <p className="text-gold-400/60 text-xs sm:text-sm lg:text-base">
+                <div className="text-center mb-6 sm:mb-7">
+                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2">Register Your Zcash Name</h2>
+                  <p className="text-gold-400/60 text-xs sm:text-sm">
                     Secure your .zec or .zcash identity on the blockchain
                   </p>
                 </div>
@@ -489,7 +489,7 @@ function InscribePageContent() {
                 <button
                   onClick={handleNameRegistration}
                   disabled={loading || !isConnected || !nameInput.trim() || !!nameError}
-                  className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-gold-500 text-black font-bold text-base sm:text-lg rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-gold-500/20"
+                  className="w-full px-4 py-2.5 sm:px-5 sm:py-3 bg-gold-500 text-black font-bold text-sm sm:text-base rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-gold-500/20"
                 >
                   {loading ? (
                     <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
