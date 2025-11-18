@@ -33,6 +33,9 @@ export default function Header() {
           <Link href="/mine" className="px-4 py-2 text-gold-400 hover:text-gold-300">
             MINE ZORE
           </Link>
+          <Link href="/tokens" className="px-4 py-2 text-gold-400 hover:text-gold-300">
+            ZRC20
+          </Link>
           {!mounted ? (
             <button
               className="px-6 py-2 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-all"
@@ -131,6 +134,13 @@ export default function Header() {
               onClick={() => setIsMobileMenuOpen(false)}
             >
               MINE ZORE
+            </Link>
+            <Link
+              href="/tokens"
+              className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              ZRC20
             </Link>
           </div>
         </div>

@@ -1,10 +1,23 @@
 import { NextResponse } from 'next/server';
 
+const TOKEN_API_BASE = 'https://token-api.zerdinals.com';
+const INDEXER_API_BASE = 'https://indexer.zerdinals.com';
+
 export async function GET(request: Request, { params }: { params: { path: string[] } }) {
   const path = params.path?.join('/') || '';
+  const { searchParams } = new URL(request.url);
+
+  // Determine which API to use based on path
+  let apiBase = TOKEN_API_BASE;
+  if (path.startsWith('inscription') || path.startsWith('content') || path.startsWith('address')) {
+    apiBase = INDEXER_API_BASE;
+  }
 
   try {
-    const response = await fetch(`https://zerdinals.com/api/${path}`, {
+    const queryString = searchParams.toString();
+    const url = `${apiBase}/${path}${queryString ? `?${queryString}` : ''}`;
+
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

@@ -6,11 +6,12 @@
 export interface ZerdinalsToken {
   tick: string; // Token ticker (e.g., "ZORE")
   name?: string;
-  supply?: string;
+  supply?: number | string;
   decimals?: number;
   holders?: number;
-  minted?: string;
-  limit?: string;
+  minted?: number | string;
+  mintedAmount?: number;
+  limit?: number | string;
   progress?: number;
   price?: number;
   priceChange24h?: number;
@@ -18,9 +19,16 @@ export interface ZerdinalsToken {
   volume24h?: number;
   transactions?: number;
   deployBlock?: number;
+  block?: number;
   deployTxid?: string;
+  txid?: string;
   deployTime?: number;
+  time?: number;
   description?: string;
+  isMinted?: boolean;
+  inscription_id?: string;
+  deployer?: string;
+  completedBlock?: number;
 }
 
 export interface ZerdinalsInscription {
@@ -91,10 +99,14 @@ class ZerdinalsAPIService {
   }
 
   /**
-   * Get all tokens
+   * Get all tokens from Zerdinals Token API
    */
-  async getTokens(limit: number = 100, offset: number = 0): Promise<ZerdinalsToken[]> {
-    return this.apiCall<ZerdinalsToken[]>(`/tokens?limit=${limit}&offset=${offset}`);
+  async getTokens(limit: number = 100, offset: number = 0): Promise<{ results: ZerdinalsToken[]; total?: number }> {
+    const response = await this.apiCall<any>(`/zrc20/token/token-list/all?limit=${limit}&offset=${offset}`);
+    return {
+      results: response.data?.results || [],
+      total: response.data?.total
+    };
   }
 
   /**

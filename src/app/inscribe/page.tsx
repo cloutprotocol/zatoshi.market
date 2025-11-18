@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 
 import { useState, useEffect } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 // Switch to Convex actions for inscription flows
 import { getConvexClient } from '@/lib/convexClient';
@@ -26,13 +27,14 @@ import { FeeBreakdown } from '@/components/FeeBreakdown';
 import { ConfirmTransaction } from '@/components/ConfirmTransaction';
 import { InscriptionHistory } from '@/components/InscriptionHistory';
 
-export default function InscribePage() {
+function InscribePageContent() {
   // Ensure noble-secp has HMAC in browser (for deterministic signing)
   if (!(secp as any).etc.hmacSha256Sync) {
     (secp as any).etc.hmacSha256Sync = (key: Uint8Array, ...msgs: Uint8Array[]) =>
       hmac(sha256, key, (secp as any).etc.concatBytes(...msgs));
   }
   const { wallet, isConnected } = useWallet();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<'names' | 'text' | 'zrc20' | 'utxo' | 'history'>('names');
 
   // Name registration form
@@ -67,6 +69,27 @@ export default function InscribePage() {
   const [error, setError] = useState<string | null>(null);
 
   const fullName = `${nameInput}.${nameExtension}`;
+
+  // Handle URL params to prefill ZRC20 form
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    const op = searchParams.get('op');
+    const tickParam = searchParams.get('tick');
+    const amountParam = searchParams.get('amount');
+
+    if (tab === 'zrc20') {
+      setActiveTab('zrc20');
+      if (op === 'mint' || op === 'deploy' || op === 'transfer') {
+        setZrcOp(op);
+      }
+      if (tickParam) {
+        setTick(tickParam.toUpperCase());
+      }
+      if (amountParam) {
+        setAmount(amountParam);
+      }
+    }
+  }, [searchParams]);
 
   // Clear success message when switching tabs
   useEffect(() => {
@@ -964,5 +987,13 @@ export default function InscribePage() {
         />
       )}
     </main>
+  );
+}
+
+export default function InscribePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="text-gold-400 animate-pulse">Loading...</div></div>}>
+      <InscribePageContent />
+    </Suspense>
   );
 }
