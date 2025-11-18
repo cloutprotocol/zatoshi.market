@@ -18,7 +18,6 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
   const [balance, setBalance] = useState({ confirmed: 0, unconfirmed: 0 });
   const [usdPrice, setUsdPrice] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'zrc20' | 'inscriptions'>('zrc20');
   const [showMnemonic, setShowMnemonic] = useState(false);
   const [showReceive, setShowReceive] = useState(false);
   const [showSend, setShowSend] = useState(false);
@@ -466,84 +465,9 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                 </button>
               </div>
 
-              {/* Tabs */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setActiveTab('zrc20')}
-                  className={`px-4 py-3 font-bold rounded transition-all ${
-                    activeTab === 'zrc20' ? 'bg-gold-500 text-black' : 'bg-gold-500/10 text-gold-400'
-                  }`}
-                >
-                  ZRC20
-                </button>
-                <button
-                  onClick={() => setActiveTab('inscriptions')}
-                  className={`px-4 py-3 font-bold rounded transition-all ${
-                    activeTab === 'inscriptions' ? 'bg-gold-500 text-black' : 'bg-gold-500/10 text-gold-400'
-                  }`}
-                >
-                  Inscriptions
-                </button>
-              </div>
-
-              {/* Tab Content */}
-              {activeTab === 'zrc20' && (
-                <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {/* Platform token ZORE always at top */}
-                  <div className="p-4 bg-black/40 rounded border border-gold-500/30">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gold-500 rounded-full flex items-center justify-center text-black font-bold">
-                        Z
-                      </div>
-                      <div className="flex-1">
-                        <div className="text-gold-300 font-bold">ZORE</div>
-                      </div>
-                      <div className="text-gold-400 font-bold">0</div>
-                    </div>
-                  </div>
-
-                  {/* Other ZRC-20 tokens */}
-                  {loadingInscriptions ? (
-                    <div className="p-4 text-center text-gold-200/60 text-sm">
-                      Loading tokens...
-                    </div>
-                  ) : zrc20Tokens.length > 0 ? (
-                    zrc20Tokens.map((token) => (
-                      <div key={token.tick} className="p-4 bg-black/40 rounded hover:bg-black/50 transition-all">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold text-xs">
-                            {token.tick.slice(0, 2)}
-                          </div>
-                          <div className="flex-1">
-                            <div className="text-gold-300 font-bold">{token.tick}</div>
-                            <div className="text-gold-200/60 text-xs flex gap-3">
-                              {token.mintCount > 0 && (
-                                <span className="flex items-center gap-1">
-                                  <span className="w-1 h-1 rounded-full bg-blue-400"></span>
-                                  {token.mintCount} mint{token.mintCount !== 1 ? 's' : ''}
-                                </span>
-                              )}
-                              {token.transferableCount > 0 && (
-                                <span className="flex items-center gap-1">
-                                  <span className="w-1 h-1 rounded-full bg-purple-400"></span>
-                                  {token.transferableCount} transfer{token.transferableCount !== 1 ? 's' : ''}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="text-gold-400 font-bold">{formatZRC20Amount(token.balance)}</div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="p-4 text-center text-gold-200/60 text-sm">
-                      No ZRC-20 tokens
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeTab === 'inscriptions' && (
+              {/* Inscriptions Section */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-bold text-gold-400 uppercase tracking-wide">Inscriptions</h3>
                 <div>
                   {loadingInscriptions ? (
                     <div className="p-8 text-center text-gold-200/60 text-sm">
@@ -611,7 +535,7 @@ export default function WalletDrawer({ isOpen, onClose }: WalletDrawerProps) {
                     </div>
                   )}
                 </div>
-              )}
+              </div>
 
               {/* Bottom Actions */}
               <div className="space-y-2">
