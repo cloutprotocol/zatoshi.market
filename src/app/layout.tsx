@@ -18,16 +18,16 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'zatoshi.market'
   },
-  metadataBase: new URL('https://zatoshi.market'),
+  metadataBase: new URL('https://www.zatoshi.market'),
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://zatoshi.market',
+    url: 'https://www.zatoshi.market',
     siteName: 'zatoshi.market',
     title: 'zatoshi.market',
     images: [
       {
-        url: '/ogimage.png',
+        url: 'https://www.zatoshi.market/ogimage.png',
         width: 1200,
         height: 675,
         alt: 'zatoshi.market',
@@ -37,7 +37,10 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'zatoshi.market',
-    images: ['/ogimage.png'],
+    images: ['https://www.zatoshi.market/ogimage.png'],
+  },
+  alternates: {
+    canonical: 'https://www.zatoshi.market',
   }
 };
 
