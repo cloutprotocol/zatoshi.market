@@ -385,21 +385,24 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
             <div className="space-y-6">
               {/* Header with Close */}
               <div className="flex justify-between items-center">
-                <h2 className="text-xl text-gold-400 font-bold">WALLET</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl text-gold-400 font-bold">WALLET</h2>
+                  <button
+                    onClick={handleCopyAddress}
+                    className="p-1.5 hover:bg-gold-500/20 rounded transition-all"
+                    title="Copy address"
+                  >
+                    <svg className="w-4 h-4 text-gold-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                </div>
                 <button
                   onClick={onClose}
                   className="text-gold-400 hover:text-gold-300 text-1xl mr-3"
                 >
-               
-                </button>
-              </div>
 
-              {/* Address - Desktop only */}
-              <div
-                onClick={handleCopyAddress}
-                className="hidden lg:block p-3 bg-black/40 rounded cursor-pointer hover:bg-black/60 transition-all"
-              >
-                <p className="text-gold-300 font-mono text-xs break-all">{wallet.address}</p>
+                </button>
               </div>
 
               {/* Balance */}
@@ -557,6 +560,14 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
                 >
                   Disconnect (Forget) Wallet
                 </button>
+              </div>
+
+              {/* Address - Desktop only at bottom */}
+              <div
+                onClick={handleCopyAddress}
+                className="hidden lg:block p-3 bg-black/40 rounded cursor-pointer hover:bg-black/60 transition-all"
+              >
+                <p className="text-white font-mono text-xs break-all text-center">{wallet.address}</p>
               </div>
 
               {/* Address & Close - Mobile only at bottom */}

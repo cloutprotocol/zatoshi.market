@@ -3,7 +3,14 @@
 import React, { useState, useEffect } from "react";
 import { formatUSD } from "@/config/fees";
 
-type LineItem = { label: string; valueZats: number; hidden?: boolean };
+type LineItem = {
+  label: string;
+  hidden?: boolean;
+  // numeric items contribute to the total and show zats + USD
+  valueZats?: number;
+  // info-only items render this string and are excluded from totals
+  valueText?: string;
+};
 
 export function ConfirmTransaction(props: {
   isOpen: boolean;
@@ -47,7 +54,7 @@ export function ConfirmTransaction(props: {
   if (!isOpen) return null;
 
   const visible = items.filter((i) => !i.hidden);
-  const total = visible.reduce((s, i) => s + (Number.isFinite(i.valueZats) ? i.valueZats : 0), 0);
+  const total = visible.reduce((s, i) => s + (typeof i.valueZats === 'number' && Number.isFinite(i.valueZats) ? i.valueZats : 0), 0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -59,9 +66,15 @@ export function ConfirmTransaction(props: {
             <div key={idx} className="flex justify-between items-start">
               <span className="text-gold-400/70">{i.label}</span>
               <div className="text-right">
-                <div className="font-mono text-gold-300">{i.valueZats.toLocaleString()} zats</div>
-                {zecPrice && !priceLoading && (
-                  <div className="text-xs text-gold-400/60">{formatUSD(i.valueZats, zecPrice)}</div>
+                {typeof i.valueZats === 'number' && Number.isFinite(i.valueZats) ? (
+                  <>
+                    <div className="font-mono text-gold-300">{i.valueZats.toLocaleString()} zats</div>
+                    {zecPrice && !priceLoading && (
+                      <div className="text-xs text-gold-400/60">{formatUSD(i.valueZats, zecPrice)}</div>
+                    )}
+                  </>
+                ) : (
+                  <div className="font-mono text-gold-300">{i.valueText ?? '-'}</div>
                 )}
               </div>
             </div>
@@ -92,4 +105,3 @@ export function ConfirmTransaction(props: {
     </div>
   );
 }
-
