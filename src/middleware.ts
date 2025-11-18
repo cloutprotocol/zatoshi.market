@@ -4,13 +4,8 @@ import type { NextRequest } from 'next/server';
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow only root path, API routes, and static assets
-  if (
-    pathname === '/' ||
-    pathname.startsWith('/api/') ||
-    pathname.startsWith('/_next/') ||
-    pathname.match(/\.(png|jpg|jpeg|gif|webp|svg|ico|mp4|webm|ogg)$/i)
-  ) {
+  // Allow root path only - redirect everything else
+  if (pathname === '/') {
     return NextResponse.next();
   }
 
@@ -21,11 +16,11 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
+     * Match all request paths except for:
+     * - api routes
+     * - _next (Next.js internals)
+     * - static files
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\..*|api/).*)',
+    '/((?!api|_next|.*\\..*).*)',
   ],
 };
