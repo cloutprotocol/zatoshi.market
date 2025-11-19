@@ -1606,55 +1606,6 @@ function InscribePageContent() {
 
                 {/* Batch Mint - Enhanced liquid glass design */}
                 <div className="mt-8 p-6 sm:p-8 rounded border-2 border-gold-500/40 bg-gradient-to-br from-gold-500/10 via-transparent to-gold-500/5 backdrop-blur-2xl shadow-xl shadow-gold-500/10 space-y-5 relative overflow-hidden isolate">
-                  {/* Liquid Glass Overlay */}
-                  <div className="absolute inset-0 rounded z-10 flex flex-col items-center justify-center border border-black/30" style={{ backdropFilter: 'blur(64px) saturate(180%)', WebkitBackdropFilter: 'blur(64px) saturate(180%)' }}>
-                    <div className="absolute inset-0 bg-black/50 rounded"></div>
-                    <div className="absolute inset-0 bg-liquid-glass opacity-50 rounded"></div>
-                    <div className="absolute inset-0 bg-gradient-to-br from-black/30 via-black/10 to-black/30 rounded"></div>
-                    <div className="absolute inset-0 backdrop-blur-3xl rounded"></div>
-                    <div className="absolute inset-0 border border-gold-500/5 rounded"></div>
-                    <div className="relative z-20 text-center group">
-                      <style dangerouslySetInnerHTML={{__html: `
-                        @keyframes holographic-lock {
-                          0% {
-                            background-position: 0% 50%;
-                          }
-                          50% {
-                            background-position: 100% 50%;
-                          }
-                          100% {
-                            background-position: 0% 50%;
-                          }
-                        }
-                        .holographic-lock-hover:hover::before {
-                          content: '';
-                          position: absolute;
-                          inset: 0;
-                          border-radius: 1rem;
-                          background: linear-gradient(
-                            45deg,
-                            rgba(255, 215, 0, 0.3),
-                            rgba(255, 235, 59, 0.3),
-                            rgba(255, 193, 7, 0.3),
-                            rgba(255, 215, 0, 0.3),
-                            rgba(255, 235, 59, 0.3)
-                          );
-                          background-size: 400% 400%;
-                          animation: holographic-lock 3s ease infinite;
-                          z-index: 1;
-                        }
-                      `}} />
-                      <div className="relative inline-block p-5 rounded bg-black/80 backdrop-blur-xl shadow-2xl border border-black/40 transition-all duration-300 holographic-lock-hover hover:border-gold-500/40 hover:shadow-gold-500/20">
-                        <div className="absolute inset-0 bg-liquid-glass opacity-50 rounded"></div>
-                        <div className="absolute inset-0 border border-gold-500/10 rounded group-hover:border-gold-500/30 transition-all duration-300"></div>
-                        <svg className="w-12 h-12 mx-auto relative z-10 text-gold-400/70 group-hover:text-gold-400 transition-all duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
-                      </div>
-                      <p className="text-xs text-gold-400/70 tracking-wide mt-4">zmaps required</p>
-                    </div>
-                  </div>
-
                   <div className="text-center">
                     <h3 className="text-xl sm:text-2xl font-bold text-gold-300 mb-1">Batch Mint</h3>
                   </div>
