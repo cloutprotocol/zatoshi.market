@@ -8,10 +8,10 @@ export const PLATFORM_FEES = {
   ZMAP_CREATION: 150000, // 0.0015 ZEC (~$1.05 @ $700/ZEC)
 
   // Name Registration Fee (.zec, .zcash)
-  NAME_REGISTRATION: 100000, // 0.0010 ZEC
+  NAME_REGISTRATION: 20000, // 0.0002 ZEC
 
   // General Inscription/Mint Fee
-  INSCRIPTION: 100000, // 0.0010 ZEC
+  INSCRIPTION: 20000, // 0.0002 ZEC
 
   // Network fees (estimated, user pays actual)
   NETWORK_FEE_ESTIMATE: 10000, // 0.0001 ZEC
@@ -77,10 +77,10 @@ export const calculateTotalCost = (platformFee: number, contentSizeBytes: number
  * Maximum file size for image inscriptions (in bytes)
  * Content is automatically chunked into 520-byte pieces (MAX_SCRIPT_ELEMENT_SIZE)
  * Limited by total scriptSig size (~10KB) and practical mempool relay limits
- * Set to 50KB for balance between usability and reliability
+ * Set to 1.25KB actual limit with 1KB displayed to users for safety buffer
  */
-export const MAX_IMAGE_SIZE_BYTES = 1.5 * 1024; // 1.5KB
-export const MAX_IMAGE_SIZE_KB = 1.5;
+export const MAX_IMAGE_SIZE_BYTES = 1.25 * 1024; // 1.25KB actual limit
+export const MAX_IMAGE_SIZE_KB = 1; // 1KB displayed to users
 
 /**
  * File size threshold for showing "large file" warning (in KB)

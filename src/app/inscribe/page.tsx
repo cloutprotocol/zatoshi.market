@@ -232,9 +232,9 @@ function InscribePageContent() {
 
   const handleFileSelect = async (file: File) => {
     // Validate file type
-    const validTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/svg+xml', 'image/webp', 'image/avif'];
+    const validTypes = ['image/png', 'image/gif', 'image/svg+xml'];
     if (!validTypes.includes(file.type)) {
-      setError('Please upload a PNG, JPEG, GIF, SVG, WebP, or AVIF file');
+      setError('Please upload a PNG, GIF, or SVG file');
       return;
     }
 
@@ -314,17 +314,10 @@ function InscribePageContent() {
           } else if (imageFile.type === 'image/gif') {
             fileTypeDisplay = 'GIF';
             inscriptionContentType = 'image/gif';
-          } else if (imageFile.type === 'image/jpeg') {
-            fileTypeDisplay = 'JPEG';
-            inscriptionContentType = 'image/jpeg';
-          } else if (imageFile.type === 'image/avif' || imageFile.type === 'image/webp') {
-            // AVIF and WEBP will use PNG mimetype header for now
-            fileTypeDisplay = imageFile.type === 'image/avif' ? 'AVIF (as PNG)' : 'WEBP (as PNG)';
-            inscriptionContentType = 'image/png';
           } else {
-            // Everything else that is an image will get a PNG mimetype
-            fileTypeDisplay = 'Image (as PNG)';
-            inscriptionContentType = 'image/png';
+            // Fallback (should not reach here due to validation)
+            fileTypeDisplay = 'Image';
+            inscriptionContentType = imageFile.type;
           }
 
 
@@ -1275,7 +1268,7 @@ function InscribePageContent() {
                   >
                     <input
                       type="file"
-                      accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp,image/avif"
+                      accept="image/png,image/gif,image/svg+xml"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) handleFileSelect(file);
@@ -1305,7 +1298,7 @@ function InscribePageContent() {
                             Drop your image here or click to browse
                           </p>
                           <p className="text-gold-400/60 text-sm">
-                            PNG, WebP, AVIF, or SVG files • Max {MAX_IMAGE_SIZE_KB}KB
+                            PNG, GIF, or SVG files • Max {MAX_IMAGE_SIZE_KB}KB
                           </p>
                         </div>
                       </div>

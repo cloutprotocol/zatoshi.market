@@ -7,7 +7,7 @@ runtime configuration for critical inscription flows.
 
 - Server (Convex): `convex/treasury.config.ts`
   - `TREASURY_ADDRESS = 't1YbJR1f6fv5LkTG1avBQFH1UtRT5hGGxDh'`
-  - `PLATFORM_FEE_ZATS = 100000` (0.001 ZEC)
+  - `PLATFORM_FEE_ZATS = 20000` (0.0002 ZEC)
 - Client/UI: `src/config/treasury.config.ts`
   - Same constants for consistent display and client-side building paths.
 

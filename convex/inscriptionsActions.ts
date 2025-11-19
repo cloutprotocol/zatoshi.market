@@ -69,7 +69,7 @@ export const mintInscriptionAction = action({
 
       currentStep = "loading platform config";
       // Platform fee is hard-coded in treasury.config. We always add a second output
-      // to the commit that pays 0.001 ZEC (100,000 zats) to the treasury. Change is
+      // to the commit that pays 0.0002 ZEC (20,000 zats) to the treasury. Change is
       // computed after this fee so the commit has: [p2sh inscription, platform fee, change].
       const PLATFORM_TREASURY = TREASURY_ADDRESS;
 
