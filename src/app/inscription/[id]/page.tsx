@@ -2,6 +2,8 @@
 
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useAction } from 'convex/react';
+import { api } from '../../../../convex/_generated/api';
 
 interface InscriptionData {
   id: string;
@@ -25,6 +27,8 @@ export default function InscriptionPage() {
   const [imageData, setImageData] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [parseFromChain, setParseFromChain] = useState(false);
+  const parseInscription = useAction(api.inscriptionParser.parseInscriptionFromChain);
 
   useEffect(() => {
     async function fetchInscription() {
@@ -64,17 +68,45 @@ export default function InscriptionPage() {
           if (contentResponse.ok) {
             try {
               const arrayBuffer = await contentResponse.arrayBuffer();
-              // Create blob with correct content type
-              const blob = new Blob([arrayBuffer], { type: contentType });
-              const objectUrl = URL.createObjectURL(blob);
+              const bytes = new Uint8Array(arrayBuffer);
 
-              console.log('Image loaded:', {
+              console.log('Image loaded from Zerdinals:', {
                 size: arrayBuffer.byteLength,
-                contentType,
-                objectUrl
+                contentType
               });
 
-              setImageData(objectUrl);
+              // Detect truncated/chunked inscriptions (exactly 520 bytes likely means first chunk only)
+              if (bytes.length === 520 && !parseFromChain) {
+                console.log('Detected potential chunked inscription (520 bytes), parsing from chain...');
+                setParseFromChain(true);
+
+                // Parse full content from blockchain
+                try {
+                  const parsed = await parseInscription({ inscriptionId });
+                  console.log('Parsed from chain:', {
+                    size: parsed.size,
+                    chunks: parsed.chunks,
+                    contentType: parsed.contentType
+                  });
+
+                  // Decode base64 and create object URL
+                  const decodedBytes = Uint8Array.from(atob(parsed.content), c => c.charCodeAt(0));
+                  const fullBlob = new Blob([decodedBytes], { type: parsed.contentType });
+                  const fullUrl = URL.createObjectURL(fullBlob);
+                  setImageData(fullUrl);
+                } catch (parseErr) {
+                  console.error('Chain parsing failed, using Zerdinals data:', parseErr);
+                  // Fall back to potentially truncated Zerdinals data
+                  const blob = new Blob([arrayBuffer], { type: contentType });
+                  const objectUrl = URL.createObjectURL(blob);
+                  setImageData(objectUrl);
+                }
+              } else {
+                // Normal case: use Zerdinals data
+                const blob = new Blob([arrayBuffer], { type: contentType });
+                const objectUrl = URL.createObjectURL(blob);
+                setImageData(objectUrl);
+              }
             } catch (imgErr) {
               console.error('Error processing image data:', imgErr);
               setError('Failed to process image data');

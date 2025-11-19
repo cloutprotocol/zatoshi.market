@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as inscriptionParser from "../inscriptionParser.js";
 import type * as inscriptions from "../inscriptions.js";
 import type * as inscriptionsActions from "../inscriptionsActions.js";
 import type * as jobs from "../jobs.js";
@@ -27,6 +28,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  inscriptionParser: typeof inscriptionParser;
   inscriptions: typeof inscriptions;
   inscriptionsActions: typeof inscriptionsActions;
   jobs: typeof jobs;
