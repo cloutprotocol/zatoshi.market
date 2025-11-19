@@ -64,7 +64,7 @@ export function buildInscriptionChunks(contentType: string, data: string | Uint8
   return [utf8("ord"), 0x51, utf8(contentType), 0x00, (typeof data === 'string' ? utf8(data) : data)];
 }
 
-function pushData(data: Uint8Array): Uint8Array {
+export function pushData(data: Uint8Array): Uint8Array {
   const len = data.length;
   if (len <= 75) {
     return concatBytes([new Uint8Array([len]), data]);
@@ -642,7 +642,9 @@ export function assembleCommitTxHex(params: {
   const sigWithType = concatBytes([der, new Uint8Array([0x01])]);
   const version = u32le(0x80000004), vgid = u32le(0x892f2085), inCount = varint(1);
   const prev = reverseBytes(hexToBytes(params.utxo.txid)), vout = u32le(params.utxo.vout), seq = u32le(0xfffffffd);
-  const scriptSig = concatBytes([ new Uint8Array([sigWithType.length]), sigWithType, new Uint8Array([params.pubKey.length]), params.pubKey ]);
+
+  // Use proper pushData for commit scriptSig elements
+  const scriptSig = concatBytes([pushData(sigWithType), pushData(params.pubKey)]);
   const scriptLen = varint(scriptSig.length);
   const outCount = varint(outputs.length);
   const outsBuf = concatBytes(outputs.map(o=>concatBytes([u64le(o.value), varint(o.scriptPubKey.length), o.scriptPubKey])));
@@ -661,7 +663,7 @@ export function buildRevealSighash(params: {
 }): Uint8Array {
   const pkh = addressToPkh(params.address);
   const outputScript = buildP2PKHScript(pkh);
-  const inputs = [{ txid: params.commitTxid, vout: 0, sequence: 0xffffffff, value: params.inscriptionAmount, scriptPubKey: params.redeemScript }];
+  const inputs = [{ txid: params.commitTxid, vout: 0, sequence: 0xfffffffd, value: params.inscriptionAmount, scriptPubKey: params.redeemScript }];
   const outputs = [{ value: params.inscriptionAmount - params.fee, scriptPubKey: outputScript }];
   const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId: params.consensusBranchId, lockTime:0, expiryHeight:0, inputs, outputs };
   return zip243Sighash(txData, 0);
@@ -682,8 +684,17 @@ export function assembleRevealTxHex(params: {
   const der = signatureToDER(params.signatureRaw64);
   const sigWithType = concatBytes([der, new Uint8Array([0x01])]);
   const version = u32le(0x80000004), vgid = u32le(0x892f2085), inCount = varint(1);
-  const prev = reverseBytes(hexToBytes(params.commitTxid)), vout = u32le(0), seq = u32le(0xffffffff);
-  const scriptSig = concatBytes([ params.inscriptionData, new Uint8Array([sigWithType.length]), sigWithType, new Uint8Array([params.redeemScript.length]), params.redeemScript ]);
+  const prev = reverseBytes(hexToBytes(params.commitTxid)), vout = u32le(0), seq = u32le(0xfffffffd);
+
+  // Build scriptSig for P2SH spend
+  // inscriptionData is already a script fragment (not raw data) - it contains pushData ops for each chunk
+  // When executed, it pushes 5 items to stack (for the 5 OP_DROPs in redeemScript)
+  // Signature and redeemScript must be wrapped in pushData since they're data elements
+  const scriptSig = concatBytes([
+    params.inscriptionData,       // Already formatted script bytes (pushData ops inside)
+    pushData(sigWithType),        // Push signature (data)
+    pushData(params.redeemScript) // Push redeem script (data)
+  ]);
   const scriptLen = varint(scriptSig.length);
   const outCount = varint(1);
   const outBuf = concatBytes([u64le(params.inscriptionAmount - params.fee), varint(outputScript.length), outputScript]);

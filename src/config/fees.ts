@@ -50,6 +50,19 @@ export const calculateTotalCost = (platformFee: number): {
 });
 
 /**
+ * Maximum file size for image inscriptions (in bytes)
+ * Currently set to 50KB for optimal reliability and cost
+ */
+export const MAX_IMAGE_SIZE_BYTES = 50 * 1024; // 50KB
+export const MAX_IMAGE_SIZE_KB = 50;
+
+/**
+ * File size threshold for showing "large file" warning (in KB)
+ * Warning shown when file exceeds this size
+ */
+export const LARGE_FILE_WARNING_KB = 30;
+
+/**
  * Calculate fees for image inscriptions based on file size
  * Implements ZIP-317 fee calculation with minimum floor
  *

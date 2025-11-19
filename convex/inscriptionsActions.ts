@@ -576,10 +576,22 @@ export const buildUnsignedCommitAction = action({
     // Build scripts/data
     const pubKey = hexToBytes(args.pubKeyHex);
     // For images, decode base64 to bytes; for text/json, use string as-is
-    const contentData = args.type === 'image' ? base64ToBytes(contentStr) : contentStr;
+    let contentData: string | Uint8Array;
+    if (args.type === 'image') {
+      try {
+        contentData = base64ToBytes(contentStr);
+        console.log(`[image-inscription] decoded base64 to ${contentData.length} bytes, type=${contentType}`);
+      } catch (e: any) {
+        console.error('[image-inscription] base64 decode failed:', e?.message);
+        throw new Error('Failed to decode image data. Please try re-uploading the file.');
+      }
+    } else {
+      contentData = contentStr;
+    }
     const chunks = buildInscriptionChunks(contentType, contentData);
     const redeemScript = createRevealScript(pubKey, chunks);
     const p2sh = p2shFromRedeem(redeemScript);
+    console.log(`[inscription] redeemScript=${redeemScript.length} bytes, p2sh hash=${bytesToHex(p2sh.hash).slice(0,16)}...`);
     let consensusBranchId: number;
     try {
       consensusBranchId = await getConsensusBranchId();
@@ -730,16 +742,21 @@ export const broadcastSignedRevealAction = action({
     if (!rec) throw new Error("Context not found");
     if (!rec.commitTxid) throw new Error("Commit not broadcast yet");
 
+    const inscriptionData = hexToBytes(rec.inscriptionDataHex);
+    const redeemScript = hexToBytes(rec.redeemScriptHex);
+    console.log(`[reveal] inscriptionData=${inscriptionData.length} bytes, redeemScript=${redeemScript.length} bytes, type=${rec.type}, contentType=${rec.contentType}`);
+
     const revealHex = assembleRevealTxHex({
       commitTxid: rec.commitTxid,
       address: rec.address,
-      redeemScript: hexToBytes(rec.redeemScriptHex),
+      redeemScript,
       inscriptionAmount: rec.inscriptionAmount,
       fee: rec.fee,
-      inscriptionData: hexToBytes(rec.inscriptionDataHex),
+      inscriptionData,
       signatureRaw64: hexToBytes(args.revealSignatureRawHex),
       consensusBranchId: rec.consensusBranchId,
     });
+    console.log(`[reveal] assembled tx hex length: ${revealHex.length} chars (${revealHex.length/2} bytes)`);
     // Broadcast reveal with minimal retries to handle transient propagation races even after the
     // above delay. We keep this gentle (3 attempts) to avoid hammering providers.
     let revealTxid: string | undefined;

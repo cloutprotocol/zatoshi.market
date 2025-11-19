@@ -19,6 +19,9 @@ import {
   TREASURY_WALLET,
   calculateTotalCost,
   calculateImageInscriptionFees,
+  MAX_IMAGE_SIZE_BYTES,
+  MAX_IMAGE_SIZE_KB,
+  LARGE_FILE_WARNING_KB,
   formatZEC,
   formatUSD,
   isValidZcashName,
@@ -220,10 +223,10 @@ function InscribePageContent() {
       return;
     }
 
-    // Validate file size (max 4MB, but recommend <400KB)
-    const maxSize = 4 * 1024 * 1024; // 4MB
-    if (file.size > maxSize) {
-      setError('File size must be less than 4MB');
+    // Validate file size
+    const fileSizeKB = file.size / 1024;
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      setError(`File size must be less than ${MAX_IMAGE_SIZE_KB}KB. Your file is ${fileSizeKB.toFixed(2)}KB. Please compress or resize your image.`);
       return;
     }
 
@@ -1127,7 +1130,7 @@ function InscribePageContent() {
                 <div className="text-center mb-4 sm:mb-6">
                   <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">Image Inscription</h2>
                   <p className="text-gold-400/60 text-xs sm:text-sm">
-                    Inscribe PNG or SVG images permanently on Zcash
+                    Inscribe PNG or SVG images permanently on Zcash (max {MAX_IMAGE_SIZE_KB}KB)
                   </p>
                 </div>
 
@@ -1175,7 +1178,7 @@ function InscribePageContent() {
                             Drop your image here or click to browse
                           </p>
                           <p className="text-gold-400/60 text-sm">
-                            PNG or SVG files • Max 4MB
+                            PNG or SVG files • Max {MAX_IMAGE_SIZE_KB}KB
                           </p>
                         </div>
                       </div>
@@ -1223,7 +1226,7 @@ function InscribePageContent() {
                   {/* Fee Breakdown */}
                   {imageFile && (() => {
                     const fees = calculateImageInscriptionFees(imageFile.size);
-                    const isLargeFile = fees.fileSizeKB > 100;
+                    const isLargeFile = fees.fileSizeKB > LARGE_FILE_WARNING_KB;
                     return (
                       <div className="mt-4 space-y-3">
                         <div className="p-3 bg-black/20 border border-gold-500/20 rounded">
