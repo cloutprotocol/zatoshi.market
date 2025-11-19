@@ -232,7 +232,7 @@ function InscribePageContent() {
 
   const handleFileSelect = async (file: File) => {
     // Validate file type
-    const validTypes = ['image/png', 'image/svg+xml', 'image/webp', 'image/avif'];
+    const validTypes = ['image/png', 'image/svg+xml', 'image/webp', 'image/avif', 'image/gif'];
     if (!validTypes.includes(file.type)) {
       setError('Please upload a PNG, SVG, WebP, or AVIF file');
       return;
@@ -302,12 +302,12 @@ function InscribePageContent() {
           // Remove data URL prefix to get just the base64 content
           const base64Data = base64.split(',')[1];
 
-          // Always use 'image/png' as contentType for inscriptions (Zerdinals standard)
-          // This applies to PNG, WebP, AVIF, and SVG files
-          const inscriptionContentType = 'image/png';
           const fileTypeDisplay = imageFile.type === 'image/svg+xml' ? 'SVG' :
                                   imageFile.type === 'image/webp' ? 'WebP' :
-                                  imageFile.type === 'image/avif' ? 'AVIF' : 'PNG';
+                                  imageFile.type === 'image/avif' ? 'AVIF' :
+                                  imageFile.type === 'image/gif' ? 'GIF' : 'PNG';
+
+          const inscriptionContentType = imageFile.type;
 
           setConfirmTitle(`Confirm ${fileTypeDisplay} Inscription`);
           setPendingArgs({
@@ -1226,9 +1226,19 @@ function InscribePageContent() {
             {activeTab === 'images' && (
               <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
                 <div className="text-center mb-4 sm:mb-6">
-                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">Image Inscription</h2>
+                  <div className="flex items-center justify-center gap-3">
+                    <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">Image Inscription</h2>
+                    <div className="relative group">
+                      <span className="bg-red-500/20 border border-red-500/50 text-red-300 text-xs font-bold px-2 py-0.5 rounded-full">
+                        EXPERIMENTAL
+                      </span>
+                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 px-3 py-2 bg-black/90 border border-gold-500/30 rounded text-xs text-gold-300 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
+                        Image inscriptions are experimental. Please limit file sizes to 1KB.
+                      </div>
+                    </div>
+                  </div>
                   <p className="text-gold-400/60 text-xs sm:text-sm">
-                    Inscribe PNG or SVG images permanently on Zcash (max {MAX_IMAGE_SIZE_KB}KB)
+                    Inscribe PNG, GIF, or SVG images (max 1KB)
                   </p>
                 </div>
 
@@ -1246,7 +1256,7 @@ function InscribePageContent() {
                   >
                     <input
                       type="file"
-                      accept="image/png,image/svg+xml,image/webp,image/avif"
+                      accept="image/png,image/svg+xml,image/webp,image/avif,image/gif"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) handleFileSelect(file);
@@ -1377,28 +1387,46 @@ function InscribePageContent() {
                   </button>
                 </div>
 
-                {/* Success Message */}
+                {/* Success Display */}
                 {result && (
-                  <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-green-400">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span className="font-bold">Image Inscribed Successfully!</span>
+                  <div className="mt-6 p-4 sm:p-6 bg-gold-500/10 border border-gold-500/30 rounded relative">
+                    <button
+                      onClick={() => setResult(null)}
+                      className="absolute top-3 right-3 text-gold-400/60 hover:text-gold-300 transition-colors"
+                      aria-label="Close"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                    <h3 className="text-gold-300 font-bold mb-4 text-base sm:text-lg">✓ Success!</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-gold-400/60 text-sm mb-1">Commit TXID</div>
+                        <a
+                          href={`https://mainnet.zcashexplorer.app/transactions/${result.commitTxid}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
+                        >
+                          {result.commitTxid}
+                        </a>
                       </div>
-                      <div className="text-sm space-y-1">
-                        <div className="text-gold-400/80">
-                          <span className="font-medium">Transaction ID:</span>
-                          <div className="font-mono text-xs break-all mt-1 text-gold-300">
-                            {result.txid}
-                          </div>
-                        </div>
-                        <div className="text-gold-400/80">
-                          <span className="font-medium">Inscription ID:</span>
-                          <div className="font-mono text-xs break-all mt-1 text-gold-300">
-                            {result.inscriptionId}
-                          </div>
+                      <div>
+                        <div className="text-gold-400/60 text-sm mb-1">Reveal TXID</div>
+                        <a
+                          href={`https://mainnet.zcashexplorer.app/transactions/${result.revealTxid}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
+                        >
+                          {result.revealTxid}
+                        </a>
+                      </div>
+                      <div>
+                        <div className="text-gold-400/60 text-sm mb-1">Inscription ID</div>
+                        <div className="text-gold-300 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded">
+                          {result.inscriptionId}
                         </div>
                       </div>
                       <div className="pt-3">

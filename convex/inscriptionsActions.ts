@@ -674,7 +674,7 @@ export const buildUnsignedCommitAction = action({
     await ctx.runMutation(internal.txContexts.create, {
       contextId,
       status: "commit_prepared",
-      utxos: selected,
+      utxos: selected.map(u => ({ txid: u.txid, vout: u.vout, value: u.value })),
       address: args.address,
       consensusBranchId,
       inscriptionAmount,

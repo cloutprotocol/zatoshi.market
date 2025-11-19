@@ -79,8 +79,8 @@ export const calculateTotalCost = (platformFee: number, contentSizeBytes: number
  * Limited by total scriptSig size (~10KB) and practical mempool relay limits
  * Set to 50KB for balance between usability and reliability
  */
-export const MAX_IMAGE_SIZE_BYTES = 50 * 1024; // 50KB
-export const MAX_IMAGE_SIZE_KB = 50;
+export const MAX_IMAGE_SIZE_BYTES = 1.1 * 1024; // 1.1KB
+export const MAX_IMAGE_SIZE_KB = 1.1;
 
 /**
  * File size threshold for showing "large file" warning (in KB)
