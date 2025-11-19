@@ -217,9 +217,9 @@ function InscribePageContent() {
 
   const handleFileSelect = async (file: File) => {
     // Validate file type
-    const validTypes = ['image/png', 'image/svg+xml', 'image/webp'];
+    const validTypes = ['image/png', 'image/svg+xml', 'image/webp', 'image/avif'];
     if (!validTypes.includes(file.type)) {
-      setError('Please upload a PNG, SVG, or WebP file');
+      setError('Please upload a PNG, SVG, WebP, or AVIF file');
       return;
     }
 
@@ -288,10 +288,11 @@ function InscribePageContent() {
           const base64Data = base64.split(',')[1];
 
           // Always use 'image/png' as contentType for inscriptions (Zerdinals standard)
-          // This applies to PNG, WebP, and SVG files
+          // This applies to PNG, WebP, AVIF, and SVG files
           const inscriptionContentType = 'image/png';
           const fileTypeDisplay = imageFile.type === 'image/svg+xml' ? 'SVG' :
-                                  imageFile.type === 'image/webp' ? 'WebP' : 'PNG';
+                                  imageFile.type === 'image/webp' ? 'WebP' :
+                                  imageFile.type === 'image/avif' ? 'AVIF' : 'PNG';
 
           setConfirmTitle(`Confirm ${fileTypeDisplay} Inscription`);
           setPendingArgs({
@@ -1153,7 +1154,7 @@ function InscribePageContent() {
                   >
                     <input
                       type="file"
-                      accept="image/png,image/svg+xml,image/webp"
+                      accept="image/png,image/svg+xml,image/webp,image/avif"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) handleFileSelect(file);
@@ -1183,7 +1184,7 @@ function InscribePageContent() {
                             Drop your image here or click to browse
                           </p>
                           <p className="text-gold-400/60 text-sm">
-                            PNG, WebP, or SVG files • Max {MAX_IMAGE_SIZE_KB}KB
+                            PNG, WebP, AVIF, or SVG files • Max {MAX_IMAGE_SIZE_KB}KB
                           </p>
                         </div>
                       </div>

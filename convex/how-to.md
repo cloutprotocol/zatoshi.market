@@ -160,14 +160,14 @@ See: `convex/schema.ts` for definitions.
 
 ---
 
-## Image Inscription Implementation (PNG/WebP/SVG)
+## Image Inscription Implementation (PNG/WebP/AVIF/SVG)
 
 Added: November 2025
-Updated: November 2025 (WebP support added)
+Updated: November 2025 (WebP and AVIF support added)
 
 ### Overview
 
-Image inscriptions (PNG, WebP, and SVG) follow the exact same commit-reveal pattern as text inscriptions but with binary content encoded as base64 on the client side and decoded to raw bytes on the server before embedding in the witness script.
+Image inscriptions (PNG, WebP, AVIF, and SVG) follow the exact same commit-reveal pattern as text inscriptions but with binary content encoded as base64 on the client side and decoded to raw bytes on the server before embedding in the witness script.
 
 ### File Format Support
 
@@ -175,6 +175,7 @@ All image formats are inscribed with `image/png` content type header (Zerdinals 
 
 - **PNG**: Native PNG binary data
 - **WebP**: WebP binary data (inscribed with PNG header for compatibility)
+- **AVIF**: AVIF binary data (inscribed with PNG header for compatibility)
 - **SVG**: XML text (treated as binary, inscribed with PNG header)
 - **SVGZ** (future): Gzipped SVG with `image/svg+xml-compressed` MIME type (60-80% size reduction)
 
@@ -315,6 +316,7 @@ errors: [
 
 - [ ] PNG upload (<520 bytes for single-push, test Zerdinals compatibility)
 - [ ] WebP upload (<520 bytes, verify PNG header used in inscription)
+- [ ] AVIF upload (<520 bytes, verify PNG header used in inscription)
 - [ ] SVG upload (<520 bytes)
 - [ ] Large file warning (>50KB)
 - [ ] Fee scaling with file size
@@ -333,5 +335,5 @@ errors: [
 - [ ] `npx convex push` (schema/functions up to date)
 - [ ] `npx convex deploy`
 - [ ] Smoke test: commit has 2 outputs (inscription + fee), reveal has 1 output, inscription record persisted
-- [ ] Image inscription test: PNG/WebP/SVG uploads work, fees scale correctly, images viewable on Zerdinals
-- [ ] WebP test: verify files inscribed with `image/png` header (Zerdinals standard)
+- [ ] Image inscription test: PNG/WebP/AVIF/SVG uploads work, fees scale correctly, images viewable on Zerdinals
+- [ ] WebP/AVIF test: verify files inscribed with `image/png` header (Zerdinals standard)
