@@ -5,9 +5,20 @@ export const create = internalMutation({
   args: {
     contextId: v.string(),
     status: v.string(),
-    utxoTxid: v.string(),
-    utxoVout: v.number(),
-    utxoValue: v.number(),
+    // Single UTXO fields (optional now to support multi-input)
+    utxoTxid: v.optional(v.string()),
+    utxoVout: v.optional(v.number()),
+    utxoValue: v.optional(v.number()),
+    // Multi-input support
+    utxos: v.optional(
+      v.array(
+        v.object({
+          txid: v.string(),
+          vout: v.number(),
+          value: v.number(),
+        })
+      )
+    ),
     address: v.string(),
     consensusBranchId: v.number(),
     inscriptionAmount: v.number(),
@@ -49,4 +60,3 @@ export const patch = internalMutation({
     await ctx.db.patch(_id, rest);
   }
 });
-

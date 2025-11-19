@@ -117,9 +117,18 @@ export default defineSchema({
     contextId: v.string(),
     status: v.string(), // commit_prepared | commit_broadcast | completed | failed
     // Linked UTXO
-    utxoTxid: v.string(),
-    utxoVout: v.number(),
-    utxoValue: v.number(),
+    utxoTxid: v.optional(v.string()),
+    utxoVout: v.optional(v.number()),
+    utxoValue: v.optional(v.number()),
+    utxos: v.optional(
+      v.array(
+        v.object({
+          txid: v.string(),
+          vout: v.number(),
+          value: v.number(),
+        })
+      )
+    ),
     address: v.string(),
     // Transaction building params
     consensusBranchId: v.number(),

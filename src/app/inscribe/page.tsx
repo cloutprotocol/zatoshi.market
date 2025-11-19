@@ -32,7 +32,12 @@ import { ConfirmTransaction } from '@/components/ConfirmTransaction';
 import { InscriptionHistory } from '@/components/InscriptionHistory';
 import { zcashRPC } from '@/services/zcash';
 
+// Constants for fee and dust limit, mirroring backend
+const FEE_FLOOR_ZATS = 50000;
+const DUST_LIMIT = 546;
+
 function InscribePageContent() {
+
   // Ensure noble-secp has HMAC in browser (for deterministic signing)
   if (!(secp as any).etc.hmacSha256Sync) {
     (secp as any).etc.hmacSha256Sync = (key: Uint8Array, ...msgs: Uint8Array[]) =>
@@ -140,9 +145,15 @@ function InscribePageContent() {
     setResult(null);
 
     try {
-      setConfirmTitle('Confirm Name Registration');
-      setPendingArgs({ content: fullName, contentType: 'text/plain', type: 'name', inscriptionAmount: 50000, fee: 10000 });
-      setConfirmOpen(true);
+            const nameFees = calculateTotalCost(PLATFORM_FEES.NAME_REGISTRATION, new TextEncoder().encode(fullName).length);
+            setConfirmTitle('Confirm Name Registration');
+            setPendingArgs({
+              content: fullName,
+              contentType: 'text/plain',
+              type: 'name',
+              inscriptionAmount: nameFees.inscriptionOutput,
+              fee: nameFees.networkFee
+            });      setConfirmOpen(true);
     } catch (err) {
       console.error('Name registration error:', err);
       setError(err instanceof Error ? err.message : 'Failed to register name');
@@ -341,16 +352,23 @@ function InscribePageContent() {
     setResult(null);
 
     try {
-      const payload = JSON.stringify(
-        zrcOp === 'deploy'
-          ? { p: 'zrc-20', op: 'deploy', tick: tick.toUpperCase(), max: maxSupply, lim: mintLimit }
-          : zrcOp === 'transfer'
-          ? { p: 'zrc-20', op: 'transfer', tick: tick.toUpperCase(), amt: amount }
-          : { p: 'zrc-20', op: 'mint', tick: tick.toUpperCase(), amt: amount }
-      );
-      setConfirmTitle('Confirm ZRC‑20 Action');
-      setPendingArgs({ contentJson: payload, contentType: 'application/json', type: zrcOp === 'deploy' ? 'zrc20-deploy' : zrcOp === 'transfer' ? 'zrc20-transfer' : 'zrc20-mint', inscriptionAmount: 50000, fee: 10000 });
-      setConfirmOpen(true);
+            const payload = JSON.stringify(
+              zrcOp === 'deploy'
+                ? { p: 'zrc-20', op: 'deploy', tick: tick.toUpperCase(), max: maxSupply, lim: mintLimit }
+                : zrcOp === 'transfer'
+                ? { p: 'zrc-20', op: 'transfer', tick: tick.toUpperCase(), amt: amount }
+                : { p: 'zrc-20', op: 'mint', tick: tick.toUpperCase(), amt: amount }
+            );
+            const zrc20Fees = calculateTotalCost(PLATFORM_FEES.INSCRIPTION, new TextEncoder().encode(payload).length);
+      
+            setConfirmTitle('Confirm ZRC‑20 Action');
+            setPendingArgs({
+              contentJson: payload,
+              contentType: 'application/json',
+              type: zrcOp === 'deploy' ? 'zrc20-deploy' : zrcOp === 'transfer' ? 'zrc20-transfer' : 'zrc20-mint',
+              inscriptionAmount: zrc20Fees.inscriptionOutput,
+              fee: zrc20Fees.networkFee
+            });      setConfirmOpen(true);
     } catch (err) {
       console.error('Mint error:', err);
       setError(err instanceof Error ? err.message : 'Failed to mint ZRC-20 token');
@@ -566,19 +584,23 @@ function InscribePageContent() {
       };
       const convex = getConvexClient(); if (!convex) throw new Error('Convex client not available');
       // Step 1
-      const step1 = await convex.action(api.inscriptionsActions.buildUnsignedCommitAction, {
-        address: wallet.address,
-        pubKeyHex,
-        content: demoContent,
-        contentType: 'text/plain',
-        type: 'demo', inscriptionAmount: 50000, fee: 10000,
-      } as any);
-      setDemoLog(l => [...l, `commitSigHashHex: ${step1.commitSigHashHex.slice(0,16)}...`]);
+            const demoFees = calculateTotalCost(PLATFORM_FEES.INSCRIPTION, new TextEncoder().encode(demoContent).length);
+            const step1 = await convex.action(api.inscriptionsActions.buildUnsignedCommitAction, {
+              address: wallet.address,
+              pubKeyHex,
+              content: demoContent,
+              contentType: 'text/plain',
+              type: 'demo',
+              inscriptionAmount: demoFees.inscriptionOutput,
+              fee: demoFees.networkFee,
+            } as any);      setDemoLog(l => [...l, `commitSigHashHexes: ${step1.commitSigHashHexes.length} to sign...`]);
       // Step 2
-      const commitSignatureRawHex = await signer(step1.commitSigHashHex);
+      const commitSignaturesRawHex = await Promise.all(
+        step1.commitSigHashHexes.map((hex: string) => signer(hex))
+      );
       const step2 = await convex.action(api.inscriptionsActions.finalizeCommitAndGetRevealPreimageAction, {
         contextId: step1.contextId,
-        commitSignatureRawHex,
+        commitSignaturesRawHex,
       });
       setDemoLog(l => [...l, `commitTxid: ${step2.commitTxid}`, `revealSigHashHex: ${step2.revealSigHashHex.slice(0,16)}...`]);
       // Step 3
@@ -603,14 +625,16 @@ function InscribePageContent() {
     try {
       const convex = getConvexClient(); if (!convex) throw new Error('Convex client not available');
       const payload = JSON.stringify({ p: 'zrc-20', op: 'mint', tick: tick.toUpperCase(), amt: amount });
+      const batchFees = calculateTotalCost(PLATFORM_FEES.INSCRIPTION, new TextEncoder().encode(payload).length);
+
       const res = await convex.action(api.inscriptionsActions.batchMintAction, {
         wif: wallet.privateKey,
         address: wallet.address,
         count: batchCount,
         contentJson: payload,
         contentType: 'application/json',
-        inscriptionAmount: 50000,
-        fee: 10000,
+        inscriptionAmount: batchFees.inscriptionOutput,
+        fee: batchFees.networkFee,
         waitMs: 10000,
       });
       setBatchJobId(res.jobId);
@@ -632,9 +656,9 @@ function InscribePageContent() {
     } finally { setLoading(false); }
   };
 
-  const nameCost = calculateTotalCost(PLATFORM_FEES.NAME_REGISTRATION);
-  const textCost = calculateTotalCost(PLATFORM_FEES.INSCRIPTION);
-  const zrc20Cost = calculateTotalCost(PLATFORM_FEES.INSCRIPTION);
+  const nameCost = calculateTotalCost(PLATFORM_FEES.NAME_REGISTRATION, 0);
+  const textCost = calculateTotalCost(PLATFORM_FEES.INSCRIPTION, 0); // Baseline for text
+  const zrc20Cost = calculateTotalCost(PLATFORM_FEES.INSCRIPTION, 0); // Baseline for zrc20
 
   return (
     <main className="min-h-screen h-screen bg-black text-gold-300 lg:pt-20 pb-4 overflow-hidden">

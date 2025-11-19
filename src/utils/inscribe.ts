@@ -24,7 +24,7 @@ export async function safeMintInscription(
   if (!convex) throw new Error("Convex client not available");
 
   // Step 1: server assembles and returns commit preimage
-  const { contextId, commitSigHashHex } = await convex.action(
+  const { contextId, commitSigHashHexes } = await convex.action(
     api.inscriptionsActions.buildUnsignedCommitAction,
     {
       address: args.address,
@@ -39,12 +39,14 @@ export async function safeMintInscription(
   );
 
   // Step 2: client signs commit locally
-  const commitSignatureRawHex = await signer(commitSigHashHex);
+  const commitSignaturesRawHex = await Promise.all(
+    commitSigHashHexes.map((hex: string) => signer(hex))
+  );
   const { commitTxid, revealSigHashHex } = await convex.action(
     api.inscriptionsActions.finalizeCommitAndGetRevealPreimageAction,
     {
       contextId,
-      commitSignatureRawHex,
+      commitSignaturesRawHex,
     }
   );
 

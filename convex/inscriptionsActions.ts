@@ -26,8 +26,8 @@ import {
   reverseBytes,
   bytesToHex,
   concatBytes,
-  buildCommitSighash,
-  assembleCommitTxHex,
+  buildCommitSighashes,
+  assembleCommitTxHexMulti,
   buildRevealSighash,
   assembleRevealTxHex,
   buildSplitSighash,
@@ -573,9 +573,19 @@ export const buildUnsignedCommitAction = action({
   },
   handler: async (ctx, args) => {
     // Client-signing path: same ZIP-317 fee floor
-    const inscriptionAmount = args.inscriptionAmount ?? 60000;
     const FEE_FLOOR_ZATS = 50000;
+    const DUST_LIMIT = 546;
     const fee = Math.max(args.fee ?? 10000, FEE_FLOOR_ZATS);
+    // Default inscription amount to fee + 10k buffer
+    const inscriptionAmount = args.inscriptionAmount ?? (fee + 10000);
+
+    // Validation: Ensure we don't create a dust or negative output
+    if (inscriptionAmount <= fee + DUST_LIMIT) {
+      throw new Error(
+        `Inscription amount (${inscriptionAmount}) must be greater than fee (${fee}) + dust limit (${DUST_LIMIT}). ` +
+        `Please increase the inscription amount to at least ${fee + DUST_LIMIT + 1} zats.`
+      );
+    }
     const contentStr = args.contentJson ?? args.content ?? "hello world";
     const contentType = args.contentType ?? (args.contentJson ? "application/json" : "text/plain");
     const PLATFORM_TREASURY = TREASURY_ADDRESS;
@@ -594,41 +604,31 @@ export const buildUnsignedCommitAction = action({
       const minVal = utxos.reduce((m:any,u:any)=>Math.min(m, u?.value||0), (utxos[0]?.value ?? 0)||0);
       console.log(`[utxo][unsigned-commit] ${args.address} total=${utxos.length} required=${required} max=${maxVal} min=${minVal}`);
     } catch {}
-    const candidates = utxos.filter(u => u.value >= required);
-    let utxo = undefined as undefined | typeof candidates[number];
-    const inscribedCandidates: string[] = [];
-    for (const c of candidates) {
-      const hasInsc = await checkInscriptionAt(`${c.txid}:${c.vout}`);
-      if (!hasInsc) { utxo = c; break; }
-      inscribedCandidates.push(`${c.txid}:${c.vout}`);
+    // Multi-input selection: choose the smallest set of UTXOs (greedy by largest first) to meet the requirement
+    const spendable: typeof utxos = [];
+    for (const u of utxos) {
+      const hasInsc = await checkInscriptionAt(`${u.txid}:${u.vout}`);
+      if (!hasInsc) spendable.push(u);
     }
-    if (!utxo) {
-      // Find the largest spendable (non-inscribed) UTXO across ALL utxos
-      let maxSpendable = 0;
-      for (const u of utxos) {
-        const hasInsc = await checkInscriptionAt(`${u.txid}:${u.vout}`);
-        if (!hasInsc && u.value > maxSpendable) maxSpendable = u.value;
-      }
-      const totalMax = utxos.reduce((m:any,u:any)=>Math.max(m, u?.value||0), 0);
-      const shortfall = required - maxSpendable;
-
-      console.log(`[utxo-error] required=${required}, maxSpendable=${maxSpendable}, totalMax=${totalMax}, candidates=${candidates.length}, inscribed=${inscribedCandidates.length}`);
-
-      let errorMsg = `Not enough spendable funds for this inscription. `;
-      if (maxSpendable > 0 && shortfall > 0 && shortfall < required * 0.2) {
-        // User is within 20% of the requirement - show specific shortfall
-        errorMsg += `You're close! You have ${maxSpendable} spendable zats but need ${required} zats (${shortfall} more). `;
-        errorMsg += `Please add ${shortfall} zats to your wallet, or use the Split UTXOs tool.`;
-      } else if (maxSpendable === 0 && candidates.length > 0) {
-        // All large-enough UTXOs are inscribed
-        errorMsg += `You have ${candidates.length} UTXO(s) with ≥${required} zats, but they're all inscribed and protected. `;
-        errorMsg += `Use the Split UTXOs tool to create a clean ${required}-zat UTXO.`;
-      } else {
-        errorMsg += `You need at least ${required} zats available in a single input. `;
-        errorMsg += `Your largest spendable UTXO: ${maxSpendable} zats. `;
-        errorMsg += `Use the Split UTXOs tool to prepare a clean UTXO.`;
-      }
-      throw new Error(errorMsg);
+    if (spendable.length === 0) {
+      throw new Error(
+        "Not enough spendable funds. All available UTXOs are inscribed."
+      );
+    }
+    const sorted = spendable.slice().sort((a, b) => b.value - a.value);
+    const selected: typeof spendable = [];
+    let totalIn = 0;
+    for (const u of sorted) {
+      if (totalIn >= required) break;
+      selected.push(u);
+      totalIn += u.value;
+    }
+    if (totalIn < required) {
+      const have = totalIn;
+      const need = required;
+      throw new Error(
+        `Not enough spendable funds to inscribe. Need ${need} zats total; only ${have} zats available in clean UTXOs.`
+      );
     }
 
     // Build scripts/data
@@ -657,9 +657,9 @@ export const buildUnsignedCommitAction = action({
       throw new Error('Network is busy; cannot fetch consensus parameters. Please retry shortly.');
     }
 
-    // Compute commit sighash
-    const sigHash = buildCommitSighash({
-      utxo,
+    // Compute commit sighashes
+    const sigHashes = buildCommitSighashes({
+      utxos: selected,
       address: args.address,
       inscriptionAmount,
       fee,
@@ -674,9 +674,7 @@ export const buildUnsignedCommitAction = action({
     await ctx.runMutation(internal.txContexts.create, {
       contextId,
       status: "commit_prepared",
-      utxoTxid: utxo.txid,
-      utxoVout: utxo.vout,
-      utxoValue: utxo.value,
+      utxos: selected,
       address: args.address,
       consensusBranchId,
       inscriptionAmount,
@@ -695,28 +693,29 @@ export const buildUnsignedCommitAction = action({
       commitTxid: undefined,
     });
 
-    // Lock UTXO tied to this context
-    await ctx.runMutation(internal.utxoLocks.lockUtxo, { txid: utxo.txid, vout: utxo.vout, address: args.address, lockedBy: contextId });
+    // Lock UTXOs tied to this context
+    await ctx.runMutation(internal.utxoLocks.lockUtxos, { items: selected.map(u => ({ txid: u.txid, vout: u.vout })), address: args.address, lockedBy: contextId });
 
-    return { contextId, commitSigHashHex: bytesToHex(sigHash) };
+    return { contextId, commitSigHashHexes: sigHashes.map(bytesToHex) };
   }
 });
 
 export const finalizeCommitAndGetRevealPreimageAction = action({
   args: {
     contextId: v.string(),
-    commitSignatureRawHex: v.string(),
+    commitSignaturesRawHex: v.array(v.string()),
   },
   handler: async (ctx, args) => {
     const rec = await ctx.runQuery(internal.txContexts.getByContextId, { contextId: args.contextId });
     if (!rec) throw new Error("Context not found");
     if (rec.status !== 'commit_prepared') throw new Error(`Invalid context status: ${rec.status}`);
+    if (!rec.utxos) throw new Error("UTXOs not found in context");
 
-    const commitHex = assembleCommitTxHex({
-      utxo: { txid: rec.utxoTxid, vout: rec.utxoVout, value: rec.utxoValue },
+    const commitHex = assembleCommitTxHexMulti({
+      utxos: rec.utxos,
       address: rec.address,
       pubKey: hexToBytes(rec.pubKeyHex),
-      signatureRaw64: hexToBytes(args.commitSignatureRawHex),
+      signaturesRaw64: args.commitSignaturesRawHex.map(hexToBytes),
       inscriptionAmount: rec.inscriptionAmount,
       fee: rec.fee,
       consensusBranchId: rec.consensusBranchId,
@@ -728,7 +727,7 @@ export const finalizeCommitAndGetRevealPreimageAction = action({
     try {
       commitTxid = await broadcastTransaction(commitHex);
     } catch (e: any) {
-      try { await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: rec.utxoTxid, vout: rec.utxoVout }); } catch {}
+      try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: rec.utxos.map(u => ({ txid: u.txid, vout: u.vout })) }); } catch {}
       try { await ctx.runMutation(internal.txContexts.patch, { _id: rec._id, status: 'failed', updatedAt: Date.now() }); } catch {}
       const msg = e?.message ? String(e.message) : String(e);
 
@@ -834,7 +833,7 @@ export const broadcastSignedRevealAction = action({
       if (!revealTxid) throw new Error('Broadcast failed: reveal did not return txid');
     } catch (e: any) {
       // Always release lock on failure
-      try { await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: rec.utxoTxid, vout: rec.utxoVout }); } catch {}
+      try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: rec.utxos.map(u => ({ txid: u.txid, vout: u.vout })) }); } catch {}
       const msg = e?.message ? String(e.message) : String(e);
 
       // Provide user-friendly error messages
@@ -861,7 +860,7 @@ export const broadcastSignedRevealAction = action({
     }
     const inscriptionId = `${revealTxid}i0`;
     // Unlock after success, too
-    try { await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: rec.utxoTxid, vout: rec.utxoVout }); } catch {}
+    try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: rec.utxos.map(u => ({ txid: u.txid, vout: u.vout })) }); } catch {}
 
     // Parse preview + zrc20 details
     const preview = rec.contentStr.slice(0, 200);

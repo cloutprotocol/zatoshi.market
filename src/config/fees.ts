@@ -16,9 +16,17 @@ export const PLATFORM_FEES = {
   // Network fees (estimated, user pays actual)
   NETWORK_FEE_ESTIMATE: 10000, // 0.0001 ZEC
 
-  // Inscription output value
+  // Inscription output value: must be > DUST_LIMIT
+  // Minimum relayable output is 546 zats (DUST_LIMIT)
+  // We make it 10000 for a small buffer
   INSCRIPTION_OUTPUT: 10000, // 0.0001 ZEC
 } as const;
+
+export const FEE_FLOOR_ZATS = 50000; // Minimum network fee (ZIP-317 enforced)
+export const NETWORK_FEE_UNIT_ZATS_PER_BYTE = 10; // 10 zats/byte for mempool acceptance
+
+export const DUST_LIMIT = 546; // Minimum relayable output for P2PKH
+export const INSCRIPTION_MIN_OUTPUT_ZATS = DUST_LIMIT + 1; // Minimum to be considered non-dust
 
 /**
  * Treasury wallet address for platform fees
@@ -34,20 +42,36 @@ export const TREASURY_WALLET = {
   isDev: process.env.NODE_ENV === 'development',
 } as const;
 
+
 /**
  * Fee calculation helpers
  */
-export const calculateTotalCost = (platformFee: number): {
+export const calculateTotalCost = (platformFee: number, contentSizeBytes: number = 0): {
   platformFee: number;
   networkFee: number;
   inscriptionOutput: number;
   total: number;
-} => ({
-  platformFee,
-  networkFee: PLATFORM_FEES.NETWORK_FEE_ESTIMATE,
-  inscriptionOutput: PLATFORM_FEES.INSCRIPTION_OUTPUT,
-  total: platformFee + PLATFORM_FEES.NETWORK_FEE_ESTIMATE + PLATFORM_FEES.INSCRIPTION_OUTPUT,
-});
+} => {
+  // Base tx overhead: ~500 bytes (version, inputs, outputs, etc.)
+  // Inscription data: contentSizeBytes (0 for names/ZRC20 without explicit content)
+  // Witness/script overhead: ~200 bytes (for a typical 1-input, 2-output P2PKH tx)
+  const estimatedTxSize = 500 + contentSizeBytes + 200;
+
+  // ZIP-317 based fee calculation
+  const calculatedFee = Math.ceil(estimatedTxSize * NETWORK_FEE_UNIT_ZATS_PER_BYTE);
+
+  const ZIP_317_CAP = 100000;
+  const networkFee = Math.min(Math.max(calculatedFee, FEE_FLOOR_ZATS), ZIP_317_CAP);
+
+  const inscriptionOutput = networkFee + INSCRIPTION_MIN_OUTPUT_ZATS;
+
+  return {
+    platformFee,
+    networkFee,
+    inscriptionOutput,
+    total: platformFee + networkFee + inscriptionOutput,
+  };
+};
 
 /**
  * Maximum file size for image inscriptions (in bytes)
@@ -88,20 +112,19 @@ export const calculateImageInscriptionFees = (fileSizeBytes: number): {
 
   // ZIP-317: 1000 zats per 1000 bytes (1 zat/byte minimum)
   // But we need to account for mempool policy - use 10 zats/byte for safety
-  const calculatedFee = Math.ceil(estimatedTxSize * 10);
+  const calculatedFee = Math.ceil(estimatedTxSize * NETWORK_FEE_UNIT_ZATS_PER_BYTE);
 
   // Enforce minimum fee floor (50,000 zats) to avoid "unpaid action limit exceeded"
   // Cap at reasonable maximum (100,000 zats) to keep large inscriptions affordable
-  const ZIP_317_FLOOR = 50000;
   const ZIP_317_CAP = 100000;
-  const networkFee = Math.min(Math.max(calculatedFee, ZIP_317_FLOOR), ZIP_317_CAP);
+  const networkFee = Math.min(Math.max(calculatedFee, FEE_FLOOR_ZATS), ZIP_317_CAP);
 
   const platformFee = PLATFORM_FEE_ZATS; // 100,000 zats
 
   // inscriptionOutput must be large enough to cover the reveal fee + minimum output
   // The reveal tx will have: output = inscriptionOutput - networkFee
-  // So inscriptionOutput must be >= networkFee + 10000 (minimum safe output)
-  const inscriptionOutput = networkFee + 10000;
+  // So inscriptionOutput must be >= networkFee + INSCRIPTION_MIN_OUTPUT_ZATS
+  const inscriptionOutput = networkFee + INSCRIPTION_MIN_OUTPUT_ZATS;
 
   return {
     platformFee,

@@ -639,6 +639,55 @@ export function buildCommitSighash(params: {
   return zip243Sighash(txData, 0);
 }
 
+export function buildCommitSighashes(params: {
+  utxos: Utxo[];
+  address: string;
+  inscriptionAmount: number;
+  fee: number;
+  consensusBranchId: number;
+  p2shScript: Uint8Array;
+  platformFeeZats?: number;
+  platformTreasuryAddress?: string;
+}): Uint8Array[] {
+  const pkh = addressToPkh(params.address);
+  const inputs = params.utxos.map((u) => ({
+    txid: u.txid,
+    vout: u.vout,
+    sequence: 0xfffffffd,
+    value: u.value,
+    scriptPubKey: buildP2PKHScript(pkh),
+  }));
+  const totalIn = params.utxos.reduce((sum, u) => sum + u.value, 0);
+
+  const outputs: { value: number; scriptPubKey: Uint8Array }[] = [
+    { value: params.inscriptionAmount, scriptPubKey: params.p2shScript },
+  ];
+  const platformFee = Math.max(0, params.platformFeeZats || 0);
+  if (platformFee > 0) {
+    const treasuryAddr = params.platformTreasuryAddress || "";
+    const tPkh = treasuryAddr ? addressToPkh(treasuryAddr) : null;
+    if (!tPkh)
+      throw new Error("Platform fee enabled but no treasury address provided");
+    outputs.push({ value: platformFee, scriptPubKey: buildP2PKHScript(tPkh) });
+  }
+  const change =
+    totalIn - params.inscriptionAmount - params.fee - platformFee;
+  if (change > 546)
+    outputs.push({ value: change, scriptPubKey: buildP2PKHScript(pkh) });
+
+  const txData = {
+    version: 0x80000004,
+    versionGroupId: 0x892f2085,
+    consensusBranchId: params.consensusBranchId,
+    lockTime: 0,
+    expiryHeight: 0,
+    inputs,
+    outputs,
+  };
+  return inputs.map((_, idx) => zip243Sighash(txData as any, idx));
+}
+
+
 export function assembleCommitTxHex(params: {
   utxo: Utxo;
   address: string;
@@ -677,6 +726,96 @@ export function assembleCommitTxHex(params: {
   const raw = concatBytes([ version, vgid, inCount, prev, vout, scriptLen, scriptSig, seq, outCount, outsBuf, lock, exp, valBal, nSS, nSO, nJS ]);
   return bytesToHex(raw);
 }
+
+export function assembleCommitTxHexMulti(params: {
+  utxos: Utxo[];
+  address: string;
+  pubKey: Uint8Array;
+  signaturesRaw64: Uint8Array[];
+  inscriptionAmount: number;
+  fee: number;
+  consensusBranchId: number;
+  p2shScript: Uint8Array;
+  platformFeeZats?: number;
+  platformTreasuryAddress?: string;
+}): string {
+  if (params.utxos.length !== params.signaturesRaw64.length)
+    throw new Error("Signature count must match inputs");
+
+  const pkh = addressToPkh(params.address);
+  const totalIn = params.utxos.reduce((sum, u) => sum + u.value, 0);
+
+  const outputs: { value: number; scriptPubKey: Uint8Array }[] = [
+    { value: params.inscriptionAmount, scriptPubKey: params.p2shScript },
+  ];
+  const platformFee = Math.max(0, params.platformFeeZats || 0);
+  if (platformFee > 0) {
+    const treasuryAddr = params.platformTreasuryAddress || "";
+    const tPkh = treasuryAddr ? addressToPkh(treasuryAddr) : null;
+    if (!tPkh)
+      throw new Error("Platform fee enabled but no treasury address provided");
+    outputs.push({ value: platformFee, scriptPubKey: buildP2PKHScript(tPkh) });
+  }
+  const change =
+    totalIn - params.inscriptionAmount - params.fee - platformFee;
+  if (change > 546)
+    outputs.push({ value: change, scriptPubKey: buildP2PKHScript(pkh) });
+
+  const derSigs = params.signaturesRaw64.map((s) => signatureToDER(s));
+  const sigsWithType = derSigs.map((der) =>
+    concatBytes([der, new Uint8Array([0x01])])
+  );
+
+  const version = u32le(0x80000004);
+  const vgid = u32le(0x892f2085);
+  const inCount = varint(params.utxos.length);
+
+  // Inputs buffer
+  const inputsBuf = concatBytes(
+    params.utxos.flatMap((u, i) => {
+      const prev = reverseBytes(hexToBytes(u.txid));
+      const vout = u32le(u.vout);
+      const scriptSig = concatBytes([
+        pushData(sigsWithType[i]),
+        pushData(params.pubKey),
+      ]);
+      const scriptLen = varint(scriptSig.length);
+      const seq = u32le(0xfffffffd);
+      return [prev, vout, scriptLen, scriptSig, seq];
+    }) as Uint8Array[]
+  );
+
+  const outCount = varint(outputs.length);
+  const outsBuf = concatBytes(
+    outputs.map((o) =>
+      concatBytes([u64le(o.value), varint(o.scriptPubKey.length), o.scriptPubKey])
+    )
+  );
+  const lock = u32le(0),
+    exp = u32le(0),
+    valBal = new Uint8Array(8),
+    nSS = new Uint8Array([0x00]),
+    nSO = new Uint8Array([0x00]),
+    nJS = new Uint8Array([0x00]);
+
+  const raw = concatBytes([
+    version,
+    vgid,
+    inCount,
+    inputsBuf,
+    outCount,
+    outsBuf,
+    lock,
+    exp,
+    valBal,
+    nSS,
+    nSO,
+    nJS,
+  ]);
+  return bytesToHex(raw);
+}
+
+
 
 export function buildRevealSighash(params: {
   commitTxid: string;
