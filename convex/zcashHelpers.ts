@@ -558,16 +558,17 @@ export async function checkInscriptionAt(location: string){
     if (!r.ok) throw new Error(`indexer status ${r.status}`);
     const j = await r.json();
     if (j?.code === 404) return false;
-    // Prefer explicit positive indicators; avoid treating empty/unknown JSON as inscribed.
+    // Only trust explicit inscription indicators to avoid false positives
     const hasPositiveSignal = Boolean(
       j?.inscriptionId ||
       (Array.isArray(j?.inscriptions) && j.inscriptions.length > 0) ||
       (Array.isArray(j?.locations) && j.locations.length > 0) ||
-      j?.inscribed === true ||
-      j?.result === 'ok' || j?.status === 'ok'
+      j?.inscribed === true
     );
+    console.log(`[inscription-check] ${location} → ${hasPositiveSignal ? 'INSCRIBED' : 'clean'} (response keys: ${Object.keys(j || {}).join(', ')})`);
     return hasPositiveSignal;
-  } catch (_) {
+  } catch (err) {
+    console.log(`[inscription-check] ${location} → indexer failed, using fallback: ${err}`);
     // Fallback to on-node heuristic via Tatum RPC
     try {
       const [txid, voutStr] = location.split(":");

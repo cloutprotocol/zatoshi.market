@@ -596,24 +596,37 @@ export const buildUnsignedCommitAction = action({
     } catch {}
     const candidates = utxos.filter(u => u.value >= required);
     let utxo = undefined as undefined | typeof candidates[number];
+    const inscribedCandidates: string[] = [];
     for (const c of candidates) {
       const hasInsc = await checkInscriptionAt(`${c.txid}:${c.vout}`);
       if (!hasInsc) { utxo = c; break; }
+      inscribedCandidates.push(`${c.txid}:${c.vout}`);
     }
     if (!utxo) {
-      // Find the largest available UTXO to provide helpful guidance
-      const maxVal = utxos.reduce((m:any,u:any)=>Math.max(m, u?.value||0), 0);
-      const shortfall = required - maxVal;
+      // Find the largest spendable (non-inscribed) UTXO across ALL utxos
+      let maxSpendable = 0;
+      for (const u of utxos) {
+        const hasInsc = await checkInscriptionAt(`${u.txid}:${u.vout}`);
+        if (!hasInsc && u.value > maxSpendable) maxSpendable = u.value;
+      }
+      const totalMax = utxos.reduce((m:any,u:any)=>Math.max(m, u?.value||0), 0);
+      const shortfall = required - maxSpendable;
+
+      console.log(`[utxo-error] required=${required}, maxSpendable=${maxSpendable}, totalMax=${totalMax}, candidates=${candidates.length}, inscribed=${inscribedCandidates.length}`);
 
       let errorMsg = `Not enough spendable funds for this inscription. `;
-      if (maxVal > 0 && shortfall > 0 && shortfall < required * 0.2) {
+      if (maxSpendable > 0 && shortfall > 0 && shortfall < required * 0.2) {
         // User is within 20% of the requirement - show specific shortfall
-        errorMsg += `You're close! You have ${maxVal} zats but need ${required} zats (${shortfall} more). `;
+        errorMsg += `You're close! You have ${maxSpendable} spendable zats but need ${required} zats (${shortfall} more). `;
         errorMsg += `Please add ${shortfall} zats to your wallet, or use the Split UTXOs tool.`;
+      } else if (maxSpendable === 0 && candidates.length > 0) {
+        // All large-enough UTXOs are inscribed
+        errorMsg += `You have ${candidates.length} UTXO(s) with ≥${required} zats, but they're all inscribed and protected. `;
+        errorMsg += `Use the Split UTXOs tool to create a clean ${required}-zat UTXO.`;
       } else {
         errorMsg += `You need at least ${required} zats available in a single input. `;
-        errorMsg += `Inputs holding inscriptions are protected and won't be used. `;
-        errorMsg += `Deposit a fresh UTXO of ≥ ${required} zats, or use the Split UTXOs tool to prepare one.`;
+        errorMsg += `Your largest spendable UTXO: ${maxSpendable} zats. `;
+        errorMsg += `Use the Split UTXOs tool to prepare a clean UTXO.`;
       }
       throw new Error(errorMsg);
     }

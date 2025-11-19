@@ -295,7 +295,7 @@ export default function InscriptionPage() {
                 {/* Number */}
                 {inscription.number !== undefined && (
                   <div>
-                    <div className="text-xs text-gold-200/60 uppercase tracking-wider mb-1">Zecscription</div>
+                    <div className="text-xs text-gold-200/60 uppercase tracking-wider mb-1">Inscription</div>
                     <div className="text-3xl font-bold text-gold-300">{inscription.number.toLocaleString()}</div>
                   </div>
                 )}

@@ -197,14 +197,18 @@ function InscribePageContent() {
         title = 'Confirm SVG Inscription';
       }
 
+      // Calculate fees based on content size
+      const contentBytes = new TextEncoder().encode(textContent).length;
+      const fees = calculateImageInscriptionFees(contentBytes);
+
       setConfirmTitle(title);
       setPendingArgs({
         content: isJson ? undefined : textContent,
         contentJson: isJson ? textContent : undefined,
         contentType,
         type: inscriptionType,
-        inscriptionAmount: 50000,
-        fee: 10000
+        inscriptionAmount: fees.inscriptionOutput,
+        fee: fees.networkFee
       });
       setConfirmOpen(true);
     } catch (err) {
@@ -1004,7 +1008,7 @@ function InscribePageContent() {
 
                 <div>
                   <label className="block text-gold-200/80 text-xs sm:text-sm mb-2">
-                    Content {textContent.length > 0 && `(${textContent.length} characters)`}
+                    Content {textContent.length > 0 && `(${textContent.length} characters, ${new TextEncoder().encode(textContent).length} bytes)`}
                   </label>
                   <textarea
                     value={textContent}
@@ -1070,12 +1074,54 @@ function InscribePageContent() {
                   </div>
                 </div>
 
-                <FeeBreakdown
-                  platformFee={textCost.platformFee}
-                  networkFee={textCost.networkFee}
-                  inscriptionOutput={textCost.inscriptionOutput}
-                  total={textCost.total}
-                />
+                {/* Fee Breakdown with dynamic calculation based on content size */}
+                {(() => {
+                  const contentBytes = new TextEncoder().encode(textContent).length;
+                  const fees = contentBytes > 0
+                    ? calculateImageInscriptionFees(contentBytes)
+                    : textCost;
+                  const isLargeContent = fees.fileSizeKB && fees.fileSizeKB > LARGE_FILE_WARNING_KB;
+
+                  return (
+                    <div className="space-y-3">
+                      {contentBytes > 0 && (
+                        <div className="p-3 bg-black/20 border border-gold-500/20 rounded">
+                          <div className="text-xs text-gold-400/80 space-y-1">
+                            <div className="flex justify-between">
+                              <span>Content Size:</span>
+                              <span className="font-medium text-gold-300">{(contentBytes / 1024).toFixed(2)} KB</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Estimated TX Size:</span>
+                              <span className="font-medium text-gold-300">{((500 + contentBytes + 200) / 1024).toFixed(2)} KB</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {isLargeContent && (
+                        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                          <div className="flex gap-2">
+                            <svg className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            <div className="text-xs text-yellow-400/90">
+                              <p className="font-medium mb-1">Large Content Notice</p>
+                              <p className="text-yellow-400/70">This content is {fees.fileSizeKB?.toFixed(0)}KB. Network fees increase with content size. Consider optimizing to reduce costs.</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <FeeBreakdown
+                        platformFee={fees.platformFee}
+                        networkFee={fees.networkFee}
+                        inscriptionOutput={fees.inscriptionOutput}
+                        total={fees.total}
+                      />
+                    </div>
+                  );
+                })()}
 
                 <button
                   onClick={handleTextInscription}
