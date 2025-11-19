@@ -57,12 +57,14 @@ export function buildInscriptionDataBuffer(content: string | Buffer, contentType
   const body = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf8');
   const mime = Buffer.from(contentType, 'utf8');
   // Ordinals envelope format (as used by Zerdinals):
-  // OP_PUSH "ord" | OP_PUSH 0x01 | OP_PUSH <mime> | OP_PUSH 0x00 | OP_PUSH <content>
+  // OP_PUSH "ord" | OP_1 | OP_PUSH <mime> | OP_0 | OP_PUSH <content>
+  // Note: For numbers 0-16, Bitcoin script requires using OP_0 through OP_16 (0x00-0x60)
+  // to satisfy SCRIPT_VERIFY_MINIMALDATA. OP_1 = 0x51, OP_0 = 0x00.
   return Buffer.concat([
     pushData(Buffer.from("ord","utf8")),
-    pushData(Buffer.from([0x01])),  // Content type field tag (byte value 0x01)
+    Buffer.from([0x51]),  // OP_1 (content type tag)
     pushData(mime),
-    pushData(Buffer.from([0x00])),  // Content field tag (byte value 0x00)
+    Buffer.from([0x00]),  // OP_0 (content tag)
     pushData(body)
   ]);
 }

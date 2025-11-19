@@ -85,12 +85,14 @@ export function buildInscriptionDataBuffer(content: string | Uint8Array, content
   const body = (typeof content === 'string') ? utf8(content) : content;
   const mime = utf8(contentType);
   // Ordinals envelope format (as used by Zerdinals):
-  // OP_PUSH "ord" | OP_PUSH 0x01 | OP_PUSH <mime> | OP_PUSH 0x00 | OP_PUSH <content>
+  // OP_PUSH "ord" | OP_1 | OP_PUSH <mime> | OP_0 | OP_PUSH <content>
+  // Note: For numbers 0-16, Bitcoin script requires using OP_0 through OP_16 (0x00-0x60)
+  // to satisfy SCRIPT_VERIFY_MINIMALDATA. OP_1 = 0x51, OP_0 = 0x00.
   return concatBytes([
     pushData(utf8("ord")),
-    pushData(new Uint8Array([0x01])),  // Content type field tag (byte value 0x01)
+    new Uint8Array([0x51]),  // OP_1 (content type tag)
     pushData(mime),
-    pushData(new Uint8Array([0x00])),  // Content field tag (byte value 0x00)
+    new Uint8Array([0x00]),  // OP_0 (content tag)
     pushData(body)
   ]);
 }
@@ -326,6 +328,7 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
 
 export async function broadcastTransaction(hex: string, tatumKey?: string): Promise<string> {
   const SIGNAL = timeoutSignal(8000);
+  const errors: string[] = [];
 
   // 1) Zerdinals helper relay (previous default) — most likely to accept reveal immediately
   //    after commit because it sees the commit right away. We use this as the first option
@@ -335,10 +338,16 @@ export async function broadcastTransaction(hex: string, tatumKey?: string): Prom
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rawTransaction: hex }), signal: SIGNAL
     });
     if (r.ok) {
-      const { txid } = await extractTxidFromResponse('zerdinals', r);
+      const { txid, snippet } = await extractTxidFromResponse('zerdinals', r);
       if (txid) return txid;
+      errors.push(`zerdinals: ${snippet}`);
+    } else {
+      const text = await r.text().catch(() => 'unknown error');
+      errors.push(`zerdinals(${r.status}): ${text.slice(0, 200)}`);
     }
-  } catch (_) {}
+  } catch (e: any) {
+    errors.push(`zerdinals: ${e?.message || 'network error'}`);
+  }
 
   // 3) Tatum JSON-RPC fallback
   try {
@@ -349,11 +358,16 @@ export async function broadcastTransaction(hex: string, tatumKey?: string): Prom
       signal: SIGNAL,
     });
     if (r.ok) {
-      const { txid } = await extractTxidFromResponse('tatum', r);
+      const { txid, snippet } = await extractTxidFromResponse('tatum', r);
       if (txid) return txid;
-      // fallthrough if we couldn't parse
+      errors.push(`tatum: ${snippet}`);
+    } else {
+      const text = await r.text().catch(() => 'unknown error');
+      errors.push(`tatum(${r.status}): ${text.slice(0, 200)}`);
     }
-  } catch (_) {}
+  } catch (e: any) {
+    errors.push(`tatum: ${e?.message || 'network error'}`);
+  }
 
   // 4) Blockchair push (if available)
   try {
@@ -364,12 +378,33 @@ export async function broadcastTransaction(hex: string, tatumKey?: string): Prom
     const body = new URLSearchParams({ data: hex });
     const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body, signal: SIGNAL });
     if (r.ok) {
-      const { txid } = await extractTxidFromResponse('blockchair', r);
+      const { txid, snippet } = await extractTxidFromResponse('blockchair', r);
       if (txid) return txid;
+      errors.push(`blockchair: ${snippet}`);
+    } else {
+      const text = await r.text().catch(() => 'unknown error');
+      errors.push(`blockchair(${r.status}): ${text.slice(0, 200)}`);
     }
-  } catch (_) {}
+  } catch (e: any) {
+    errors.push(`blockchair: ${e?.message || 'network error'}`);
+  }
 
-  throw new Error('Broadcast failed: all providers returned non-txid responses');
+  // Log all provider errors for debugging
+  console.error('[broadcast] All providers failed:', errors);
+
+  // Try to extract a meaningful error message for the user
+  const errorMsg = errors.join(' | ');
+  if (errorMsg.includes('scriptsig-not-pushonly')) {
+    throw new Error('Transaction rejected: Invalid script format. Please try again or contact support.');
+  }
+  if (errorMsg.includes('unpaid action') || errorMsg.includes('insufficient fee')) {
+    throw new Error('Transaction fee too low. Please increase the fee and try again.');
+  }
+  if (errorMsg.includes('missing inputs') || errorMsg.includes('bad-txns-inputs-missingorspent')) {
+    throw new Error('Transaction inputs unavailable. Please wait a moment and try again.');
+  }
+
+  throw new Error(`Broadcast failed. Network response: ${errors[0] || 'Unknown error'}`);
 }
 
 export async function buildCommitTxHex(params: {

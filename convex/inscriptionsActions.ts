@@ -661,10 +661,24 @@ export const finalizeCommitAndGetRevealPreimageAction = action({
       try { await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: rec.utxoTxid, vout: rec.utxoVout }); } catch {}
       try { await ctx.runMutation(internal.txContexts.patch, { _id: rec._id, status: 'failed', updatedAt: Date.now() }); } catch {}
       const msg = e?.message ? String(e.message) : String(e);
-      if (msg.toLowerCase().includes('unpaid action')) {
-        throw new Error('Network rejected TX due to ZIP-317 fee policy. Increase fee to at least 50,000 zats and retry.');
+
+      // Provide user-friendly error messages
+      if (msg.toLowerCase().includes('unpaid action') || msg.toLowerCase().includes('fee too low')) {
+        throw new Error('Network rejected transaction: Fee too low. Please increase the fee and try again.');
       }
-      throw e;
+      if (msg.toLowerCase().includes('scriptsig-not-pushonly') || msg.toLowerCase().includes('invalid script')) {
+        throw new Error('Transaction rejected: Invalid script format. Please try again or contact support.');
+      }
+      if (msg.toLowerCase().includes('missing inputs') || msg.toLowerCase().includes('inputs unavailable')) {
+        throw new Error('Transaction inputs not ready. Please wait a moment and try again.');
+      }
+      if (msg.toLowerCase().includes('broadcast failed')) {
+        throw new Error(`Unable to broadcast commit transaction. ${msg.includes('Network response') ? msg.split('Network response:')[1]?.trim() || 'Please try again.' : 'Please try again or contact support.'}`);
+      }
+
+      // Generic fallback with sanitized message
+      const sanitized = msg.replace(/convex/gi, '').replace(/inscriptionsActions/gi, '').replace(/\.ts:\d+/g, '').trim();
+      throw new Error(`Commit transaction failed: ${sanitized || 'An unexpected error occurred. Please try again.'}`);
     }
     // Small propagation delay to restore previous reliability: give broadcasters time to
     // see the commit before we ask the client to sign/broadcast the reveal. Historically
@@ -745,10 +759,25 @@ export const broadcastSignedRevealAction = action({
       // Always release lock on failure
       try { await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: rec.utxoTxid, vout: rec.utxoVout }); } catch {}
       const msg = e?.message ? String(e.message) : String(e);
-      if (msg.toLowerCase().includes('unpaid action')) {
-        throw new Error('Network rejected TX due to ZIP-317 fee policy. Increase fee to at least 50,000 zats and retry.');
+
+      // Provide user-friendly error messages
+      if (msg.toLowerCase().includes('unpaid action') || msg.toLowerCase().includes('fee too low')) {
+        throw new Error('Network rejected transaction: Fee too low. Please increase the fee and try again.');
       }
-      throw e;
+      if (msg.toLowerCase().includes('scriptsig-not-pushonly') || msg.toLowerCase().includes('invalid script')) {
+        throw new Error('Transaction rejected: Invalid script format. Please try again or contact support.');
+      }
+      if (msg.toLowerCase().includes('missing inputs') || msg.toLowerCase().includes('inputs unavailable')) {
+        throw new Error('Transaction inputs not ready. Please wait a moment and try again.');
+      }
+      if (msg.toLowerCase().includes('broadcast failed')) {
+        // Re-throw with more context
+        throw new Error(`Unable to broadcast transaction. ${msg.includes('Network response') ? msg.split('Network response:')[1]?.trim() || 'Please try again.' : 'Please try again or contact support.'}`);
+      }
+
+      // Generic fallback with sanitized message
+      const sanitized = msg.replace(/convex/gi, '').replace(/inscriptionsActions/gi, '').replace(/\.ts:\d+/g, '').trim();
+      throw new Error(`Transaction failed: ${sanitized || 'An unexpected error occurred. Please try again.'}`);
     }
     const inscriptionId = `${revealTxid}i0`;
     // Unlock after success, too

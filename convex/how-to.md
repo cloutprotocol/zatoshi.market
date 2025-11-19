@@ -158,6 +158,162 @@ See: `convex/schema.ts` for definitions.
 
 ---
 
+## Image Inscription Implementation (PNG/SVG)
+
+Added: November 2025
+
+### Overview
+
+Image inscriptions (PNG and SVG) follow the exact same commit-reveal pattern as text inscriptions but with binary content encoded as base64 on the client side and decoded to raw bytes on the server before embedding in the witness script.
+
+### File Format Support
+
+- **PNG**: `image/png` MIME type, binary data
+- **SVG**: `image/svg+xml` MIME type, XML text (but treated as binary for consistency)
+- **SVGZ** (future): Gzipped SVG with `image/svg+xml-compressed` MIME type (60-80% size reduction)
+
+### Size Limits
+
+- Maximum: 4MB (protocol limit)
+- Recommended: <400KB for reliable mempool acceptance
+- Warning threshold: >100KB (shows user notice to optimize)
+
+### Fee Calculation
+
+Images use dynamic fee calculation based on file size to comply with ZIP-317:
+
+```typescript
+estimatedTxSize = 500 (base tx) + fileSizeBytes + 200 (witness/script overhead)
+networkFee = max(estimatedTxSize * 10 zats/byte, 50000 zats)
+```
+
+- Small files (<5KB): 50,000 zats (floor)
+- Medium files (50KB): ~57,000 zats
+- Large files (200KB): ~207,000 zats
+
+Total cost = `networkFee + platformFee (100k) + inscriptionOutput (60k)`
+
+### Client-Side Flow
+
+1. User uploads image via drag-and-drop or file picker
+2. File validation (type: PNG/SVG, size: <4MB)
+3. Image preview displayed
+4. Fee calculation based on file size
+5. File read as base64 via `FileReader.readAsDataURL()`
+6. Base64 data (without data URL prefix) passed to Convex action
+
+### Server-Side Flow
+
+1. Receive base64-encoded content with `type: 'image'`
+2. Decode base64 to raw bytes using `base64ToBytes()` helper
+3. Build inscription envelope with proper Ordinals format
+4. Standard commit-reveal flow (same as text)
+
+### Critical Issues Fixed
+
+#### Issue 1: scriptsig-not-pushonly (Initial)
+
+**Error**: `"64: scriptsig-not-pushonly"`
+
+**Root Cause**: Raw bytes (0x51, 0x00) in inscription data were being interpreted as opcodes instead of data.
+
+**Fix**: Implemented `pushData()` helper to wrap all data with proper OP_PUSHDATA1/2/4 opcodes based on length:
+- ≤75 bytes: Direct length prefix
+- 76-255 bytes: OP_PUSHDATA1 (0x4c)
+- 256-65535 bytes: OP_PUSHDATA2 (0x4d)
+- >65535 bytes: OP_PUSHDATA4 (0x4e)
+
+**Location**: `convex/zcashHelpers.ts:59-82`, `src/lib/zcash/inscriptions.ts:39-54`
+
+#### Issue 2: Incorrect Ordinals Protocol (Fixed Immediately After)
+
+**Error**: Still `scriptsig-not-pushonly` after initial fix
+
+**Root Cause**: Used `0x51` (OP_1 opcode) instead of byte value `0x01` for content type field tag.
+
+**Attempted Fix**: Changed to push byte value `0x01` using `pushData(new Uint8Array([0x01]))`
+
+**Result**: Created new error (see Issue 3 below)
+
+#### Issue 3: SCRIPT_VERIFY_MINIMALDATA Violation (Final Fix)
+
+**Error**: `"64: non-mandatory-script-verify-flag (Data push larger than necessary)"`
+
+**Root Cause**: Bitcoin/Zcash script validation requires using dedicated opcodes (OP_0 through OP_16) for numbers 0-16, not data pushes. Pushing `0x01 0x01` (push 1 byte: value 0x01) violates SCRIPT_VERIFY_MINIMALDATA.
+
+**Correct Ordinals Envelope Format**:
+```
+OP_PUSH "ord"     → pushData(utf8("ord"))    [3 bytes: "ord"]
+OP_1              → 0x51                     [content type tag]
+OP_PUSH <mime>    → pushData(mime)           [N bytes MIME type]
+OP_0              → 0x00                     [content tag]
+OP_PUSH <content> → pushData(body)           [N bytes content]
+```
+
+**Final Fix**: Use literal opcodes for numbers 0-16:
+```typescript
+new Uint8Array([0x51])  // OP_1 (not pushData!)
+new Uint8Array([0x00])  // OP_0 (not pushData!)
+```
+
+**Location**: `convex/zcashHelpers.ts:84-98`, `src/lib/zcash/inscriptions.ts:56-70`
+
+**Reference**: This matches the exact format used by Zerdinals indexer and Bitcoin Ordinals protocol.
+
+### Broadcast Error Handling
+
+Improved error capture and user-friendly messages:
+
+```typescript
+// Network errors are now captured from all providers
+errors: [
+  'zerdinals(500): {"error":"failed to send raw transaction"}',
+  'tatum: {"code":-26,"message":"64: scriptsig-not-pushonly"}',
+  'blockchair(400): Invalid transaction...'
+]
+
+// User sees clean messages
+"Transaction rejected: Invalid script format. Please try again or contact support."
+```
+
+**Location**: `convex/zcashHelpers.ts:327-406`, `convex/inscriptionsActions.ts:744-767`
+
+### Implementation Files
+
+**Frontend**:
+- `src/app/inscribe/page.tsx`: Images tab UI (lines 1027-1184)
+- `src/config/fees.ts`: Dynamic fee calculation (lines 56-89)
+
+**Backend**:
+- `convex/inscriptionsActions.ts`: Image type detection and base64 decoding (line 579)
+- `convex/zcashHelpers.ts`: Base64 decoder (lines 23-30), inscription envelope builder (lines 84-98)
+- `src/lib/zcash/inscriptions.ts`: Browser-side helpers (mirror of above)
+
+### Key Learnings
+
+1. **SCRIPT_VERIFY_MINIMALDATA** is strict: Numbers 0-16 MUST use OP_0 through OP_16 opcodes, never data pushes.
+
+2. **Ordinals Protocol Precision**: The exact byte sequence matters. Even a single incorrect opcode breaks indexer compatibility.
+
+3. **Error Visibility**: Logging actual network rejection reasons (not just "broadcast failed") is critical for debugging script validation issues.
+
+4. **Size-Based Fees**: Images require dynamic fee calculation; a fixed fee causes rejections for larger files.
+
+5. **Base64 Handling**: Client encodes to base64 for transport; server must decode back to raw bytes before building the inscription envelope.
+
+### Testing Checklist
+
+- [ ] PNG upload (<100KB)
+- [ ] SVG upload (<100KB)
+- [ ] Large file warning (>100KB)
+- [ ] Fee scaling with file size
+- [ ] Commit transaction includes platform fee output
+- [ ] Reveal transaction broadcasts successfully
+- [ ] Image viewable on Zerdinals explorer
+- [ ] Inscription ID format: `{revealTxid}i0`
+
+---
+
 ## Deployment Checklist (Dev/Prod)
 
 - [ ] BLOCKCHAIR_API_KEY set in Convex project
@@ -165,3 +321,4 @@ See: `convex/schema.ts` for definitions.
 - [ ] `npx convex push` (schema/functions up to date)
 - [ ] `npx convex deploy`
 - [ ] Smoke test: commit has 2 outputs (inscription + fee), reveal has 1 output, inscription record persisted
+- [ ] Image inscription test: PNG/SVG uploads work, fees scale correctly, images viewable on Zerdinals
