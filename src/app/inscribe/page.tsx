@@ -71,7 +71,7 @@ function InscribePageContent() {
 
   // Status
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ txid: string; inscriptionId: string } | null>(null);
+  const [result, setResult] = useState<{ commitTxid: string, revealTxid: string; inscriptionId: string } | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingArgs, setPendingArgs] = useState<{
     content?: string;
@@ -881,7 +881,7 @@ function InscribePageContent() {
                         type="text"
                         value={nameInput}
                         onChange={(e) => {
-                          const value = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+                          const value = e.target.value; // No character filtering or lowercasing
                           setNameInput(value);
                           validateName(value);
                         }}
@@ -971,14 +971,25 @@ function InscribePageContent() {
                     <h3 className="text-gold-300 font-bold mb-4 text-base sm:text-lg">✓ Success!</h3>
                     <div className="space-y-3">
                       <div>
-                        <div className="text-gold-400/60 text-sm mb-1">Transaction ID</div>
+                        <div className="text-gold-400/60 text-sm mb-1">Commit TXID</div>
                         <a
-                          href={`https://mainnet.zcashexplorer.app/transactions/${result.txid}`}
+                          href={`https://mainnet.zcashexplorer.app/transactions/${result.commitTxid}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
                         >
-                          {result.txid}
+                          {result.commitTxid}
+                        </a>
+                      </div>
+                      <div>
+                        <div className="text-gold-400/60 text-sm mb-1">Reveal TXID</div>
+                        <a
+                          href={`https://mainnet.zcashexplorer.app/transactions/${result.revealTxid}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
+                        >
+                          {result.revealTxid}
                         </a>
                       </div>
                       <div>
@@ -1175,14 +1186,25 @@ function InscribePageContent() {
                     <h3 className="text-gold-300 font-bold mb-4 text-base sm:text-lg">✓ Success!</h3>
                     <div className="space-y-3">
                       <div>
-                        <div className="text-gold-400/60 text-sm mb-1">Transaction ID</div>
+                        <div className="text-gold-400/60 text-sm mb-1">Commit TXID</div>
                         <a
-                          href={`https://mainnet.zcashexplorer.app/transactions/${result.txid}`}
+                          href={`https://mainnet.zcashexplorer.app/transactions/${result.commitTxid}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
                         >
-                          {result.txid}
+                          {result.commitTxid}
+                        </a>
+                      </div>
+                      <div>
+                        <div className="text-gold-400/60 text-sm mb-1">Reveal TXID</div>
+                        <a
+                          href={`https://mainnet.zcashexplorer.app/transactions/${result.revealTxid}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
+                        >
+                          {result.revealTxid}
                         </a>
                       </div>
                       <div>
@@ -1508,14 +1530,25 @@ function InscribePageContent() {
                     <h3 className="text-gold-300 font-bold mb-4 text-base sm:text-lg">✓ Success!</h3>
                     <div className="space-y-3">
                       <div>
-                        <div className="text-gold-400/60 text-sm mb-1">Transaction ID</div>
+                        <div className="text-gold-400/60 text-sm mb-1">Commit TXID</div>
                         <a
-                          href={`https://mainnet.zcashexplorer.app/transactions/${result.txid}`}
+                          href={`https://mainnet.zcashexplorer.app/transactions/${result.commitTxid}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
                         >
-                          {result.txid}
+                          {result.commitTxid}
+                        </a>
+                      </div>
+                      <div>
+                        <div className="text-gold-400/60 text-sm mb-1">Reveal TXID</div>
+                        <a
+                          href={`https://mainnet.zcashexplorer.app/transactions/${result.revealTxid}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
+                        >
+                          {result.revealTxid}
                         </a>
                       </div>
                       <div>
@@ -2047,11 +2080,11 @@ function InscribePageContent() {
                   change: (res as any).change ?? 0,
                 });
               } else {
-                const { revealTxid, inscriptionId } = await safeMintInscription(
+                const { commitTxid, revealTxid, inscriptionId } = await safeMintInscription(
                   { address: wallet.address, pubKeyHex, ...pendingArgs },
                   walletSigner
                 );
-                setResult({ txid: revealTxid, inscriptionId });
+                setResult({ commitTxid, revealTxid, inscriptionId });
                 if (pendingArgs.type === 'name') setNameInput('');
                 if (pendingArgs.type === 'text' || pendingArgs.type === 'json') setTextContent('');
                 if (pendingArgs.type?.startsWith('zrc20')) { setTick(''); setAmount(''); setMaxSupply(''); setMintLimit(''); }
