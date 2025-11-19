@@ -160,19 +160,25 @@ See: `convex/schema.ts` for definitions.
 
 ---
 
-## Image Inscription Implementation (PNG/SVG)
+## Image Inscription Implementation (PNG/WebP/SVG)
 
 Added: November 2025
+Updated: November 2025 (WebP support added)
 
 ### Overview
 
-Image inscriptions (PNG and SVG) follow the exact same commit-reveal pattern as text inscriptions but with binary content encoded as base64 on the client side and decoded to raw bytes on the server before embedding in the witness script.
+Image inscriptions (PNG, WebP, and SVG) follow the exact same commit-reveal pattern as text inscriptions but with binary content encoded as base64 on the client side and decoded to raw bytes on the server before embedding in the witness script.
 
 ### File Format Support
 
-- **PNG**: `image/png` MIME type, binary data
-- **SVG**: `image/svg+xml` MIME type, XML text (but treated as binary for consistency)
+All image formats are inscribed with `image/png` content type header (Zerdinals standard):
+
+- **PNG**: Native PNG binary data
+- **WebP**: WebP binary data (inscribed with PNG header for compatibility)
+- **SVG**: XML text (treated as binary, inscribed with PNG header)
 - **SVGZ** (future): Gzipped SVG with `image/svg+xml-compressed` MIME type (60-80% size reduction)
+
+**Note**: Following Zerdinals' convention, all image inscriptions use `image/png` as the contentType field in the Ordinals envelope, regardless of the actual file format. This ensures maximum compatibility with existing indexers and wallets.
 
 ### Size Limits
 
@@ -307,14 +313,16 @@ errors: [
 
 ### Testing Checklist
 
-- [ ] PNG upload (<100KB)
-- [ ] SVG upload (<100KB)
-- [ ] Large file warning (>100KB)
+- [ ] PNG upload (<520 bytes for single-push, test Zerdinals compatibility)
+- [ ] WebP upload (<520 bytes, verify PNG header used in inscription)
+- [ ] SVG upload (<520 bytes)
+- [ ] Large file warning (>50KB)
 - [ ] Fee scaling with file size
 - [ ] Commit transaction includes platform fee output
 - [ ] Reveal transaction broadcasts successfully
 - [ ] Image viewable on Zerdinals explorer
 - [ ] Inscription ID format: `{revealTxid}i0`
+- [ ] Files <520 bytes use single-push format (no chunking)
 
 ---
 
@@ -325,4 +333,5 @@ errors: [
 - [ ] `npx convex push` (schema/functions up to date)
 - [ ] `npx convex deploy`
 - [ ] Smoke test: commit has 2 outputs (inscription + fee), reveal has 1 output, inscription record persisted
-- [ ] Image inscription test: PNG/SVG uploads work, fees scale correctly, images viewable on Zerdinals
+- [ ] Image inscription test: PNG/WebP/SVG uploads work, fees scale correctly, images viewable on Zerdinals
+- [ ] WebP test: verify files inscribed with `image/png` header (Zerdinals standard)

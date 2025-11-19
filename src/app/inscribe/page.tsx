@@ -217,9 +217,9 @@ function InscribePageContent() {
 
   const handleFileSelect = async (file: File) => {
     // Validate file type
-    const validTypes = ['image/png', 'image/svg+xml'];
+    const validTypes = ['image/png', 'image/svg+xml', 'image/webp'];
     if (!validTypes.includes(file.type)) {
-      setError('Please upload a PNG or SVG file');
+      setError('Please upload a PNG, SVG, or WebP file');
       return;
     }
 
@@ -287,11 +287,16 @@ function InscribePageContent() {
           // Remove data URL prefix to get just the base64 content
           const base64Data = base64.split(',')[1];
 
-          const mimeType = imageFile.type;
-          setConfirmTitle(`Confirm ${imageFile.type === 'image/svg+xml' ? 'SVG' : 'PNG'} Inscription`);
+          // Always use 'image/png' as contentType for inscriptions (Zerdinals standard)
+          // This applies to PNG, WebP, and SVG files
+          const inscriptionContentType = 'image/png';
+          const fileTypeDisplay = imageFile.type === 'image/svg+xml' ? 'SVG' :
+                                  imageFile.type === 'image/webp' ? 'WebP' : 'PNG';
+
+          setConfirmTitle(`Confirm ${fileTypeDisplay} Inscription`);
           setPendingArgs({
             content: base64Data,
-            contentType: mimeType,
+            contentType: inscriptionContentType,
             type: 'image',
             inscriptionAmount: fees.inscriptionOutput,
             fee: fees.networkFee
@@ -1148,7 +1153,7 @@ function InscribePageContent() {
                   >
                     <input
                       type="file"
-                      accept="image/png,image/svg+xml"
+                      accept="image/png,image/svg+xml,image/webp"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) handleFileSelect(file);
@@ -1178,7 +1183,7 @@ function InscribePageContent() {
                             Drop your image here or click to browse
                           </p>
                           <p className="text-gold-400/60 text-sm">
-                            PNG or SVG files • Max {MAX_IMAGE_SIZE_KB}KB
+                            PNG, WebP, or SVG files • Max {MAX_IMAGE_SIZE_KB}KB
                           </p>
                         </div>
                       </div>

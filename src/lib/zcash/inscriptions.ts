@@ -67,10 +67,9 @@ export function buildInscriptionDataBuffer(content: string | Buffer, contentType
   const mime = Buffer.from(contentType, 'utf8');
 
   // Ordinals envelope format (as used by Zerdinals):
-  // OP_PUSH "ord" | OP_1 | OP_PUSH <mime> | OP_0 | OP_PUSH <chunk1> | OP_PUSH <chunk2> | ...
+  // OP_PUSH "ord" | OP_1 | OP_PUSH <mime> | OP_0 | OP_PUSH <content>
   // Note: For numbers 0-16, Bitcoin script requires using OP_0 through OP_16 (0x00-0x60)
   // to satisfy SCRIPT_VERIFY_MINIMALDATA. OP_1 = 0x51, OP_0 = 0x00.
-  // Content is split into 520-byte chunks to comply with MAX_SCRIPT_ELEMENT_SIZE
   const parts = [
     pushData(Buffer.from("ord","utf8")),
     Buffer.from([0x51]),  // OP_1 (content type tag)
@@ -78,10 +77,17 @@ export function buildInscriptionDataBuffer(content: string | Buffer, contentType
     Buffer.from([0x00])   // OP_0 (content tag)
   ];
 
-  // Split body into 520-byte chunks and push each separately
+  // For content < 520 bytes, use single push (Zerdinals standard format)
+  // For larger content, split into 520-byte chunks (MAX_SCRIPT_ELEMENT_SIZE)
   const MAX_CHUNK = 520;
-  for (let i = 0; i < body.length; i += MAX_CHUNK) {
-    parts.push(pushData(body.slice(i, i + MAX_CHUNK)));
+  if (body.length < MAX_CHUNK) {
+    // Single push for small content (standard Zerdinals format)
+    parts.push(pushData(body));
+  } else {
+    // Chunked format for larger content
+    for (let i = 0; i < body.length; i += MAX_CHUNK) {
+      parts.push(pushData(body.slice(i, i + MAX_CHUNK)));
+    }
   }
 
   return Buffer.concat(parts);
