@@ -141,7 +141,7 @@ function InscribePageContent() {
 
     try {
       setConfirmTitle('Confirm Name Registration');
-      setPendingArgs({ content: fullName, contentType: 'text/plain', type: 'name', inscriptionAmount: 60000, fee: 10000 });
+      setPendingArgs({ content: fullName, contentType: 'text/plain', type: 'name', inscriptionAmount: 50000, fee: 10000 });
       setConfirmOpen(true);
     } catch (err) {
       console.error('Name registration error:', err);
@@ -203,7 +203,7 @@ function InscribePageContent() {
         contentJson: isJson ? textContent : undefined,
         contentType,
         type: inscriptionType,
-        inscriptionAmount: 60000,
+        inscriptionAmount: 50000,
         fee: 10000
       });
       setConfirmOpen(true);
@@ -339,7 +339,7 @@ function InscribePageContent() {
           : { p: 'zrc-20', op: 'mint', tick: tick.toUpperCase(), amt: amount }
       );
       setConfirmTitle('Confirm ZRC‑20 Action');
-      setPendingArgs({ contentJson: payload, contentType: 'application/json', type: zrcOp === 'deploy' ? 'zrc20-deploy' : zrcOp === 'transfer' ? 'zrc20-transfer' : 'zrc20-mint', inscriptionAmount: 60000, fee: 10000 });
+      setPendingArgs({ contentJson: payload, contentType: 'application/json', type: zrcOp === 'deploy' ? 'zrc20-deploy' : zrcOp === 'transfer' ? 'zrc20-transfer' : 'zrc20-mint', inscriptionAmount: 50000, fee: 10000 });
       setConfirmOpen(true);
     } catch (err) {
       console.error('Mint error:', err);
@@ -561,7 +561,7 @@ function InscribePageContent() {
         pubKeyHex,
         content: demoContent,
         contentType: 'text/plain',
-        type: 'demo', inscriptionAmount: 60000, fee: 10000,
+        type: 'demo', inscriptionAmount: 50000, fee: 10000,
       } as any);
       setDemoLog(l => [...l, `commitSigHashHex: ${step1.commitSigHashHex.slice(0,16)}...`]);
       // Step 2
@@ -599,7 +599,7 @@ function InscribePageContent() {
         count: batchCount,
         contentJson: payload,
         contentType: 'application/json',
-        inscriptionAmount: 60000,
+        inscriptionAmount: 50000,
         fee: 10000,
         waitMs: 10000,
       });

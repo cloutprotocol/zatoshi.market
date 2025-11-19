@@ -132,10 +132,12 @@ See: `convex/schema.ts` for definitions.
 
 - Unable to check your spendable funds: both UTXO providers failed. Check `BLOCKCHAIR_API_KEY`, zerdinals status, retry.
 - Network rejected due to ZIP‑317: increase fee to `≥ 50,000` zats.
+- **"64: scriptsig-size"**: ScriptSig exceeds mempool relay limits. Content is automatically chunked into 520-byte pieces, but very large files (>50KB) may still exceed practical limits. Compress/optimize the file. If this error appears for files <50KB, it indicates a chunking bug.
 - Broadcast failed: non‑txid: check broadcast logs; if commit is new, wait 8–15s and retry reveal; tolerant parser logs will show the response snippet.
 - Missing fee output: ensure commit assembly includes platform fee; see `convex/treasury.config.ts` and commit assembly in `convex/zcashHelpers.ts`.
 - Need a single UTXO with at least X zats: prepare one UTXO ≥ required (fresh deposit recommended) or use the Split UTXOs tool; inputs with inscriptions are intentionally excluded.
-- Not enough spendable funds for this inscription: same as above; ensure a clean UTXO ≥ required (inscribed UTXOs are protected and won’t be used).
+- Not enough spendable funds for this inscription: same as above; ensure a clean UTXO ≥ required (inscribed UTXOs are protected and won't be used).
+- **Negative output value**: inscriptionAmount too low to cover reveal fee. For images, fee is capped at 100k zats, so inscriptionAmount must be ≥ 110k zats (100k fee + 10k minimum output).
 
 ---
 
@@ -174,9 +176,11 @@ Image inscriptions (PNG and SVG) follow the exact same commit-reveal pattern as 
 
 ### Size Limits
 
-- Maximum: 4MB (protocol limit)
-- Recommended: <400KB for reliable mempool acceptance
-- Warning threshold: >100KB (shows user notice to optimize)
+- **Maximum: 50KB** (practical limit for mempool relay and fees)
+- Recommended: <30KB for optimal fees and faster confirmation
+- Warning threshold: >30KB (shows user notice to optimize)
+
+**Content Chunking**: Images are automatically split into 520-byte chunks to comply with Bitcoin/Zcash MAX_SCRIPT_ELEMENT_SIZE. The number of OP_DROPs in the redeemScript matches the total number of envelope elements (4 + number of content chunks). For example, a 13KB image = 26 chunks, requiring 30 OP_DROPs (4 envelope elements + 26 chunks).
 
 ### Fee Calculation
 

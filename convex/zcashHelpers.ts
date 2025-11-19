@@ -61,7 +61,16 @@ export function buildP2PKHScript(pkh: Uint8Array): Uint8Array {
 }
 
 export function buildInscriptionChunks(contentType: string, data: string | Uint8Array): (Uint8Array|number)[] {
-  return [utf8("ord"), 0x51, utf8(contentType), 0x00, (typeof data === 'string' ? utf8(data) : data)];
+  const body = (typeof data === 'string' ? utf8(data) : data);
+  const chunks: (Uint8Array|number)[] = [utf8("ord"), 0x51, utf8(contentType), 0x00];
+
+  // Split data into 520-byte chunks (MAX_SCRIPT_ELEMENT_SIZE)
+  const MAX_CHUNK = 520;
+  for (let i = 0; i < body.length; i += MAX_CHUNK) {
+    chunks.push(body.slice(i, i + MAX_CHUNK));
+  }
+
+  return chunks;
 }
 
 export function pushData(data: Uint8Array): Uint8Array {
@@ -84,17 +93,26 @@ export function pushData(data: Uint8Array): Uint8Array {
 export function buildInscriptionDataBuffer(content: string | Uint8Array, contentType: string): Uint8Array {
   const body = (typeof content === 'string') ? utf8(content) : content;
   const mime = utf8(contentType);
+
   // Ordinals envelope format (as used by Zerdinals):
-  // OP_PUSH "ord" | OP_1 | OP_PUSH <mime> | OP_0 | OP_PUSH <content>
+  // OP_PUSH "ord" | OP_1 | OP_PUSH <mime> | OP_0 | OP_PUSH <chunk1> | OP_PUSH <chunk2> | ...
   // Note: For numbers 0-16, Bitcoin script requires using OP_0 through OP_16 (0x00-0x60)
   // to satisfy SCRIPT_VERIFY_MINIMALDATA. OP_1 = 0x51, OP_0 = 0x00.
-  return concatBytes([
+  // Content is split into 520-byte chunks to comply with MAX_SCRIPT_ELEMENT_SIZE
+  const parts = [
     pushData(utf8("ord")),
     new Uint8Array([0x51]),  // OP_1 (content type tag)
     pushData(mime),
-    new Uint8Array([0x00]),  // OP_0 (content tag)
-    pushData(body)
-  ]);
+    new Uint8Array([0x00])   // OP_0 (content tag)
+  ];
+
+  // Split body into 520-byte chunks and push each separately
+  const MAX_CHUNK = 520;
+  for (let i = 0; i < body.length; i += MAX_CHUNK) {
+    parts.push(pushData(body.slice(i, i + MAX_CHUNK)));
+  }
+
+  return concatBytes(parts);
 }
 
 // Cross-runtime safe timeout signal helper. Falls back if AbortSignal.timeout is unavailable.
@@ -683,6 +701,11 @@ export function assembleRevealTxHex(params: {
   const outputScript = buildP2PKHScript(pkh);
   const der = signatureToDER(params.signatureRaw64);
   const sigWithType = concatBytes([der, new Uint8Array([0x01])]);
+
+  console.log(`[asm] signatureRaw64: ${params.signatureRaw64.length} bytes`);
+  console.log(`[asm] DER signature: ${der.length} bytes, with type: ${sigWithType.length} bytes`);
+  console.log(`[asm] redeemScript: ${params.redeemScript.length} bytes`);
+
   const version = u32le(0x80000004), vgid = u32le(0x892f2085), inCount = varint(1);
   const prev = reverseBytes(hexToBytes(params.commitTxid)), vout = u32le(0), seq = u32le(0xfffffffd);
 
@@ -690,16 +713,36 @@ export function assembleRevealTxHex(params: {
   // inscriptionData is already a script fragment (not raw data) - it contains pushData ops for each chunk
   // When executed, it pushes 5 items to stack (for the 5 OP_DROPs in redeemScript)
   // Signature and redeemScript must be wrapped in pushData since they're data elements
+  const sigPushed = pushData(sigWithType);
+  const rsPushed = pushData(params.redeemScript);
+
+  console.log(`[asm] pushData(sig): ${sigPushed.length} bytes (first 2: ${bytesToHex(sigPushed.slice(0,2))})`);
+  console.log(`[asm] pushData(rs): ${rsPushed.length} bytes (first 2: ${bytesToHex(rsPushed.slice(0,2))})`);
+
   const scriptSig = concatBytes([
     params.inscriptionData,       // Already formatted script bytes (pushData ops inside)
-    pushData(sigWithType),        // Push signature (data)
-    pushData(params.redeemScript) // Push redeem script (data)
+    sigPushed,                    // Push signature (data)
+    rsPushed                      // Push redeem script (data)
   ]);
   const scriptLen = varint(scriptSig.length);
+
+  console.log(`[asm] scriptSig total: ${scriptSig.length} bytes, varint: ${bytesToHex(scriptLen)}`);
+
   const outCount = varint(1);
-  const outBuf = concatBytes([u64le(params.inscriptionAmount - params.fee), varint(outputScript.length), outputScript]);
+  const outValue = params.inscriptionAmount - params.fee;
+  const outBuf = concatBytes([u64le(outValue), varint(outputScript.length), outputScript]);
+
+  console.log(`[asm] output value: ${outValue} zats (${bytesToHex(u64le(outValue))})`);
+  console.log(`[asm] output script: ${outputScript.length} bytes`);
+
   const lock = u32le(0), exp = u32le(0), valBal = new Uint8Array(8), nSS=new Uint8Array([0x00]), nSO=new Uint8Array([0x00]), nJS=new Uint8Array([0x00]);
   const raw = concatBytes([ version, vgid, inCount, prev, vout, scriptLen, scriptSig, seq, outCount, outBuf, lock, exp, valBal, nSS, nSO, nJS ]);
+
+  console.log(`[asm] raw tx: ${raw.length} bytes`);
+  console.log(`[asm] components: ver=4 vgid=4 in=1 prev=32 vout=4 scLen=${scriptLen.length} sc=${scriptSig.length} seq=4 outCnt=1 out=${outBuf.length} lock=4 exp=4 valBal=8 shields=3`);
+  const expectedTotal = 4+4+1+32+4+scriptLen.length+scriptSig.length+4+1+outBuf.length+4+4+8+3;
+  console.log(`[asm] expected total: ${expectedTotal}, actual: ${raw.length}`);
+
   return bytesToHex(raw);
 }
 

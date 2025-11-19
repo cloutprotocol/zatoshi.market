@@ -51,7 +51,9 @@ export const calculateTotalCost = (platformFee: number): {
 
 /**
  * Maximum file size for image inscriptions (in bytes)
- * Currently set to 50KB for optimal reliability and cost
+ * Content is automatically chunked into 520-byte pieces (MAX_SCRIPT_ELEMENT_SIZE)
+ * Limited by total scriptSig size (~10KB) and practical mempool relay limits
+ * Set to 50KB for balance between usability and reliability
  */
 export const MAX_IMAGE_SIZE_BYTES = 50 * 1024; // 50KB
 export const MAX_IMAGE_SIZE_KB = 50;
@@ -89,11 +91,17 @@ export const calculateImageInscriptionFees = (fileSizeBytes: number): {
   const calculatedFee = Math.ceil(estimatedTxSize * 10);
 
   // Enforce minimum fee floor (50,000 zats) to avoid "unpaid action limit exceeded"
+  // Cap at reasonable maximum (100,000 zats) to keep large inscriptions affordable
   const ZIP_317_FLOOR = 50000;
-  const networkFee = Math.max(calculatedFee, ZIP_317_FLOOR);
+  const ZIP_317_CAP = 100000;
+  const networkFee = Math.min(Math.max(calculatedFee, ZIP_317_FLOOR), ZIP_317_CAP);
 
   const platformFee = PLATFORM_FEE_ZATS; // 100,000 zats
-  const inscriptionOutput = 60000; // Standard inscription output
+
+  // inscriptionOutput must be large enough to cover the reveal fee + minimum output
+  // The reveal tx will have: output = inscriptionOutput - networkFee
+  // So inscriptionOutput must be >= networkFee + 10000 (minimum safe output)
+  const inscriptionOutput = networkFee + 10000;
 
   return {
     platformFee,
