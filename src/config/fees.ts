@@ -22,8 +22,8 @@ export const PLATFORM_FEES = {
   INSCRIPTION_OUTPUT: 10000, // 0.0001 ZEC
 } as const;
 
-export const FEE_FLOOR_ZATS = 50000; // Minimum network fee (ZIP-317 enforced)
-export const NETWORK_FEE_UNIT_ZATS_PER_BYTE = 10; // 10 zats/byte for mempool acceptance
+export const FEE_FLOOR_ZATS = 100000; // Minimum network fee (ZIP-317 enforced)
+export const NETWORK_FEE_UNIT_ZATS_PER_BYTE = 20; // 20 zats/byte for improved mempool acceptance
 
 export const DUST_LIMIT = 546; // Minimum relayable output for P2PKH
 export const INSCRIPTION_MIN_OUTPUT_ZATS = DUST_LIMIT + 1; // Minimum to be considered non-dust
@@ -79,8 +79,8 @@ export const calculateTotalCost = (platformFee: number, contentSizeBytes: number
  * Limited by total scriptSig size (~10KB) and practical mempool relay limits
  * Set to 50KB for balance between usability and reliability
  */
-export const MAX_IMAGE_SIZE_BYTES = 1.1 * 1024; // 1.1KB
-export const MAX_IMAGE_SIZE_KB = 1.1;
+export const MAX_IMAGE_SIZE_BYTES = 1.5 * 1024; // 1.5KB
+export const MAX_IMAGE_SIZE_KB = 1.5;
 
 /**
  * File size threshold for showing "large file" warning (in KB)

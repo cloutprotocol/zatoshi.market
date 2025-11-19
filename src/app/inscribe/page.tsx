@@ -232,9 +232,9 @@ function InscribePageContent() {
 
   const handleFileSelect = async (file: File) => {
     // Validate file type
-    const validTypes = ['image/png', 'image/svg+xml', 'image/webp', 'image/avif', 'image/gif'];
+    const validTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/svg+xml', 'image/webp', 'image/avif'];
     if (!validTypes.includes(file.type)) {
-      setError('Please upload a PNG, SVG, WebP, or AVIF file');
+      setError('Please upload a PNG, JPEG, GIF, SVG, WebP, or AVIF file');
       return;
     }
 
@@ -302,12 +302,31 @@ function InscribePageContent() {
           // Remove data URL prefix to get just the base64 content
           const base64Data = base64.split(',')[1];
 
-          const fileTypeDisplay = imageFile.type === 'image/svg+xml' ? 'SVG' :
-                                  imageFile.type === 'image/webp' ? 'WebP' :
-                                  imageFile.type === 'image/avif' ? 'AVIF' :
-                                  imageFile.type === 'image/gif' ? 'GIF' : 'PNG';
+          let fileTypeDisplay: string;
+          let inscriptionContentType: string;
 
-          const inscriptionContentType = imageFile.type;
+          if (imageFile.type === 'image/svg+xml') {
+            fileTypeDisplay = 'SVG';
+            inscriptionContentType = 'image/svg+xml';
+          } else if (imageFile.type === 'image/png') {
+            fileTypeDisplay = 'PNG';
+            inscriptionContentType = 'image/png';
+          } else if (imageFile.type === 'image/gif') {
+            fileTypeDisplay = 'GIF';
+            inscriptionContentType = 'image/gif';
+          } else if (imageFile.type === 'image/jpeg') {
+            fileTypeDisplay = 'JPEG';
+            inscriptionContentType = 'image/jpeg';
+          } else if (imageFile.type === 'image/avif' || imageFile.type === 'image/webp') {
+            // AVIF and WEBP will use PNG mimetype header for now
+            fileTypeDisplay = imageFile.type === 'image/avif' ? 'AVIF (as PNG)' : 'WEBP (as PNG)';
+            inscriptionContentType = 'image/png';
+          } else {
+            // Everything else that is an image will get a PNG mimetype
+            fileTypeDisplay = 'Image (as PNG)';
+            inscriptionContentType = 'image/png';
+          }
+
 
           setConfirmTitle(`Confirm ${fileTypeDisplay} Inscription`);
           setPendingArgs({
@@ -1256,7 +1275,7 @@ function InscribePageContent() {
                   >
                     <input
                       type="file"
-                      accept="image/png,image/svg+xml,image/webp,image/avif,image/gif"
+                      accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp,image/avif"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) handleFileSelect(file);
