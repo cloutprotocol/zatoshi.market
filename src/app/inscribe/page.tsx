@@ -47,6 +47,7 @@ function InscribePageContent() {
   // Text inscription form
   const [textContent, setTextContent] = useState('');
   const [contentType, setContentType] = useState('text/plain');
+  const [jsonValid, setJsonValid] = useState<boolean | null>(null);
 
   // Image inscription form
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -163,9 +164,45 @@ function InscribePageContent() {
     setResult(null);
 
     try {
+      // Determine inscription type based on content type
       const isJson = contentType === 'application/json';
-      setConfirmTitle('Confirm Text Inscription');
-      setPendingArgs({ content: isJson ? undefined : textContent, contentJson: isJson ? textContent : undefined, contentType, type: isJson ? 'json' : 'text', inscriptionAmount: 60000, fee: 10000 });
+      const isHtml = contentType === 'text/html';
+      const isSvg = contentType === 'image/svg+xml';
+
+      // Validate JSON if content type is JSON
+      if (isJson) {
+        try {
+          JSON.parse(textContent);
+        } catch (e) {
+          setLoading(false);
+          setError('Invalid JSON format. Please check your syntax and try again.');
+          return;
+        }
+      }
+
+      let inscriptionType = 'text';
+      let title = 'Confirm Text Inscription';
+
+      if (isJson) {
+        inscriptionType = 'json';
+        title = 'Confirm JSON Inscription';
+      } else if (isHtml) {
+        inscriptionType = 'html';
+        title = 'Confirm HTML Inscription';
+      } else if (isSvg) {
+        inscriptionType = 'svg';
+        title = 'Confirm SVG Inscription';
+      }
+
+      setConfirmTitle(title);
+      setPendingArgs({
+        content: isJson ? undefined : textContent,
+        contentJson: isJson ? textContent : undefined,
+        contentType,
+        type: inscriptionType,
+        inscriptionAmount: 60000,
+        fee: 10000
+      });
       setConfirmOpen(true);
     } catch (err) {
       console.error('Inscription error:', err);
@@ -937,7 +974,11 @@ function InscribePageContent() {
                   <div className="relative">
                     <select
                       value={contentType}
-                      onChange={(e) => setContentType(e.target.value)}
+                      onChange={(e) => {
+                        setContentType(e.target.value);
+                        // Reset JSON validation when changing content type
+                        setJsonValid(null);
+                      }}
                       className="appearance-none w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-gold-300 outline-none focus:border-gold-500/50"
                       disabled={loading}
                     >
@@ -958,14 +999,66 @@ function InscribePageContent() {
                   </label>
                   <textarea
                     value={textContent}
-                    onChange={(e) => setTextContent(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setTextContent(value);
+                      // Clear error when user starts typing
+                      if (error) setError(null);
+
+                      // Validate JSON in real-time
+                      if (contentType === 'application/json' && value.trim()) {
+                        try {
+                          JSON.parse(value);
+                          setJsonValid(true);
+                        } catch {
+                          setJsonValid(false);
+                        }
+                      } else {
+                        setJsonValid(null);
+                      }
+                    }}
                     className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-gold-300 font-mono text-xs sm:text-sm min-h-[180px] sm:min-h-[240px] outline-none focus:border-gold-500/50 resize-none"
-                    placeholder="Enter your inscription content..."
+                    placeholder={
+                      contentType === 'application/json'
+                        ? '{\n  "example": "JSON content",\n  "key": "value"\n}'
+                        : contentType === 'text/html'
+                        ? '<!DOCTYPE html>\n<html>\n<body>\n  <h1>Your HTML here</h1>\n</body>\n</html>'
+                        : contentType === 'image/svg+xml'
+                        ? '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">\n  <circle cx="50" cy="50" r="40" fill="gold" />\n</svg>'
+                        : 'Enter your inscription content...'
+                    }
                     disabled={loading}
                   />
-                  <p className="text-gold-400/60 text-xs mt-1.5">
-                    Keep content under 80KB for optimal indexing
-                  </p>
+                  <div className="flex items-center justify-between mt-1.5">
+                    <p className="text-gold-400/60 text-xs">
+                      {contentType === 'application/json'
+                        ? 'Enter valid JSON. Content will be validated before inscription.'
+                        : contentType === 'text/html'
+                        ? 'HTML content will be inscribed as-is. Ensure all tags are properly closed.'
+                        : contentType === 'image/svg+xml'
+                        ? 'SVG content (text mode). For file upload, use the Images tab.'
+                        : 'Keep content under 80KB for optimal indexing'}
+                    </p>
+                    {contentType === 'application/json' && jsonValid !== null && (
+                      <div className="flex items-center gap-1.5">
+                        {jsonValid ? (
+                          <>
+                            <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="text-xs text-green-400">Valid JSON</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                            <span className="text-xs text-red-400">Invalid JSON</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <FeeBreakdown
@@ -977,7 +1070,7 @@ function InscribePageContent() {
 
                 <button
                   onClick={handleTextInscription}
-                  disabled={loading || !isConnected || !textContent.trim()}
+                  disabled={loading || !isConnected || !textContent.trim() || (contentType === 'application/json' && jsonValid === false)}
                   className="w-full px-4 py-2.5 sm:px-5 sm:py-3 bg-gold-500 text-black font-bold text-sm sm:text-base rounded hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? (
