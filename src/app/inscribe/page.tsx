@@ -33,6 +33,11 @@ import { ConfirmTransaction } from '@/components/ConfirmTransaction';
 import { InscriptionHistory } from '@/components/InscriptionHistory';
 import { zcashRPC } from '@/services/zcash';
 
+type TabKey = 'names' | 'text' | 'images' | 'zrc20' | 'utxo' | 'history';
+const SHOW_NAMES = false;
+const SHOW_IMAGES = false;
+const DEFAULT_TAB: TabKey = 'text';
+
 // Constants for fee and dust limit, mirroring backend
 const DUST_LIMIT = 546;
 
@@ -45,7 +50,7 @@ function InscribePageContent() {
   }
   const { wallet, isConnected } = useWallet();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'names' | 'text' | 'images' | 'zrc20' | 'utxo' | 'history'>('names');
+  const [activeTab, setActiveTab] = useState<TabKey>(DEFAULT_TAB);
 
   // Name registration form
   const [nameInput, setNameInput] = useState('');
@@ -87,15 +92,26 @@ function InscribePageContent() {
 
   const fullName = `${nameInput}.${nameExtension}`;
 
-  // Handle URL params to prefill ZRC20 form
+  const isTabEnabled = (tab: TabKey) => {
+    if (tab === 'names') return SHOW_NAMES;
+    if (tab === 'images') return SHOW_IMAGES;
+    return true;
+  };
+
+  // Handle URL params to prefill ZRC20 form and tab selection
   useEffect(() => {
-    const tab = searchParams.get('tab');
+    const tab = searchParams.get('tab') as TabKey | null;
     const op = searchParams.get('op');
     const tickParam = searchParams.get('tick');
     const amountParam = searchParams.get('amount');
 
+    if (tab && isTabEnabled(tab)) {
+      setActiveTab(tab);
+    } else {
+      setActiveTab(DEFAULT_TAB);
+    }
+
     if (tab === 'zrc20') {
-      setActiveTab('zrc20');
       if (op === 'mint' || op === 'deploy' || op === 'transfer') {
         setZrcOp(op);
       }
@@ -1022,15 +1038,17 @@ function InscribePageContent() {
       {/* Mobile Tab Bar - Integrated with header */}
       <div className="fixed top-16 left-0 right-0 z-40 lg:hidden bg-black/95 backdrop-blur-xl border-b border-gold-500/20">
         <div className="flex gap-1 px-2 py-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          <button
-            onClick={() => setActiveTab('names')}
-            className={`flex-1 min-w-0 px-3 py-2 font-bold transition-colors ${activeTab === 'names'
-              ? 'bg-gold-500 text-black'
-              : 'bg-black/40 border border-gold-500/30 text-gold-400'
-              }`}
-          >
-            <div className="text-xs whitespace-nowrap">Names</div>
-          </button>
+          {SHOW_NAMES && (
+            <button
+              onClick={() => setActiveTab('names')}
+              className={`flex-1 min-w-0 px-3 py-2 font-bold transition-colors ${activeTab === 'names'
+                ? 'bg-gold-500 text-black'
+                : 'bg-black/40 border border-gold-500/30 text-gold-400'
+                }`}
+            >
+              <div className="text-xs whitespace-nowrap">Names</div>
+            </button>
+          )}
 
           <button
             onClick={() => setActiveTab('text')}
@@ -1042,15 +1060,17 @@ function InscribePageContent() {
             <div className="text-xs whitespace-nowrap">Text</div>
           </button>
 
-          <button
-            onClick={() => setActiveTab('images')}
-            className={`flex-1 min-w-0 px-3 py-2 font-bold transition-colors ${activeTab === 'images'
-              ? 'bg-gold-500 text-black'
-              : 'bg-black/40 border border-gold-500/30 text-gold-400'
-              }`}
-          >
-            <div className="text-xs whitespace-nowrap">Images</div>
-          </button>
+          {SHOW_IMAGES && (
+            <button
+              onClick={() => setActiveTab('images')}
+              className={`flex-1 min-w-0 px-3 py-2 font-bold transition-colors ${activeTab === 'images'
+                ? 'bg-gold-500 text-black'
+                : 'bg-black/40 border border-gold-500/30 text-gold-400'
+                }`}
+            >
+              <div className="text-xs whitespace-nowrap">Images</div>
+            </button>
+          )}
 
           <button
             onClick={() => setActiveTab('zrc20')}
@@ -1089,7 +1109,7 @@ function InscribePageContent() {
           {/* Left Sidebar - Tabs (Desktop only) */}
           <div className="hidden lg:flex lg:w-56 flex-shrink-0 flex-col lg:overflow-y-auto lg:pl-0">
             <div className="flex flex-col gap-2">
-              <button
+              {/* <button
                 onClick={() => setActiveTab('names')}
                 className={`w-full text-left px-5 py-2.5 rounded font-bold transition-all ${activeTab === 'names'
                   ? 'bg-gold-500 text-black'
@@ -1098,7 +1118,7 @@ function InscribePageContent() {
               >
                 <div className="text-base">Names</div>
                 <div className="text-xs opacity-75">.zec • .zcash</div>
-              </button>
+              </button> */}
 
               <button
                 onClick={() => setActiveTab('text')}
@@ -1111,7 +1131,7 @@ function InscribePageContent() {
                 <div className="text-xs opacity-75">Inscriptions</div>
               </button>
 
-              <button
+              {/* <button
                 onClick={() => setActiveTab('images')}
                 className={`w-full text-left px-5 py-2.5 rounded font-bold transition-all ${activeTab === 'images'
                   ? 'bg-gold-500 text-black'
@@ -1120,7 +1140,7 @@ function InscribePageContent() {
               >
                 <div className="text-base">Images</div>
                 <div className="text-xs opacity-75">PNG • SVG</div>
-              </button>
+              </button> */}
 
               <button
                 onClick={() => setActiveTab('zrc20')}
@@ -2195,22 +2215,19 @@ function InscribePageContent() {
                                 <div className="text-xs text-gold-400/70 font-semibold">
                                   Inscriptions Created: {batchStatus.ids.length}/{batchStatus.total}
                                 </div>
-                                <div className="space-y-1.5 text-xs max-h-48 overflow-auto bg-black/40 rounded p-3 border border-gold-500/20">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs max-h-48 overflow-auto bg-black/40 rounded p-3 border border-gold-500/20">
                                   {batchStatus.ids.map((id, idx) => (
-                                    <div key={id} className="flex items-center gap-2 hover:bg-gold-500/10 rounded px-2 py-1.5 transition-all duration-300 group animate-[fadeIn_0.5s_ease-out_forwards]" style={{ animationDelay: `${idx * 50}ms`, opacity: 0 }}>
+                                    <Link
+                                      key={id}
+                                      href={`/inscription/${id}`}
+                                      className="flex items-center gap-2 hover:bg-gold-500/10 rounded px-2 py-1.5 transition-all duration-300 group animate-[fadeIn_0.5s_ease-out_forwards]"
+                                      style={{ animationDelay: `${idx * 50}ms`, opacity: 0 }}
+                                    >
                                       <span className="opacity-70 font-mono text-gold-400/60 min-w-[24px]">{idx + 1}.</span>
-                                      <a
-                                        className="flex-1 truncate text-gold-300 hover:text-gold-200 font-mono group-hover:underline"
-                                        href={`https://zerdinals.com/zerdinals/${id}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                      >
+                                      <span className="flex-1 truncate text-gold-300 group-hover:text-gold-200 font-mono group-hover:underline">
                                         {id}
-                                      </a>
-                                      <svg className="w-3.5 h-3.5 text-gold-400/40 group-hover:text-gold-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                      </svg>
-                                    </div>
+                                      </span>
+                                    </Link>
                                   ))}
                                 </div>
                               </div>
@@ -2572,6 +2589,17 @@ function InscribePageContent() {
                 ? [{ label: 'Platform fee', valueZats: PLATFORM_FEES.INSCRIPTION * (pendingArgs.batchCount || 1) } as any]
                 : [{ label: 'Platform fee', valueZats: pendingArgs.type === 'name' ? PLATFORM_FEES.NAME_REGISTRATION : PLATFORM_FEES.INSCRIPTION } as any]),
           ]}
+          disclaimer="Your wallet will sign this transaction locally. Private keys never leave your device."
+          disclaimerExtra={
+            pendingArgs.type === 'batch-mint' ? (
+              <div className="mt-3 text-xs text-gold-100 bg-gold-500/15 border border-gold-400/60 rounded p-3 backdrop-blur flex items-start gap-2">
+                <span className="text-yellow-300">⚠️</span>
+                <span className="text-gold-100">
+                  Batch mint: keep this window open and ensure you have enough ZEC to cover all mints.
+                </span>
+              </div>
+            ) : null
+          }
           onCancel={() => setConfirmOpen(false)}
           onConfirm={async () => {
             if (!wallet?.privateKey || !wallet?.address) { setConfirmOpen(false); setError('Please connect your wallet first'); return; }

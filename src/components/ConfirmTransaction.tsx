@@ -22,25 +22,29 @@ export function ConfirmTransaction(props: {
   isOpen: boolean;
   title?: string;
   items: LineItem[];
-  disclaimer?: string;
+  disclaimer?: React.ReactNode;
+  disclaimerExtra?: React.ReactNode;
   onCancel: () => void;
   onConfirm: () => Promise<void> | void;
   confirmText?: string;
   feeOptions?: readonly FeeOption[];
   selectedFeeOption?: FeeOption;
   onFeeOptionChange?: (option: FeeOption) => void;
+  extraContent?: React.ReactNode;
 }) {
   const {
     isOpen,
     title = "Confirm Transaction",
     items,
     disclaimer,
+    disclaimerExtra,
     onCancel,
     onConfirm,
     confirmText = "Confirm & Sign",
     feeOptions,
     selectedFeeOption,
-    onFeeOptionChange
+    onFeeOptionChange,
+    extraContent,
   } = props;
   const [zecPrice, setZecPrice] = useState<number | null>(null);
   const [priceLoading, setPriceLoading] = useState(false);
@@ -79,9 +83,11 @@ export function ConfirmTransaction(props: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70" onClick={onCancel} />
-      <div className="relative z-10 w-full max-w-lg bg-black/90 border border-gold-500/30 rounded p-6">
+      <div className="relative z-10 w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-black/90 border border-gold-500/30 rounded p-6">
         <h3 className="text-xl font-bold mb-4 text-gold-300">{title}</h3>
         <div className="space-y-2 text-sm">
+          {extraContent ? <div className="mb-3">{extraContent}</div> : null}
+
           {visible.map((i, idx) => (
             <div key={idx} className="flex justify-between items-start">
               <span className="text-gold-400/70">{i.label}</span>
@@ -135,9 +141,12 @@ export function ConfirmTransaction(props: {
               )}
             </div>
           </div>
-          <p className="text-xs text-gold-400/60 pt-3">
-            {disclaimer || "Your wallet will sign this transaction locally. Private keys never leave your device."}
-          </p>
+          <div className="text-xs text-gold-400/60 pt-3 space-y-2">
+            <p>
+              {disclaimer || "Your wallet will sign this transaction locally. Private keys never leave your device."}
+            </p>
+            {disclaimerExtra ? <div>{disclaimerExtra}</div> : null}
+          </div>
         </div>
         <div className="mt-5 flex justify-end gap-3">
           <button onClick={onCancel} className="px-5 py-2 bg-black/40 border border-gold-500/40 rounded text-sm text-gold-300 hover:border-gold-500/60">

@@ -28,14 +28,8 @@ export default function Header() {
 
         {/* Desktop Navigation */}
         <div className="hidden lg:flex gap-6 items-center">
-          <Link href="/zmaps" className="px-4 py-2 text-gold-400 hover:text-gold-300">
-            ZMAPS
-          </Link>
           <Link href="/inscribe" className="px-4 py-2 text-gold-400 hover:text-gold-300">
             INSCRIBE
-          </Link>
-          <Link href="/zore" className="px-4 py-2 text-gold-400 hover:text-gold-300">
-            ZORE
           </Link>
           <Link href="/tokens" className="px-4 py-2 text-gold-400 hover:text-gold-300">
             ZRC20
@@ -90,25 +84,11 @@ export default function Header() {
             <div className="h-full flex flex-col">
               <div className="flex-1 px-6 py-4 space-y-2 pt-20">
                 <Link
-                  href="/zmaps"
-                  className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  ZMAPS
-                </Link>
-                <Link
                   href="/inscribe"
                   className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   INSCRIBE
-                </Link>
-                <Link
-                  href="/zore"
-                  className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  ZORE
                 </Link>
                 <Link
                   href="/tokens"

@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
+import { BadgePill } from '@/components/BadgePill';
 import { generateWallet, importFromMnemonic, importFromPrivateKey } from '@/lib/wallet';
 import { zcashRPC } from '@/services/zcash';
 import { sendZEC } from '@/services/transaction';
 import QRCode from 'qrcode';
 
 export default function WalletPage() {
-  const { wallet, connectWallet, disconnectWallet, hasStoredKeystore, unlockWallet, saveEncrypted, lockWallet } = useWallet();
+  const { wallet, badges, connectWallet, disconnectWallet, hasStoredKeystore, unlockWallet, saveEncrypted, lockWallet } = useWallet();
   const [balance, setBalance] = useState({ confirmed: 0, unconfirmed: 0 });
   const [usdPrice, setUsdPrice] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -296,7 +297,7 @@ export default function WalletPage() {
           <div className="glass-card p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl text-gold-400 font-bold">WALLET</h2>
-              <div className="flex gap-4">
+              <div className="flex gap-4 items-center">
                 <button
                   onClick={lockWallet}
                   className="px-4 py-2 text-gold-400 text-sm hover:text-gold-300"
@@ -318,6 +319,14 @@ export default function WalletPage() {
                 </button>
               </div>
             </div>
+
+            {badges.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {badges.map((badge) => (
+                  <BadgePill key={`${badge.badgeSlug}-${badge.source || 'default'}`} badge={badge} />
+                ))}
+              </div>
+            )}
 
             {/* Balance Display */}
             <div className="text-center py-8">

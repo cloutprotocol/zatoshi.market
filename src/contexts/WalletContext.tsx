@@ -1,8 +1,21 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { Wallet } from '@/lib/wallet';
 import { hasKeystore, saveKeystore, loadKeystore, deleteKeystore } from '@/lib/keystore';
+import { getConvexClient } from '@/lib/convexClient';
+import { api } from '../../convex/_generated/api';
+
+export interface UserBadge {
+  badgeSlug: string;
+  label: string;
+  description?: string;
+  icon?: string;
+  level?: number;
+  source?: string;
+  reason?: string;
+  createdAt: number;
+}
 
 interface WalletContextType {
   wallet: Wallet | null;
@@ -10,12 +23,14 @@ interface WalletContextType {
   isLocked: boolean;
   hasStoredKeystore: boolean;
   mounted: boolean;
+  badges: UserBadge[];
   connectWallet: (wallet: Wallet) => void; // in-memory only
   saveEncrypted: (wallet: Wallet, password: string) => Promise<void>;
   unlockWallet: (password: string) => Promise<boolean>;
   lockWallet: () => void;
   disconnectWallet: () => void; // clears keystore and memory
   updateBalance: (confirmed: number, unconfirmed: number) => void;
+  refreshBadges: (address?: string) => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -25,6 +40,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [hasStoredKeystore, setHasStoredKeystore] = useState(false);
+  const [badges, setBadges] = useState<UserBadge[]>([]);
+
+  const refreshBadges = useCallback(async (address?: string) => {
+    const addr = address ?? wallet?.address;
+    if (!addr) return;
+    const convex = getConvexClient();
+    if (!convex) return;
+    try {
+      const res = await convex.query(api.badges.getUserBadges, { address: addr });
+      setBadges(res || []);
+    } catch (e) {
+      console.error('Badge fetch failed:', e);
+    }
+  }, [wallet?.address]);
 
   useEffect(() => {
     setMounted(true);
@@ -38,6 +67,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const parsed = JSON.parse(sessionWallet);
           setWallet(parsed);
           setIsConnected(true);
+          refreshBadges(parsed.address);
         }
       } catch (e) {
         console.error('Session wallet restore error:', e);
@@ -69,11 +99,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         console.error('Legacy wallet migration error:', e);
       }
     }
-  }, []);
+  }, [refreshBadges]);
 
   const connectWallet = (newWallet: Wallet) => {
     setWallet(newWallet);
     setIsConnected(true);
+    refreshBadges(newWallet.address);
     // Save to session storage to persist across page refreshes
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('zatoshi_session_wallet', JSON.stringify(newWallet));
@@ -90,6 +121,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const unlocked = await loadKeystore(password);
       setWallet(unlocked);
       setIsConnected(true);
+      refreshBadges(unlocked.address);
       // Save to session storage to persist across page refreshes
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('zatoshi_session_wallet', JSON.stringify(unlocked));
@@ -104,6 +136,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const lockWallet = () => {
     setWallet(null);
     setIsConnected(false);
+    setBadges([]);
     // Clear session storage
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('zatoshi_session_wallet');
@@ -113,6 +146,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const disconnectWallet = () => {
     setWallet(null);
     setIsConnected(false);
+    setBadges([]);
     deleteKeystore();
     setHasStoredKeystore(false);
     // Clear session storage
@@ -133,12 +167,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         isLocked: !wallet && hasStoredKeystore,
         hasStoredKeystore,
         mounted,
+        badges,
         connectWallet,
         saveEncrypted,
         unlockWallet,
         lockWallet,
         disconnectWallet,
         updateBalance,
+        refreshBadges,
       }}
     >
       {children}

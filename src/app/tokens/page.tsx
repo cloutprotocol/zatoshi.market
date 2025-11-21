@@ -77,6 +77,15 @@ export default function TokenListPage() {
     return ((token.mintedAmount / token.supply) * 100).toFixed(1);
   };
 
+  const buildTokenLink = (token: TokenListItem) => {
+    const params = new URLSearchParams({ tab: 'zrc20', tick: token.tick.toLowerCase() });
+    if (!token.isMinted) {
+      params.set('op', 'mint');
+      params.set('amount', token.limit.toString());
+    }
+    return `/inscribe?${params.toString()}`;
+  };
+
   return (
     <main className="relative min-h-screen text-gold-100 pt-20">
       {/* Dither Background */}
@@ -118,7 +127,7 @@ export default function TokenListPage() {
           </div>
 
           {/* Stats Summary */}
-          {!loading && (
+          {/* {!loading && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
               <div className="p-6 bg-black/40 border border-gold-500/20">
                 <div className="text-gold-200/60 text-sm uppercase tracking-widest mb-2">
@@ -145,7 +154,7 @@ export default function TokenListPage() {
                 </div>
               </div>
             </div>
-          )}
+          )} */}
 
           {/* Token List */}
           {loading ? (
@@ -168,7 +177,7 @@ export default function TokenListPage() {
                     <div className="hidden md:grid md:grid-cols-12 gap-4 items-center p-6">
                       {/* Token Info */}
                       <div className="md:col-span-2">
-                        <Link href={`/token/${token.tick.toLowerCase()}`}>
+                        <Link href={buildTokenLink(token)}>
                           <div className="flex items-center gap-3 cursor-pointer">
                             <div className="size-10 bg-gold-500 rounded-full flex items-center justify-center border-2 border-gold-400 group-hover:animate-glow">
                               <span className="text-base font-bold text-black">
@@ -261,7 +270,7 @@ export default function TokenListPage() {
                       {/* Card Header with Token Info */}
                       <div className="p-4">
                         <div className="flex items-start justify-between mb-4">
-                          <Link href={`/token/${token.tick.toLowerCase()}`}>
+                          <Link href={buildTokenLink(token)}>
                             <div className="flex items-center gap-3 cursor-pointer">
                               <div className="size-12 bg-gold-500 rounded-full flex items-center justify-center border-2 border-gold-400">
                                 <span className="text-lg font-bold text-black">
@@ -348,68 +357,65 @@ export default function TokenListPage() {
                   </div>
                 ))}
 
-              {paginatedTokens.length === 0 && !loading && (
-                <div className="text-center py-12 text-gold-300/60">
-                  No tokens found matching &quot;{searchQuery}&quot;
+                {paginatedTokens.length === 0 && !loading && (
+                  <div className="text-center py-12 text-gold-300/60">
+                    No tokens found matching &quot;{searchQuery}&quot;
+                  </div>
+                )}
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="mt-8">
+                  {/* Count hidden per request */}
+                  <div className="flex justify-center items-center gap-4">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-6 py-3 bg-black/40 border border-gold-500/20 text-gold-400 font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gold-500/10 transition-all"
+                    >
+                      ← PREV
+                    </button>
+
+                    <div className="flex gap-2">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => setCurrentPage(pageNum)}
+                            className={`px-4 py-3 font-bold transition-all ${currentPage === pageNum
+                                ? 'bg-gold-500 text-black'
+                                : 'bg-black/40 border border-gold-500/20 text-gold-400 hover:bg-gold-500/10'
+                              }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="px-6 py-3 bg-black/40 border border-gold-500/20 text-gold-400 font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gold-500/10 transition-all"
+                    >
+                      NEXT →
+                    </button>
+                  </div>
                 </div>
               )}
-            </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="mt-8">
-                <div className="text-center text-gold-300/60 text-sm mb-4">
-                  Showing {startIndex + 1}-{Math.min(startIndex + tokensPerPage, filteredTokens.length)} of {filteredTokens.length} tokens
-                </div>
-                <div className="flex justify-center items-center gap-4">
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="px-6 py-3 bg-black/40 border border-gold-500/20 text-gold-400 font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gold-500/10 transition-all"
-                >
-                  ← PREV
-                </button>
-
-                <div className="flex gap-2">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`px-4 py-3 font-bold transition-all ${
-                          currentPage === pageNum
-                            ? 'bg-gold-500 text-black'
-                            : 'bg-black/40 border border-gold-500/20 text-gold-400 hover:bg-gold-500/10'
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="px-6 py-3 bg-black/40 border border-gold-500/20 text-gold-400 font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gold-500/10 transition-all"
-                >
-                  NEXT →
-                </button>
-              </div>
-            </div>
-            )}
-          </>
+            </>
           )}
         </div>
       </div>

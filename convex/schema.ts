@@ -200,4 +200,59 @@ export default defineSchema({
     .index("by_seller", ["sellerAddress"])
     .index("by_ticker", ["tokenTicker"])
     .index("by_created_at", ["createdAt"]),
+
+  // Badge definitions (global, reusable across collections)
+  badgeDefinitions: defineTable({
+    slug: v.string(), // canonical id (e.g., "vip")
+    label: v.string(), // display label (e.g., "VIP")
+    description: v.optional(v.string()),
+    icon: v.optional(v.string()), // optional icon url or emoji
+    level: v.optional(v.number()), // optional ordering/priority
+    createdAt: v.number(),
+  }).index("by_slug", ["slug"]),
+
+  // Badge assignments to wallet addresses
+  userBadges: defineTable({
+    address: v.string(),
+    badgeSlug: v.string(),
+    source: v.optional(v.string()), // e.g., "whitelist:zgods"
+    reason: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_address", ["address"])
+    .index("by_badge_slug", ["badgeSlug"])
+    .index("by_address_badge", ["address", "badgeSlug"]),
+
+  // Collection claims (ZRC-721 allocations)
+  collectionClaims: defineTable({
+    collectionSlug: v.string(),
+    tokenId: v.number(),
+    status: v.string(), // reserved | minted | failed
+    address: v.string(),
+    inscriptionId: v.optional(v.string()),
+    txid: v.optional(v.string()),
+    batchId: v.optional(v.string()),
+    attempts: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_collection_token", ["collectionSlug", "tokenId"])
+    .index("by_collection_status", ["collectionSlug", "status"])
+    .index("by_collection_address", ["collectionSlug", "address"]),
+
+  collectionClaimEvents: defineTable({
+    collectionSlug: v.string(),
+    tokenId: v.number(),
+    address: v.string(),
+    batchId: v.optional(v.string()),
+    status: v.string(), // reserved | minted | failed
+    message: v.optional(v.string()),
+    txid: v.optional(v.string()),
+    inscriptionId: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_collection", ["collectionSlug"])
+    .index("by_address", ["address"])
+    .index("by_batch", ["batchId"]),
 });

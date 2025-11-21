@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { zcashRPC } from '@/services/zcash';
 
@@ -75,16 +76,45 @@ export default function Home() {
               >
                 INSCRIBE
               </Link>
-              <a
-                href="https://zerdinals.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-8 py-4 bg-gold-500/10 text-gold-400 text-lg font-bold text-center"
+              <Link
+                href="/claim/zgods"
+                className="px-8 py-4 bg-gold-500/20 text-gold-400 border border-gold-500/40 text-lg font-bold text-center"
               >
-                VIEW EXPLORER
-              </a>
+                CLAIM ZGODS
+              </Link>
             </div>
           </div>
+        </section>
+
+        {/* Claim CTA */}
+        <section className="py-16">
+          <Link
+            href="/claim/zgods"
+            className="block p-8 md:p-12 bg-black/60 border border-gold-500/20 hover:border-gold-400/60 transition-all relative overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-liquid-glass opacity-40" />
+            <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
+              <div className="shrink-0 w-full md:w-48">
+                <div className="relative aspect-square w-full overflow-hidden border border-gold-500/30 bg-black/40">
+                  <Image src="/collections/zgods/3vUZmMCg.gif" alt="ZGODS" fill className="object-cover" sizes="192px" priority />
+                </div>
+              </div>
+
+              <div className="flex-1 space-y-3 text-center md:text-left">
+                <p className="text-sm tracking-[0.2em] text-gold-300/70">CLAIM IS LIVE</p>
+                <h3 className="text-3xl md:text-4xl font-bold text-gold-300">Claim ZGODS</h3>
+                <p className="text-gold-100/80 text-base md:text-lg">
+                  Claim your allocated ZGODS using the same wallet you used in the pre-sale!
+                </p>
+              </div>
+
+              <div className="w-full md:w-auto">
+                <div className="inline-flex items-center justify-center px-8 py-4 bg-gold-500 text-black text-lg font-bold text-center">
+                  CLAIM NOW
+                </div>
+              </div>
+            </div>
+          </Link>
         </section>
 
         {/* Features Grid */}
@@ -93,51 +123,22 @@ export default function Home() {
             <div className="p-6 md:p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
               <h3 className="text-2xl font-bold mb-4 text-gold-400">ZRC20 TOKENS</h3>
               <p className="text-gold-100/80">
-                Deploy, mint & trade ZRC20 tokens, the fungible token standard of Zerdinals.
+                Deploy, mint & trade ZRC20 tokens, the fungible token standard on Zcash.
               </p>
             </div>
 
             <div className="p-6 md:p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
-              <h3 className="text-2xl font-bold mb-4 text-gold-400">ZMAPS</h3>
+              <h3 className="text-2xl font-bold mb-4 text-gold-400">MARKETPLACE</h3>
               <p className="text-gold-100/80">
-                Each ZMAP represents 100 Zcash blocks and can be used to mine ZORE tokens.
+                Trade Zcash inscriptions and discover new drops.
               </p>
             </div>
 
             <div className="p-6 md:p-8 bg-black/40 relative overflow-hidden group hover:bg-liquid-glass transition-all">
               <h3 className="text-2xl font-bold mb-4 text-gold-400">INSCRIPTIONS</h3>
               <p className="text-gold-100/80">
-                Digital art inscriptions on Zcash coming soon.
+                Digital art inscriptions on Zcash. Launchpad and trading coming soon.
               </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Stats Section - Live Data */}
-        <section className="py-16">
-          <div className="p-6 md:p-10 lg:p-12 bg-black/40 relative overflow-hidden">
-            <div className="absolute inset-0 bg-liquid-glass opacity-60"></div>
-            <div className="grid md:grid-cols-4 gap-6 md:gap-4 lg:gap-8 text-center relative z-10">
-              <div>
-                <div className="text-2xl md:text-3xl lg:text-5xl font-bold mb-2 text-gold-400">
-                  {loading ? '...' : blockHeight.toLocaleString()}
-                </div>
-                <div className="text-gold-200/80 text-xs">ZCASH BLOCKS</div>
-              </div>
-              <div>
-                <div className="text-2xl md:text-3xl lg:text-5xl font-bold mb-2 text-gold-400">
-                  {loading ? '...' : totalZmaps.toLocaleString()}
-                </div>
-                <div className="text-gold-200/80 text-xs">TOTAL ZMAPS</div>
-              </div>
-              <div>
-                <div className="text-2xl md:text-3xl lg:text-5xl font-bold mb-2 text-gold-400">...</div>
-                <div className="text-gold-200/80 text-xs">INSCRIBED ZMAPS</div>
-              </div>
-              <div>
-                <div className="text-2xl md:text-3xl lg:text-5xl font-bold mb-2 text-gold-400">0.002</div>
-                <div className="text-gold-200/80 text-xs">ZEC PER ZMAP</div>
-              </div>
             </div>
           </div>
         </section>
@@ -150,18 +151,20 @@ export default function Home() {
               <Link href="/inscribe" className="hover:text-gold-400 transition-all">
                 INSCRIBE
               </Link>
-              <Link href="/zmaps" className="hover:text-gold-400 transition-all">
-                ZMAPS
-              </Link>
-              <Link href="/zore" className="hover:text-gold-400 transition-all">
-                ZORE
-              </Link>
               <Link href="/tokens" className="hover:text-gold-400 transition-all">
                 ZRC20
               </Link>
+              <a href="https://mempool.zatoshi.market" target="_blank" rel="noopener noreferrer" className="hover:text-gold-400 transition-all">
+                MEMPOOL
+              </a>
               <a href="https://twitter.com/zatoshimarket" target="_blank" rel="noopener noreferrer" className="hover:text-gold-400 transition-all">
                 TWITTER
               </a>
+              <span className="hidden md:inline text-gold-200/70">|</span>
+              <div className="flex items-center gap-2 text-gold-200/80 text-xs md:text-sm">
+                <span>LIVE ZCASH BLOCKS</span>
+                <span className="text-gold-400 font-mono">{loading ? '...' : blockHeight.toLocaleString()}</span>
+              </div>
             </div>
           </div>
           <div className="text-center mt-8 text-gold-200/60 text-sm">
