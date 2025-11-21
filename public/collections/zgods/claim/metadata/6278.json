@@ -1,0 +1,42 @@
+{
+  "name": "ZGODS 6278",
+  "collection": "ZGODS",
+  "description": "The first ZRC-721 Inscription Collection on the ZCash Privacy Blockchain. We are the ZGODS, expect us.",
+  "website": "https://zgods.xyz",
+  "twitter": "https://x.com/ZERO_ON_ZCASH",
+  "img": "https://ipfs.io/ipfs/bafybeiaqmceddfi4y3dyqwepjs6go477x35ypaojwgegcsee2vgy63yobq/6278.png",
+  "attributes": [
+    {
+      "trait_type": "Base Variant",
+      "value": "hooded Zcash vigilante guardian"
+    },
+    {
+      "trait_type": "Background",
+      "value": "prismatic cathedral"
+    },
+    {
+      "trait_type": "Attire",
+      "value": "carbon fiber cloak"
+    },
+    {
+      "trait_type": "Facewear",
+      "value": "respirator cowl"
+    },
+    {
+      "trait_type": "Encryption Prop",
+      "value": "entropy beads"
+    },
+    {
+      "trait_type": "Accessory",
+      "value": "privacy rosary"
+    },
+    {
+      "trait_type": "Aura",
+      "value": "none"
+    },
+    {
+      "trait_type": "Legend",
+      "value": "Zooko signed key"
+    }
+  ]
+}

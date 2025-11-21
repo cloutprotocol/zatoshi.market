@@ -1,0 +1,42 @@
+{
+  "name": "ZGODS 7863",
+  "collection": "ZGODS",
+  "description": "The first ZRC-721 Inscription Collection on the ZCash Privacy Blockchain. We are the ZGODS, expect us.",
+  "website": "https://zgods.xyz",
+  "twitter": "https://x.com/ZERO_ON_ZCASH",
+  "img": "https://ipfs.io/ipfs/bafybeiaqmceddfi4y3dyqwepjs6go477x35ypaojwgegcsee2vgy63yobq/7863.png",
+  "attributes": [
+    {
+      "trait_type": "Base Variant",
+      "value": "shielded Zcash operator cypherpunk hero"
+    },
+    {
+      "trait_type": "Background",
+      "value": "shielded node vault"
+    },
+    {
+      "trait_type": "Attire",
+      "value": "optical trench"
+    },
+    {
+      "trait_type": "Facewear",
+      "value": "retinal cipher lenses"
+    },
+    {
+      "trait_type": "Encryption Prop",
+      "value": "entropy beads"
+    },
+    {
+      "trait_type": "Accessory",
+      "value": "privacy rosary"
+    },
+    {
+      "trait_type": "Aura",
+      "value": "SNARK lattice"
+    },
+    {
+      "trait_type": "Legend",
+      "value": "Tim May manifesto scroll"
+    }
+  ]
+}

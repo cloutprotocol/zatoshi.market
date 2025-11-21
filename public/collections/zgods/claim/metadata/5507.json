@@ -1,0 +1,42 @@
+{
+  "name": "ZGODS 5507",
+  "collection": "ZGODS",
+  "description": "The first ZRC-721 Inscription Collection on the ZCash Privacy Blockchain. We are the ZGODS, expect us.",
+  "website": "https://zgods.xyz",
+  "twitter": "https://x.com/ZERO_ON_ZCASH",
+  "img": "https://ipfs.io/ipfs/bafybeiaqmceddfi4y3dyqwepjs6go477x35ypaojwgegcsee2vgy63yobq/5507.png",
+  "attributes": [
+    {
+      "trait_type": "Base Variant",
+      "value": "shielded Zcash operator cypherpunk hero"
+    },
+    {
+      "trait_type": "Background",
+      "value": "cypherpunk garage"
+    },
+    {
+      "trait_type": "Attire",
+      "value": "carbon fiber cloak"
+    },
+    {
+      "trait_type": "Facewear",
+      "value": "quantum blindfold"
+    },
+    {
+      "trait_type": "Encryption Prop",
+      "value": "transparent hardware wallet"
+    },
+    {
+      "trait_type": "Accessory",
+      "value": "none"
+    },
+    {
+      "trait_type": "Aura",
+      "value": "shield bloom"
+    },
+    {
+      "trait_type": "Legend",
+      "value": "none"
+    }
+  ]
+}

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ordinals Collection Metadata – quick guide</title>
+  <style>
+    body {
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 24px;
+      background: #0f1115;
+      color: #e7ecf2;
+    }
+    h1, h2, h3 {
+      margin: 0 0 12px;
+      font-weight: 700;
+    }
+    h1 { font-size: 26px; }
+    h2 { font-size: 20px; margin-top: 28px; }
+    h3 { font-size: 16px; margin-top: 20px; }
+    p { margin: 0 0 12px; }
+    code, pre {
+      background: #161a22;
+      border: 1px solid #232a36;
+      border-radius: 6px;
+      color: #d7e3ff;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+    code { padding: 2px 6px; }
+    pre {
+      padding: 12px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #1d2430;
+      border: 1px solid #2c3545;
+      color: #9fb5d8;
+      font-size: 12px;
+      margin-right: 6px;
+    }
+    ul { padding-left: 20px; margin: 0 0 12px; }
+    li { margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+  <h1>Ordinals Collection Metadata — field and inscription guide</h1>
+  <p>
+    Based on the Ordinals “Easy guide to create on‑chain metadata for collections.” Use deterministic JSON → CBOR, embed under the
+    <code>metadata</code> key after your inscription content, and keep payloads small so they fit standard script limits.
+  </p>
+
+  <div class="pill">Step 1</div><div class="pill">Plan fields</div>
+  <h2>Pick a stable schema</h2>
+  <p>Suggested collection-level shape (what the creator fills in):</p>
+  <pre>{
+  "slug": "zgods",
+  "name": "ZGods",
+  "description": "Cyberpunk Zcash demigods.",
+  "supply": 500,
+  "image": "https://example.com/zgods/cover.png",
+  "creator": "zs1…",
+  "links": {
+    "site": "https://example.com",
+    "twitter": "https://x.com/zgods"
+  }
+}</pre>
+  <p>Example item-level metadata (ties to a collection via inscription ID):</p>
+  <pre>{
+  "id": "",
+  "collection": "INSCRIPTION_ID_OF_COLLECTION_METADATA",
+  "name": "ZGods 2",
+  "attributes": [
+    { "trait_type": "Base Variant", "value": "Zcash zero-knowledge oracle" },
+    { "trait_type": "Background", "value": "silent snow relay" },
+    { "trait_type": "Attire", "value": "graphite stealth hoodie" },
+    { "trait_type": "Facewear", "value": "none" },
+    { "trait_type": "Encryption Prop", "value": "transparent hardware wallet" },
+    { "trait_type": "Accessory", "value": "holo mempool orb" },
+    { "trait_type": "Aura", "value": "none" },
+    { "trait_type": "Legend", "value": "Tim May manifesto scroll" }
+  ],
+  "image": "https://example.com/zgods/2.png"
+}</pre>
+  <p>Guidelines: keep strings short, avoid binary blobs, and keep the full CBOR-encoded metadata well below 1&nbsp;KB.</p>
+
+  <div class="pill">Step 2</div><div class="pill">Encode</div>
+  <h2>Encode JSON to deterministic CBOR</h2>
+  <p>Use canonical CBOR (shortest lengths, sorted keys). Node example:</p>
+  <pre>import { encode } from "cbor-x";
+import fs from "node:fs";
+
+const json = JSON.parse(fs.readFileSync("metadata.json", "utf8"));
+const cbor = encode(json, { deterministic: true });
+fs.writeFileSync("metadata.cbor", cbor);
+console.log("CBOR bytes:", cbor.length);</pre>
+  <p>For a quick hex string: <code>Buffer.from(cbor).toString("hex")</code>.</p>
+
+  <div class="pill">Step 3</div><div class="pill">Inscribe collection metadata</div>
+  <h2>Inscribe the collection record first</h2>
+  <p>
+    Use <code>ord wallet inscribe</code> (or your signer) with <code>--content-type application/json</code> if you prefer readable payloads,
+    or <code>application/cbor</code> when pushing the CBOR bytes. The resulting inscription ID is the collection handle used by items.
+  </p>
+
+  <div class="pill">Step 4</div><div class="pill">Inscribe items</div>
+  <h2>Inscribe each item with a pointer to the collection</h2>
+  <p>
+    Add the <code>collection</code> field set to the collection’s inscription ID. Keep per-item metadata compact (<code>name</code>,
+    <code>attributes</code>, <code>image</code>, optional <code>external_url</code>).
+  </p>
+
+  <div class="pill">Step 5</div><div class="pill">Embed in the Ord envelope</div>
+  <h2>Placement in the inscription script</h2>
+  <p>
+    After your main content, append <code>&quot;metadata&quot;</code> and the CBOR as two pushdatas inside the Ordinals envelope:
+  </p>
+  <pre>OP_FALSE OP_IF
+  "ord" OP_1 &lt;content-type&gt; OP_0 &lt;content bytes/chunks&gt;
+  OP_0 "metadata" &lt;cbor-map&gt;
+OP_ENDIF</pre>
+  <p>
+    This keeps the output spendable while exposing the metadata to indexers that follow the Ordinals metadata draft. Avoid chunking
+    metadata; keep it &lt; 520 bytes so it fits in a single push.
+  </p>
+
+  <h3>Notes</h3>
+  <ul>
+    <li>Deterministic CBOR is important so identical JSON yields identical bytes and stable hashes.</li>
+    <li>Stay within the 10&nbsp;KB scriptSig budget (Zcash/Ord-style limits) — aim for &lt;1&nbsp;KB metadata.</li>
+    <li>Collection first, items second; the <code>collection</code> field binds them.</li>
+    <li>If you need MAP-style OP_RETURN tagging, treat it as optional extra data; Ordinals metadata lives inside the envelope.</li>
+  </ul>
+</body>
+</html>

@@ -1,0 +1,42 @@
+{
+  "name": "ZGODS 2618",
+  "collection": "ZGODS",
+  "description": "The first ZRC-721 Inscription Collection on the ZCash Privacy Blockchain. We are the ZGODS, expect us.",
+  "website": "https://zgods.xyz",
+  "twitter": "https://x.com/ZERO_ON_ZCASH",
+  "img": "https://ipfs.io/ipfs/bafybeiaqmceddfi4y3dyqwepjs6go477x35ypaojwgegcsee2vgy63yobq/2618.png",
+  "attributes": [
+    {
+      "trait_type": "Base Variant",
+      "value": "hooded Zcash vigilante guardian"
+    },
+    {
+      "trait_type": "Background",
+      "value": "cypherpunk garage"
+    },
+    {
+      "trait_type": "Attire",
+      "value": "carbon fiber cloak"
+    },
+    {
+      "trait_type": "Facewear",
+      "value": "thermal balaclava"
+    },
+    {
+      "trait_type": "Encryption Prop",
+      "value": "air-gapped laptop"
+    },
+    {
+      "trait_type": "Accessory",
+      "value": "memory crystal"
+    },
+    {
+      "trait_type": "Aura",
+      "value": "none"
+    },
+    {
+      "trait_type": "Legend",
+      "value": "Phil Zimmermann pgp token"
+    }
+  ]
+}

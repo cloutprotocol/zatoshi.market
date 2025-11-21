@@ -1,0 +1,42 @@
+{
+  "name": "ZGODS 35",
+  "collection": "ZGODS",
+  "description": "The first ZRC-721 Inscription Collection on the ZCash Privacy Blockchain. We are the ZGODS, expect us.",
+  "website": "https://zgods.xyz",
+  "twitter": "https://x.com/ZERO_ON_ZCASH",
+  "img": "https://ipfs.io/ipfs/bafybeiaqmceddfi4y3dyqwepjs6go477x35ypaojwgegcsee2vgy63yobq/35.png",
+  "attributes": [
+    {
+      "trait_type": "Base Variant",
+      "value": "hooded Zcash vigilante guardian"
+    },
+    {
+      "trait_type": "Background",
+      "value": "desert mining bunker"
+    },
+    {
+      "trait_type": "Attire",
+      "value": "optical trench"
+    },
+    {
+      "trait_type": "Facewear",
+      "value": "retinal cipher lenses"
+    },
+    {
+      "trait_type": "Encryption Prop",
+      "value": "Sapling shield emitter"
+    },
+    {
+      "trait_type": "Accessory",
+      "value": "holo mempool orb"
+    },
+    {
+      "trait_type": "Aura",
+      "value": "ciphertext rain"
+    },
+    {
+      "trait_type": "Legend",
+      "value": "Whitfield Diffie ring"
+    }
+  ]
+}

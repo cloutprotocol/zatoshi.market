@@ -1,0 +1,42 @@
+{
+  "name": "ZGODS 7249",
+  "collection": "ZGODS",
+  "description": "The first ZRC-721 Inscription Collection on the ZCash Privacy Blockchain. We are the ZGODS, expect us.",
+  "website": "https://zgods.xyz",
+  "twitter": "https://x.com/ZERO_ON_ZCASH",
+  "img": "https://ipfs.io/ipfs/bafybeiaqmceddfi4y3dyqwepjs6go477x35ypaojwgegcsee2vgy63yobq/7249.png",
+  "attributes": [
+    {
+      "trait_type": "Base Variant",
+      "value": "hooded Zcash vigilante guardian"
+    },
+    {
+      "trait_type": "Background",
+      "value": "signal rooftop"
+    },
+    {
+      "trait_type": "Attire",
+      "value": "quantum courier harness"
+    },
+    {
+      "trait_type": "Facewear",
+      "value": "none"
+    },
+    {
+      "trait_type": "Encryption Prop",
+      "value": "portable Faraday altar"
+    },
+    {
+      "trait_type": "Accessory",
+      "value": "privacy rosary"
+    },
+    {
+      "trait_type": "Aura",
+      "value": "packet fireflies"
+    },
+    {
+      "trait_type": "Legend",
+      "value": "Julian Assange badge"
+    }
+  ]
+}

@@ -162,6 +162,7 @@ export default defineSchema({
     completedCount: v.number(),
     inscriptionIds: v.array(v.string()),
     inscriptions: v.array(v.id("inscriptions")),
+    totalCostZats: v.optional(v.number()), // accumulated actual spend (zats)
     error: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),

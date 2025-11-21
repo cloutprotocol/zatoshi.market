@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Claim ZGODS</title>
+  <link rel="dns-prefetch" href="https://ipfs.io">
+  <link rel="preconnect" href="https://ipfs.io" crossorigin>
+  <link rel="dns-prefetch" href="https://cloudflare-ipfs.com">
+  <link rel="preconnect" href="https://cloudflare-ipfs.com" crossorigin>
+  <link rel="dns-prefetch" href="https://zatoshi.market">
+  <link rel="preconnect" href="https://zatoshi.market" crossorigin>
+  <link rel="stylesheet" href="./claim.css" />
+</head>
+
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <h1>ZGODS</h1>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/claim/gallery/">Gallery</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- Step 1: Connect Wallet -->
+    <section id="connectSection" class="claim-section">
+      <div class="claim-card">
+        <h2>Check Eligibility</h2>
+        <p>Enter your wallet address to check your ZGODS allocation.</p>
+        <div class="wallet-input-group">
+          <input type="text" id="walletInput" placeholder="Enter wallet address (e.g. t1...)" class="wallet-input" />
+          <button id="checkWalletBtn" class="btn primary">Check</button>
+        </div>
+        <p class="subtext">Try: <code>t1Z1wNUTbkX6UQpMjKKWaZTrSx5imhjYUFt</code> (User #1)</p>
+      </div>
+    </section>
+
+    <!-- Step 2: Claim Eligibility -->
+    <section id="claimSection" class="claim-section hidden">
+      <div class="claim-card">
+        <div class="wallet-info">
+          <div class="wallet-label">Connected Wallet</div>
+          <div id="walletAddress" class="wallet-address"></div>
+          <button id="disconnectWallet" class="btn small secondary">Disconnect</button>
+        </div>
+
+        <div class="eligibility-info">
+          <h2>Claim Eligibility</h2>
+          <div class="claim-stats">
+            <div class="stat-item">
+              <div class="stat-label">Available to Claim</div>
+              <div id="availableClaim" class="stat-value">0</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">Already Claimed</div>
+              <div id="alreadyClaimed" class="stat-value">0</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">Total Allocation</div>
+              <div id="totalAllocation" class="stat-value">0</div>
+            </div>
+          </div>
+
+          <div class="claim-controls">
+            <div class="claim-amount">
+              <label for="claimQuantity">Quantity to Inscribe</label>
+              <div class="quantity-controls">
+                <input id="claimQuantity" type="range" min="1" max="5" value="1" class="slider" />
+                <div class="slider-value"><span id="sliderValue">1</span></div>
+              </div>
+            </div>
+            <button id="inscribeBtn" class="btn primary large">Inscribe <span id="inscribeQty">1</span> ZGODS</button>
+          </div>
+
+          <div class="inscribe-notice">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <p>Your inscriptions will be provably random. You will not know which ZGODS you receive until after the
+              inscription is complete.</p>
+          </div>
+
+          <div class="collection-preview hidden" id="collectionPreview">
+            <h3>Your Collection</h3>
+            <div id="collectionGrid" class="collection-grid"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 3: Inscribing -->
+    <section id="inscribingSection" class="claim-section hidden">
+      <div class="claim-card">
+        <h2>Inscribing Your ZGODS</h2>
+        <div class="inscribing-status">
+          <div class="spinner"></div>
+          <p id="inscribingText">Inscribing <span id="inscribingQty">1</span> ZGODS...</p>
+          <p class="inscribing-subtext">This may take a few moments. Please do not close this window.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 4: Reveal -->
+    <section id="revealSection" class="claim-section hidden">
+      <div class="claim-card">
+        <h2>Inscription Complete!</h2>
+        <p class="reveal-intro">Your ZGODS have been inscribed. Here's what you got:</p>
+
+        <div id="revealedItems" class="revealed-grid"></div>
+
+        <div class="reveal-actions">
+          <a href="/claim/gallery/" class="btn primary">View Gallery</a>
+          <button id="claimMoreBtn" class="btn secondary">Claim More</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal -->
+  <div id="modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-overlay" data-close></div>
+    <div class="modal-content">
+      <button id="modalClose" class="modal-close" aria-label="Close">&times;</button>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="./claim.js" type="module"></script>
+</body>
+
+</html>

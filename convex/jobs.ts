@@ -16,6 +16,7 @@ export const createJob = internalMutation({
       completedCount: 0,
       inscriptionIds: [],
       inscriptions: [],
+      totalCostZats: 0,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -31,7 +32,12 @@ export const setJobStatus = internalMutation({
 });
 
 export const addJobProgress = internalMutation({
-  args: { jobId: v.id("jobs"), inscriptionId: v.string(), inscriptionDocId: v.id("inscriptions") },
+  args: {
+    jobId: v.id("jobs"),
+    inscriptionId: v.string(),
+    inscriptionDocId: v.id("inscriptions"),
+    costZats: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId);
     if (!job) throw new Error("Job not found");
@@ -39,6 +45,7 @@ export const addJobProgress = internalMutation({
       completedCount: job.completedCount + 1,
       inscriptionIds: [...job.inscriptionIds, args.inscriptionId],
       inscriptions: [...job.inscriptions, args.inscriptionDocId],
+      totalCostZats: (job.totalCostZats || 0) + (args.costZats || 0),
       updatedAt: Date.now(),
     });
   },

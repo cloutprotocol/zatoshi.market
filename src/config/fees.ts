@@ -22,8 +22,19 @@ export const PLATFORM_FEES = {
   INSCRIPTION_OUTPUT: 10000, // 0.0001 ZEC
 } as const;
 
-export const FEE_FLOOR_ZATS = 100000; // Minimum network fee (ZIP-317 enforced)
-export const NETWORK_FEE_UNIT_ZATS_PER_BYTE = 20; // 20 zats/byte for improved mempool acceptance
+// ==================================================================================
+// ZIP 317 Fee Configuration
+// ==================================================================================
+// ZIP 317 defines: fee = max(10,000 zats, logical_actions × 5,000 zats)
+// where logical_actions = max(input_count, output_count)
+//
+// Most inscriptions have 3 outputs (Inscription + Platform Fee + Change)
+// Therefore minimum = 3 × 5,000 = 15,000 zats
+//
+// We use 20,000 as our "Low" tier floor to provide a safe buffer
+// ==================================================================================
+export const FEE_FLOOR_ZATS = 20000; // Safe minimum above ZIP-317 calculated minimum
+export const NETWORK_FEE_UNIT_ZATS_PER_BYTE = 10; // 10 zats/byte for size-based estimation
 
 export const DUST_LIMIT = 546; // Minimum relayable output for P2PKH
 export const INSCRIPTION_MIN_OUTPUT_ZATS = DUST_LIMIT + 1; // Minimum to be considered non-dust
@@ -46,7 +57,11 @@ export const TREASURY_WALLET = {
 /**
  * Fee calculation helpers
  */
-export const calculateTotalCost = (platformFee: number, contentSizeBytes: number = 0): {
+export const calculateTotalCost = (
+  platformFee: number,
+  contentSizeBytes: number = 0,
+  opts?: { feePerTx?: number }
+): {
   platformFee: number;
   networkFee: number;
   inscriptionOutput: number;
@@ -61,7 +76,8 @@ export const calculateTotalCost = (platformFee: number, contentSizeBytes: number
   const calculatedFee = Math.ceil(estimatedTxSize * NETWORK_FEE_UNIT_ZATS_PER_BYTE);
 
   const ZIP_317_CAP = 100000;
-  const networkFee = Math.min(Math.max(calculatedFee, FEE_FLOOR_ZATS), ZIP_317_CAP);
+  const floor = Math.max(FEE_FLOOR_ZATS, opts?.feePerTx ?? 0);
+  const networkFee = Math.min(Math.max(calculatedFee, floor), ZIP_317_CAP);
 
   const inscriptionOutput = networkFee + INSCRIPTION_MIN_OUTPUT_ZATS;
 
@@ -95,7 +111,7 @@ export const LARGE_FILE_WARNING_KB = 30;
  * @param fileSizeBytes - Size of the image file in bytes
  * @returns Fee breakdown with network fee based on transaction size
  */
-export const calculateImageInscriptionFees = (fileSizeBytes: number): {
+export const calculateImageInscriptionFees = (fileSizeBytes: number, opts?: { feePerTx?: number }): {
   platformFee: number;
   networkFee: number;
   inscriptionOutput: number;
@@ -117,7 +133,8 @@ export const calculateImageInscriptionFees = (fileSizeBytes: number): {
   // Enforce minimum fee floor (50,000 zats) to avoid "unpaid action limit exceeded"
   // Cap at reasonable maximum (100,000 zats) to keep large inscriptions affordable
   const ZIP_317_CAP = 100000;
-  const networkFee = Math.min(Math.max(calculatedFee, FEE_FLOOR_ZATS), ZIP_317_CAP);
+  const floor = Math.max(FEE_FLOOR_ZATS, opts?.feePerTx ?? 0);
+  const networkFee = Math.min(Math.max(calculatedFee, floor), ZIP_317_CAP);
 
   const platformFee = PLATFORM_FEE_ZATS; // 100,000 zats
 

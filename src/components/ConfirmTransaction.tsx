@@ -12,6 +12,12 @@ type LineItem = {
   valueText?: string;
 };
 
+export type FeeOption = {
+  key: string;
+  label: string;
+  perTx: number;
+};
+
 export function ConfirmTransaction(props: {
   isOpen: boolean;
   title?: string;
@@ -20,8 +26,22 @@ export function ConfirmTransaction(props: {
   onCancel: () => void;
   onConfirm: () => Promise<void> | void;
   confirmText?: string;
+  feeOptions?: readonly FeeOption[];
+  selectedFeeOption?: FeeOption;
+  onFeeOptionChange?: (option: FeeOption) => void;
 }) {
-  const { isOpen, title = "Confirm Transaction", items, disclaimer, onCancel, onConfirm, confirmText = "Confirm & Sign" } = props;
+  const {
+    isOpen,
+    title = "Confirm Transaction",
+    items,
+    disclaimer,
+    onCancel,
+    onConfirm,
+    confirmText = "Confirm & Sign",
+    feeOptions,
+    selectedFeeOption,
+    onFeeOptionChange
+  } = props;
   const [zecPrice, setZecPrice] = useState<number | null>(null);
   const [priceLoading, setPriceLoading] = useState(false);
 
@@ -79,6 +99,32 @@ export function ConfirmTransaction(props: {
               </div>
             </div>
           ))}
+
+          {/* Fee Selector */}
+          {feeOptions && selectedFeeOption && onFeeOptionChange && (
+            <div className="py-3">
+              <label className="block text-xs text-gold-400/70 mb-2">Fee Rate</label>
+              <div className="grid grid-cols-3 gap-2">
+                {feeOptions.map((option) => (
+                  <button
+                    key={option.key}
+                    onClick={() => onFeeOptionChange(option)}
+                    className={`
+                      px-2 py-2 rounded text-xs font-medium border transition-colors
+                      ${selectedFeeOption.key === option.key
+                        ? 'bg-gold-500/20 border-gold-500 text-gold-300'
+                        : 'bg-black/40 border-gold-500/20 text-gold-400/60 hover:border-gold-500/40'
+                      }
+                    `}
+                  >
+                    <div className="font-bold">{option.label}</div>
+                    <div className="opacity-70">{option.perTx.toLocaleString()}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="h-px bg-gold-500/20 my-3" />
           <div className="flex justify-between items-start text-lg font-bold">
             <span className="text-gold-200">Total</span>

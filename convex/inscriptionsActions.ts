@@ -60,8 +60,12 @@ export const mintInscriptionAction = action({
       // Inputs & fees
       // - inscriptionAmount: value locked into the P2SH reveal output (vout 0 of commit)
       // - fee: ZIP-317 floor enforced to avoid "unpaid action limit" mempool rejections
+      // ZIP 317 Fee Floor: We use 20,000 zats as a safe minimum
+      // ZIP 317: fee = max(10,000, logical_actions × 5,000)
+      // Most inscriptions have 3 outputs (Inscription + Platform Fee + Change) = 15,000 minimum
+      // 20,000 provides a buffer and aligns with our "Low" tier
       const inscriptionAmount = args.inscriptionAmount ?? 50000;
-      const FEE_FLOOR_ZATS = 50000;
+      const FEE_FLOOR_ZATS = 20000;
       const fee = Math.max(args.fee ?? 10000, FEE_FLOOR_ZATS);
       const waitMs = args.waitMs ?? 10000;
       const contentStr = args.contentJson ?? args.content ?? "hello world";
@@ -91,17 +95,30 @@ export const mintInscriptionAction = action({
       // Filter safe (non-inscribed) UTXOs first; if indexer fails, abort
       currentStep = "filtering UTXOs";
       try {
-        const maxVal = utxos.reduce((m:any,u:any)=>Math.max(m, u?.value||0), 0);
-        const minVal = utxos.reduce((m:any,u:any)=>Math.min(m, u?.value||0), (utxos[0]?.value ?? 0)||0);
+        const maxVal = utxos.reduce((m: any, u: any) => Math.max(m, u?.value || 0), 0);
+        const minVal = utxos.reduce((m: any, u: any) => Math.min(m, u?.value || 0), (utxos[0]?.value ?? 0) || 0);
         console.log(`[utxo][mint] ${args.address} total=${utxos.length} required=${required} max=${maxVal} min=${minVal}`);
-      } catch {}
-      const candidates = utxos.filter(u => u.value >= required);
-      const safe: typeof candidates = [];
+      } catch { }
+      // Optimization: Sort by value descending (greedy) and check inscriptions lazily
+      // This avoids checking every single UTXO if we only need one or two.
+      utxos.sort((a, b) => b.value - a.value);
 
-      currentStep = "checking inscriptions on UTXOs";
-      for (const c of candidates) {
-        const hasInscription = await checkInscriptionAt(`${c.txid}:${c.vout}`);
-        if (!hasInscription) safe.push(c);
+      const safe: typeof utxos = [];
+      currentStep = "selecting clean UTXOs";
+
+      // We need to find enough clean UTXOs to cover 'required'
+      // Since we are just looking for a single UTXO >= required (based on original logic),
+      // we can just find the first one that works.
+      // Original logic: const candidates = utxos.filter(u => u.value >= required);
+
+      for (const u of utxos) {
+        if (u.value < required) continue; // Skip if too small (since we want single input if possible)
+
+        const hasInscription = await checkInscriptionAt(`${u.txid}:${u.vout}`);
+        if (!hasInscription) {
+          safe.push(u);
+          break; // Found one!
+        }
       }
 
       // Attempt to lock a suitable safe UTXO to avoid races
@@ -213,7 +230,7 @@ export const mintInscriptionAction = action({
         revealTxid = await broadcastTransaction(revealHex);
       } catch (e: any) {
         // Always release lock on failure
-        try { await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxo.txid, vout: utxo.vout }); } catch {}
+        try { await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxo.txid, vout: utxo.vout }); } catch { }
         const msg = e?.message ? String(e.message) : String(e);
         if (msg.toLowerCase().includes('unpaid action')) {
           throw new Error('Network rejected TX due to ZIP-317 fee policy. Increase fee to at least 50,000 zats and retry.');
@@ -244,7 +261,7 @@ export const mintInscriptionAction = action({
             zrc20Op = parsed.op?.toString();
             zrc20Amount = parsed.amt?.toString();
           }
-        } catch {}
+        } catch { }
       }
 
       currentStep = "saving inscription to database";
@@ -289,7 +306,7 @@ export const splitUtxosAction = action({
     // Build outputs first to calculate ZIP-317 fee
     const pkh = addressToPkh(address);
     const outputs: { value: number; scriptPubKey: Uint8Array }[] = [];
-    for (let i=0;i<splitCount;i++) outputs.push({ value: targetAmount, scriptPubKey: buildP2PKHScript(pkh) });
+    for (let i = 0; i < splitCount; i++) outputs.push({ value: targetAmount, scriptPubKey: buildP2PKHScript(pkh) });
 
     // ZIP-317: logical_actions = max(inputs, outputs), fee = max(10000, actions * 5000)
     // Single input, multiple outputs
@@ -312,7 +329,7 @@ export const splitUtxosAction = action({
     // Sign v4 using lib helpers
     const consensusBranchId = await getConsensusBranchId(tatumKey);
     const inputs = [{ txid: src.txid, vout: src.vout, sequence: 0xfffffffd, value: src.value, scriptPubKey: buildP2PKHScript(pkh) }];
-    const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId, lockTime:0, expiryHeight:0, inputs, outputs };
+    const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId, lockTime: 0, expiryHeight: 0, inputs, outputs };
     const priv = wifToPriv(wif);
     const sigHash = zip243Sighash(txData as any, 0);
     const secp = await import("@noble/secp256k1");
@@ -328,14 +345,14 @@ export const splitUtxosAction = action({
     const inCount = new Uint8Array([0x01]);
     const prev = reverseBytes(hexToBytes(src.txid));
     const voutBuf = u32le(src.vout);
-    const scriptSig = concatBytes([ new Uint8Array([sigType.length]), sigType, new Uint8Array([pub.length]), pub ]);
+    const scriptSig = concatBytes([new Uint8Array([sigType.length]), sigType, new Uint8Array([pub.length]), pub]);
     const scriptLen = varint(scriptSig.length);
     const seq = u32le(0xfffffffd);
     const outCount = varint(outputs.length);
-    const outsBuf = concatBytes(outputs.map(o=>concatBytes([u64le(o.value), varint(o.scriptPubKey.length), o.scriptPubKey])));
+    const outsBuf = concatBytes(outputs.map(o => concatBytes([u64le(o.value), varint(o.scriptPubKey.length), o.scriptPubKey])));
     const lock = u32le(0); const exp = u32le(0); const valBal = new Uint8Array(8);
     const nSS = new Uint8Array([0x00]), nSO = new Uint8Array([0x00]), nJS = new Uint8Array([0x00]);
-    const raw = concatBytes([ version, vgid, inCount, prev, voutBuf, scriptLen, scriptSig, seq, outCount, outsBuf, lock, exp, valBal, nSS, nSO, nJS ]);
+    const raw = concatBytes([version, vgid, inCount, prev, voutBuf, scriptLen, scriptSig, seq, outCount, outsBuf, lock, exp, valBal, nSS, nSO, nJS]);
     const txid = await broadcastTransaction(bytesToHex(raw), tatumKey);
     return { txid };
   }
@@ -352,7 +369,7 @@ export const buildUnsignedSplitAction = action({
   },
   handler: async (ctx, args) => {
     // Prune stale locks first to avoid deadlocks from old contexts
-    try { await ctx.runMutation(internal.utxoLocks.pruneStaleLocks, {} as any); } catch {}
+    try { await ctx.runMutation(internal.utxoLocks.pruneStaleLocks, {} as any); } catch { }
 
     let utxos;
     try { utxos = await fetchUtxos(args.address); }
@@ -367,44 +384,39 @@ export const buildUnsignedSplitAction = action({
     const effectiveFee = Math.max(args.fee, minSplitFee);
     const required = args.splitCount * args.targetAmount + effectiveFee;
     try {
-      const maxVal = utxos.reduce((m:any,u:any)=>Math.max(m, u?.value||0), 0);
-      console.log(`[utxo][split] ${address} total=${utxos.length} required=${required} max=${maxVal}`);
-    } catch {}
+      const maxVal = utxos.reduce((m: any, u: any) => Math.max(m, u?.value || 0), 0);
+      console.log(`[utxo][split] ${args.address} total=${utxos.length} required=${required} max=${maxVal}`);
+    } catch { }
 
-    // Gather spendable (non-inscribed) UTXOs
-    const spendable: typeof utxos = [];
-    for (const u of utxos) {
-      const hasInsc = await checkInscriptionAt(`${u.txid}:${u.vout}`);
-      if (!hasInsc) spendable.push(u);
-    }
-    if (spendable.length === 0) {
-      throw new Error('Not enough spendable funds. All available UTXOs are inscribed.');
-    }
-    // Multi-input selection: choose the smallest set of UTXOs (greedy by largest first) to meet the requirement
-    const sorted = spendable.slice().sort((a,b)=>b.value - a.value);
-    const selected: typeof spendable = [];
+    // Optimization: Sort first, then check inscriptions lazily until we have enough
+    const sorted = utxos.slice().sort((a, b) => b.value - a.value);
+    const selected: typeof utxos = [];
     let total = 0;
+
     for (const u of sorted) {
       if (total >= required) break;
-      selected.push(u);
-      total += u.value;
+
+      const hasInsc = await checkInscriptionAt(`${u.txid}:${u.vout}`);
+      if (!hasInsc) {
+        selected.push(u);
+        total += u.value;
+      }
     }
+
     if (total < required) {
-      const have = total;
-      const need = required;
-      throw new Error(`Not enough spendable funds to split. Need ${need} zats total; only ${have} zats available in clean UTXOs.`);
+      throw new Error(`Not enough spendable funds to split. Need ${required} zats total; found ${total} zats in clean UTXOs.`);
     }
 
     // Create a context id up front so we can tag locks and make retries idempotent
     const contextId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
     // Lock all selected inputs atomically, attributed to this context
-    const lockRes = await ctx.runMutation(internal.utxoLocks.lockUtxos, { items: selected.map(s=>({txid:s.txid, vout:s.vout})), address: args.address, lockedBy: contextId } as any);
+    const lockRes = await ctx.runMutation(internal.utxoLocks.lockUtxos, { items: selected.map(s => ({ txid: s.txid, vout: s.vout })), address: args.address, lockedBy: contextId } as any);
     if (!lockRes?.success) throw new Error('UTXO lock failed; retry later');
 
     const pkh = addressToPkh(args.address);
     const outputs: { value: number; scriptPubKey: Uint8Array }[] = [];
-    for (let i=0;i<args.splitCount;i++) outputs.push({ value: args.targetAmount, scriptPubKey: buildP2PKHScript(pkh) });
+    for (let i = 0; i < args.splitCount; i++) outputs.push({ value: args.targetAmount, scriptPubKey: buildP2PKHScript(pkh) });
     const change = total - required;
     if (change > 546) outputs.push({ value: change, scriptPubKey: buildP2PKHScript(pkh) });
 
@@ -417,7 +429,7 @@ export const buildUnsignedSplitAction = action({
     if (finalFee > effectiveFee) {
       const newRequired = args.splitCount * args.targetAmount + finalFee;
       if (total < newRequired) {
-        await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: selected.map(s=>({txid:s.txid, vout:s.vout})) });
+        await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: selected.map(s => ({ txid: s.txid, vout: s.vout })) });
         throw new Error(`Not enough funds for split with ZIP-317 fees. Need ${newRequired} zats (${finalFee} fee for ${logicalActions} actions), have ${total} zats.`);
       }
       // Adjust change with new fee
@@ -447,7 +459,7 @@ export const buildUnsignedSplitAction = action({
         pubKeyHex: args.pubKeyHex,
         redeemScriptHex: '',
         p2shScriptHex: '',
-        inscriptionDataHex: bytesToHex(utf8(JSON.stringify({ splitCount: args.splitCount, targetAmount: args.targetAmount, inputs: selected.map(s=>({ txid: s.txid, vout: s.vout, value: s.value })) }))),
+        inscriptionDataHex: bytesToHex(utf8(JSON.stringify({ splitCount: args.splitCount, targetAmount: args.targetAmount, inputs: selected.map(s => ({ txid: s.txid, vout: s.vout, value: s.value })) }))),
         contentType: 'split',
         contentStr: 'split',
         type: 'split',
@@ -459,7 +471,7 @@ export const buildUnsignedSplitAction = action({
       return { contextId, splitSigHashHexes: sighashes.map(bytesToHex) } as any;
     } catch (e) {
       // If anything fails after locking, release locks so we don't strand them
-      try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: selected.map(s=>({txid:s.txid, vout:s.vout})) }); } catch {}
+      try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: selected.map(s => ({ txid: s.txid, vout: s.vout })) }); } catch { }
       throw e;
     }
   }
@@ -490,8 +502,8 @@ export const broadcastSignedSplitAction = action({
 
     const pkh = addressToPkh(rec.address);
     const outputs: { value: number; scriptPubKey: Uint8Array }[] = [];
-    for (let i=0;i<splitParams.splitCount;i++) outputs.push({ value: splitParams.targetAmount, scriptPubKey: buildP2PKHScript(pkh) });
-    const totalIn = inputs.reduce((s,u)=>s+u.value,0);
+    for (let i = 0; i < splitParams.splitCount; i++) outputs.push({ value: splitParams.targetAmount, scriptPubKey: buildP2PKHScript(pkh) });
+    const totalIn = inputs.reduce((s, u) => s + u.value, 0);
     const change = totalIn - (splitParams.splitCount * splitParams.targetAmount) - rec.fee;
     if (change > 546) outputs.push({ value: change, scriptPubKey: buildP2PKHScript(pkh) });
     const txHex = assembleSplitTxHexMulti({
@@ -507,14 +519,14 @@ export const broadcastSignedSplitAction = action({
       txid = await broadcastTransaction(txHex);
     } catch (e: any) {
       // ensure we unlock any locked inputs (strip extra fields for validator)
-      try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: inputs.map((i:any)=>({ txid: i.txid, vout: i.vout })) }); } catch {}
+      try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: inputs.map((i: any) => ({ txid: i.txid, vout: i.vout })) }); } catch { }
       const msg = e?.message ? String(e.message) : String(e);
       if (msg.toLowerCase().includes('unpaid action limit exceeded')) {
         throw new Error('Network rejected TX due to ZIP-317 fee policy. Increase fee to at least 50,000 zats and retry.');
       }
       throw e;
     }
-    try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: inputs.map((i:any)=>({ txid: i.txid, vout: i.vout })) }); } catch {}
+    try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: inputs.map((i: any) => ({ txid: i.txid, vout: i.vout })) }); } catch { }
     await ctx.runMutation(internal.txContexts.patch, { _id: rec._id, status: 'completed', updatedAt: Date.now() });
     return {
       txid,
@@ -538,6 +550,7 @@ export const batchMintAction = action({
     inscriptionAmount: v.optional(v.number()),
     fee: v.optional(v.number()),
     waitMs: v.optional(v.number()),
+    feeTier: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Create job and start tail-chained internal action
@@ -572,8 +585,11 @@ export const buildUnsignedCommitAction = action({
     fee: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    // Client-signing path: same ZIP-317 fee floor
-    const FEE_FLOOR_ZATS = 50000;
+    // ZIP 317 Fee Floor: Client-side signing path uses same floor as server
+    // ZIP 317: fee = max(10,000, logical_actions × 5,000)
+    // Most inscriptions have 3 outputs = 15,000 minimum
+    // We use 20,000 as a safe buffer ("Low" tier)
+    const FEE_FLOOR_ZATS = 20000;
     const DUST_LIMIT = 546;
     const fee = Math.max(args.fee ?? 10000, FEE_FLOOR_ZATS);
     // Default inscription amount to fee + 10k buffer
@@ -600,36 +616,78 @@ export const buildUnsignedCommitAction = action({
     }
     const required = inscriptionAmount + fee + platformFeeZats;
     try {
-      const maxVal = utxos.reduce((m:any,u:any)=>Math.max(m, u?.value||0), 0);
-      const minVal = utxos.reduce((m:any,u:any)=>Math.min(m, u?.value||0), (utxos[0]?.value ?? 0)||0);
+      const maxVal = utxos.reduce((m: any, u: any) => Math.max(m, u?.value || 0), 0);
+      const minVal = utxos.reduce((m: any, u: any) => Math.min(m, u?.value || 0), (utxos[0]?.value ?? 0) || 0);
       console.log(`[utxo][unsigned-commit] ${args.address} total=${utxos.length} required=${required} max=${maxVal} min=${minVal}`);
-    } catch {}
-    // Multi-input selection: choose the smallest set of UTXOs (greedy by largest first) to meet the requirement
-    const spendable: typeof utxos = [];
-    for (const u of utxos) {
-      const hasInsc = await checkInscriptionAt(`${u.txid}:${u.vout}`);
-      if (!hasInsc) spendable.push(u);
-    }
-    if (spendable.length === 0) {
-      throw new Error(
-        "Not enough spendable funds. All available UTXOs are inscribed."
-      );
-    }
-    const sorted = spendable.slice().sort((a, b) => b.value - a.value);
-    const selected: typeof spendable = [];
+    } catch { }
+    // Optimization: Sort first, then check inscriptions lazily
+    const sorted = utxos.slice().sort((a, b) => b.value - a.value);
+    const selected: typeof utxos = [];
     let totalIn = 0;
+
     for (const u of sorted) {
       if (totalIn >= required) break;
-      selected.push(u);
-      totalIn += u.value;
+
+      const hasInsc = await checkInscriptionAt(`${u.txid}:${u.vout}`);
+      if (!hasInsc) {
+        selected.push(u);
+        totalIn += u.value;
+      }
     }
-    if (totalIn < required) {
-      const have = totalIn;
-      const need = required;
+
+
+
+    // ==================================================================================
+    // ZIP-317 Dynamic Fee Calculation
+    // ==================================================================================
+    // ZIP 317 defines fees as: fee = max(10,000 zats, logical_actions × 5,000 zats)
+    // where logical_actions = max(input_count, output_count)
+    //
+    // For typical inscriptions:
+    // - Inputs: Usually 1 (we select the minimal set to cover required amount)
+    // - Outputs: 3 (Inscription P2SH + Platform Treasury + Change)
+    // - Therefore: logical_actions = max(1, 3) = 3
+    // - Minimum fee = 3 × 5,000 = 15,000 zats
+    //
+    // We automatically bump the user's fee to meet this requirement if needed.
+    // ==================================================================================
+    const outputCount = 3; // P2SH, Treasury, Change
+    const logicalActions = Math.max(selected.length, outputCount);
+    const zip317MinFee = Math.max(10000, logicalActions * 5000);
+
+    // Bump fee if user's selection is below ZIP 317 minimum
+    const finalFee = Math.max(fee, zip317MinFee);
+    if (fee < zip317MinFee) {
+      console.log(`[fee-bump] User fee ${fee} too low for ${logicalActions} actions. Bumping to ${zip317MinFee}.`);
+    }
+
+    // ==================================================================================
+    // Inscription Amount Adjustment
+    // ==================================================================================
+    // The commit tx locks `inscriptionAmount` into the P2SH output (vout 0).
+    // The reveal tx spends this P2SH output and pays `finalFee`.
+    // Therefore: inscriptionAmount must be > finalFee + DUST_LIMIT (546 zats)
+    // to create a valid output in the reveal tx.
+    //
+    // If the user-provided inscriptionAmount is too small (which can happen when
+    // we bump the fee), we automatically adjust it to meet the requirement.
+    // ==================================================================================
+    let finalInscriptionAmount = inscriptionAmount;
+    const minInscriptionAmount = finalFee + DUST_LIMIT + 1;
+    if (finalInscriptionAmount < minInscriptionAmount) {
+      console.log(`[inscription-amount-bump] User inscriptionAmount ${finalInscriptionAmount} too low for fee ${finalFee}. Bumping to ${minInscriptionAmount}.`);
+      finalInscriptionAmount = minInscriptionAmount;
+    }
+
+
+    const finalRequired = finalInscriptionAmount + finalFee + platformFeeZats;
+
+    if (totalIn < finalRequired) {
       throw new Error(
-        `Not enough spendable funds to inscribe. Need ${need} zats total; only ${have} zats available in clean UTXOs.`
+        `Not enough spendable funds. Need ${finalRequired} zats (incl. ${finalFee} network fee); found ${totalIn} zats.`
       );
     }
+
 
     // Build scripts/data
     const pubKey = hexToBytes(args.pubKeyHex);
@@ -649,7 +707,7 @@ export const buildUnsignedCommitAction = action({
     const chunks = buildInscriptionChunks(contentType, contentData);
     const redeemScript = createRevealScript(pubKey, chunks);
     const p2sh = p2shFromRedeem(redeemScript);
-    console.log(`[inscription] redeemScript=${redeemScript.length} bytes, p2sh hash=${bytesToHex(p2sh.hash).slice(0,16)}...`);
+    console.log(`[inscription] redeemScript=${redeemScript.length} bytes, p2sh hash=${bytesToHex(p2sh.hash).slice(0, 16)}...`);
     let consensusBranchId: number;
     try {
       consensusBranchId = await getConsensusBranchId();
@@ -661,8 +719,8 @@ export const buildUnsignedCommitAction = action({
     const sigHashes = buildCommitSighashes({
       utxos: selected,
       address: args.address,
-      inscriptionAmount,
-      fee,
+      inscriptionAmount: finalInscriptionAmount,
+      fee: finalFee,
       consensusBranchId,
       p2shScript: p2sh.script,
       platformFeeZats,
@@ -677,8 +735,8 @@ export const buildUnsignedCommitAction = action({
       utxos: selected.map(u => ({ txid: u.txid, vout: u.vout, value: u.value })),
       address: args.address,
       consensusBranchId,
-      inscriptionAmount,
-      fee,
+      inscriptionAmount: finalInscriptionAmount,
+      fee: finalFee,
       platformFeeZats,
       platformTreasuryAddress: PLATFORM_TREASURY,
       pubKeyHex: args.pubKeyHex,
@@ -727,8 +785,8 @@ export const finalizeCommitAndGetRevealPreimageAction = action({
     try {
       commitTxid = await broadcastTransaction(commitHex);
     } catch (e: any) {
-      try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: rec.utxos.map(u => ({ txid: u.txid, vout: u.vout })) }); } catch {}
-      try { await ctx.runMutation(internal.txContexts.patch, { _id: rec._id, status: 'failed', updatedAt: Date.now() }); } catch {}
+      try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: rec.utxos.map(u => ({ txid: u.txid, vout: u.vout })) }); } catch { }
+      try { await ctx.runMutation(internal.txContexts.patch, { _id: rec._id, status: 'failed', updatedAt: Date.now() }); } catch { }
       const msg = e?.message ? String(e.message) : String(e);
 
       // Provide user-friendly error messages
@@ -767,14 +825,14 @@ export const finalizeCommitAndGetRevealPreimageAction = action({
             const r = await fetch(rpc, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'x-api-key': tatumKey },
-              body: JSON.stringify({ jsonrpc:'2.0', method:'getrawtransaction', params:[commitTxid, 1], id:1 })
+              body: JSON.stringify({ jsonrpc: '2.0', method: 'getrawtransaction', params: [commitTxid, 1], id: 1 })
             });
-            if (r.ok) { const j:any = await r.json(); if (j?.result) break; }
-          } catch {}
+            if (r.ok) { const j: any = await r.json(); if (j?.result) break; }
+          } catch { }
           await new Promise(r => setTimeout(r, 1500));
         }
       }
-    } catch {}
+    } catch { }
     const revealSigHash = buildRevealSighash({
       commitTxid,
       address: rec.address,
@@ -814,7 +872,7 @@ export const broadcastSignedRevealAction = action({
       signatureRaw64: hexToBytes(args.revealSignatureRawHex),
       consensusBranchId: rec.consensusBranchId,
     });
-    console.log(`[reveal] assembled tx hex length: ${revealHex.length} chars (${revealHex.length/2} bytes)`);
+    console.log(`[reveal] assembled tx hex length: ${revealHex.length} chars (${revealHex.length / 2} bytes)`);
     console.log(`[reveal] tx hex (first 500 chars): ${revealHex.slice(0, 500)}`);
     // Broadcast reveal with minimal retries to handle transient propagation races even after the
     // above delay. We keep this gentle (3 attempts) to avoid hammering providers.
@@ -833,15 +891,18 @@ export const broadcastSignedRevealAction = action({
       if (!revealTxid) throw new Error('Broadcast failed: reveal did not return txid');
     } catch (e: any) {
       // Always release lock on failure
-      try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: rec.utxos.map(u => ({ txid: u.txid, vout: u.vout })) }); } catch {}
+      try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: rec.utxos.map(u => ({ txid: u.txid, vout: u.vout })) }); } catch { }
       const msg = e?.message ? String(e.message) : String(e);
 
       // Provide user-friendly error messages
       if (msg.toLowerCase().includes('unpaid action') || msg.toLowerCase().includes('fee too low')) {
         throw new Error('Network rejected transaction: Fee too low. Please increase the fee and try again.');
       }
+      if (msg.toLowerCase().includes('decode failed')) {
+        throw new Error('Transaction rejected: Invalid transaction format. Please try again or contact support.');
+      }
       if (msg.toLowerCase().includes('scriptsig-size')) {
-        throw new Error(`Image file too large. Zcash enforces a 10KB limit on scriptSig size. Please reduce your image to under 9.5KB (current: ${Math.round(inscriptionData.length/1024*10)/10}KB). Try compressing or resizing the image.`);
+        throw new Error(`Image file too large. Zcash enforces a 10KB limit on scriptSig size. Please reduce your image to under 9.5KB (current: ${Math.round(inscriptionData.length / 1024 * 10) / 10}KB). Try compressing or resizing the image.`);
       }
       if (msg.toLowerCase().includes('scriptsig-not-pushonly') || msg.toLowerCase().includes('invalid script')) {
         throw new Error('Transaction rejected: Invalid script format. Please try again or contact support.');
@@ -849,18 +910,34 @@ export const broadcastSignedRevealAction = action({
       if (msg.toLowerCase().includes('missing inputs') || msg.toLowerCase().includes('inputs unavailable')) {
         throw new Error('Transaction inputs not ready. Please wait a moment and try again.');
       }
-      if (msg.toLowerCase().includes('broadcast failed')) {
-        // Re-throw with more context
-        throw new Error(`Unable to broadcast transaction. ${msg.includes('Network response') ? msg.split('Network response:')[1]?.trim() || 'Please try again.' : 'Please try again or contact support.'}`);
+
+      // Generic fallback: Sanitize message by removing provider names and internal details
+      let sanitized = msg
+        .replace(/convex/gi, '')
+        .replace(/inscriptionsActions/gi, '')
+        .replace(/\\.ts:\\d+/g, '')
+        .replace(/zerdinals\(\d+\):\s*/gi, '')
+        .replace(/tatum:\s*/gi, '')
+        .replace(/blockchair\(\d+\):\s*/gi, '')
+        .replace(/\[broadcast\]\s*All providers failed:\s*\[/gi, '')
+        .replace(/'[^']*zerdinals[^']*'/gi, '')
+        .replace(/'[^']*tatum[^']*'/gi, '')
+        .replace(/'[^']*blockchair[^']*'/gi, '')
+        .replace(/,\s*,/g, ',')
+        .replace(/\[,/g, '[')
+        .replace(/,\]/g, ']')
+        .replace(/\[\]/g, '')
+        .trim();
+
+      if (sanitized.startsWith('[') || sanitized.includes('{"error"')) {
+        sanitized = 'Transaction broadcast failed';
       }
 
-      // Generic fallback with sanitized message
-      const sanitized = msg.replace(/convex/gi, '').replace(/inscriptionsActions/gi, '').replace(/\.ts:\d+/g, '').trim();
-      throw new Error(`Transaction failed: ${sanitized || 'An unexpected error occurred. Please try again.'}`);
+      throw new Error(`Unable to broadcast transaction. ${sanitized || 'Please try again or contact support.'}`);
     }
     const inscriptionId = `${revealTxid}i0`;
     // Unlock after success, too
-    try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: rec.utxos.map(u => ({ txid: u.txid, vout: u.vout })) }); } catch {}
+    try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: rec.utxos.map(u => ({ txid: u.txid, vout: u.vout })) }); } catch { }
 
     // Parse preview + zrc20 details
     const preview = rec.contentStr.slice(0, 200);
@@ -875,7 +952,7 @@ export const broadcastSignedRevealAction = action({
           zrc20Op = parsed.op?.toString();
           zrc20Amount = parsed.amt?.toString();
         }
-      } catch {}
+      } catch { }
     }
 
     await ctx.runMutation(api.inscriptions.createInscription, {

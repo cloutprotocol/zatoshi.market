@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZGODS Gallery</title>
+  <link rel="icon" href="data:image/gif;base64,R0lGODlhAQABAAAAACw=" />
+  <link rel="dns-prefetch" href="https://ipfs.io">
+  <link rel="preconnect" href="https://ipfs.io" crossorigin>
+  <link rel="dns-prefetch" href="https://cloudflare-ipfs.com">
+  <link rel="preconnect" href="https://cloudflare-ipfs.com" crossorigin>
+  <link rel="dns-prefetch" href="https://zatoshi.market">
+  <link rel="preconnect" href="https://zatoshi.market" crossorigin>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <h1>ZGODS Gallery</h1>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/claim/">Claim</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="layout">
+      <section class="content">
+        <section class="controls" role="region" aria-label="Gallery controls">
+          <div class="left-tools">
+            <div class="view-buttons">
+              <button class="btn icon-btn view-btn active" data-view="grid" aria-label="Grid view" title="Grid">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                  <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                  <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                  <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+                </svg>
+              </button>
+              <button class="btn icon-btn view-btn" data-view="dense" aria-label="Dense view" title="Dense">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="3" y="3" width="5" height="5" rx="1"></rect>
+                  <rect x="10" y="3" width="5" height="5" rx="1"></rect>
+                  <rect x="17" y="3" width="5" height="5" rx="1"></rect>
+                  <rect x="3" y="10" width="5" height="5" rx="1"></rect>
+                  <rect x="10" y="10" width="5" height="5" rx="1"></rect>
+                  <rect x="17" y="10" width="5" height="5" rx="1"></rect>
+                  <rect x="3" y="17" width="5" height="5" rx="1"></rect>
+                  <rect x="10" y="17" width="5" height="5" rx="1"></rect>
+                  <rect x="17" y="17" width="5" height="5" rx="1"></rect>
+                </svg>
+              </button>
+              <button class="btn icon-btn view-btn" data-view="list" aria-label="List view" title="List">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="8" y="4.5" width="13" height="3" rx="1"></rect>
+                  <rect x="8" y="10.5" width="13" height="3" rx="1"></rect>
+                  <rect x="8" y="16.5" width="13" height="3" rx="1"></rect>
+                  <circle cx="4" cy="6" r="1.5"></circle>
+                  <circle cx="4" cy="12" r="1.5"></circle>
+                  <circle cx="4" cy="18" r="1.5"></circle>
+                </svg>
+              </button>
+            </div>
+            <input id="searchInput" type="search" placeholder="Search by #id" aria-label="Search"
+              class="search-input" />
+            <select id="sortSelect" class="sort-select" aria-label="Sort">
+              <option value="id-asc">ID ↑</option>
+              <option value="id-desc">ID ↓</option>
+            </select>
+          </div>
+          <div class="right-tools">
+            <div class="status-wrapper">
+              <div id="status" class="status"></div>
+              <div id="resultCount" class="status-count"></div>
+            </div>
+            <nav class="pagination" aria-label="Pagination">
+              <button id="prevPage" class="btn" aria-label="Previous page">Prev</button>
+              <div class="page-info"><span id="pageNumber">1</span> / <span id="pageTotal">1</span></div>
+              <button id="nextPage" class="btn" aria-label="Next page">Next</button>
+            </nav>
+          </div>
+        </section>
+        <div class="gallery-wrapper">
+          <section id="gallery" class="gallery" aria-live="polite"></section>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div id="modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+      <button id="modalClose" class="btn close" aria-label="Close" data-close>&times;</button>
+      <div class="modal-nav">
+        <button id="modalPrev" class="btn small" aria-label="Previous item">◀</button>
+        <button id="modalNext" class="btn small" aria-label="Next item">▶</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="./script.js" type="module"></script>
+</body>
+
+</html>

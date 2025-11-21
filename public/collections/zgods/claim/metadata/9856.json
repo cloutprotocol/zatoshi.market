@@ -1,0 +1,42 @@
+{
+  "name": "ZGODS 9856",
+  "collection": "ZGODS",
+  "description": "The first ZRC-721 Inscription Collection on the ZCash Privacy Blockchain. We are the ZGODS, expect us.",
+  "website": "https://zgods.xyz",
+  "twitter": "https://x.com/ZERO_ON_ZCASH",
+  "img": "https://ipfs.io/ipfs/bafybeiaqmceddfi4y3dyqwepjs6go477x35ypaojwgegcsee2vgy63yobq/9856.png",
+  "attributes": [
+    {
+      "trait_type": "Base Variant",
+      "value": "Zcash zero-knowledge oracle"
+    },
+    {
+      "trait_type": "Background",
+      "value": "aurora data glacier"
+    },
+    {
+      "trait_type": "Attire",
+      "value": "quantum courier harness"
+    },
+    {
+      "trait_type": "Facewear",
+      "value": "none"
+    },
+    {
+      "trait_type": "Encryption Prop",
+      "value": "portable Faraday altar"
+    },
+    {
+      "trait_type": "Accessory",
+      "value": "keyhole earrings"
+    },
+    {
+      "trait_type": "Aura",
+      "value": "gold dust digits"
+    },
+    {
+      "trait_type": "Legend",
+      "value": "Len Sassaman locket"
+    }
+  ]
+}
