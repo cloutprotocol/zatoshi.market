@@ -41,6 +41,9 @@ export interface ZerdinalsInscription {
   fee: number;
   address: string;
   txid: string;
+  output?: string; // Format: "txid:vout"
+  sat?: number;
+  satpoint?: string;
 }
 
 export interface ZerdinalsHolder {
@@ -155,6 +158,27 @@ class ZerdinalsAPIService {
    */
   async getAddressBalances(address: string): Promise<Record<string, string>> {
     return this.apiCall<Record<string, string>>(`/address/${address}/balances`);
+  }
+
+  /**
+   * Get inscriptions owned by an address
+   */
+  async getAddressInscriptions(address: string, limit: number = 50, offset: number = 0): Promise<ZerdinalsInscription[]> {
+    return this.apiCall<ZerdinalsInscription[]>(`/address/${address}/inscriptions?limit=${limit}&offset=${offset}`);
+  }
+
+  /**
+   * Get inscription content
+   */
+  async getInscriptionContent(id: string): Promise<string> {
+    try {
+      const response = await fetch(`${this.apiUrl}/content/${id}`);
+      if (!response.ok) throw new Error('Failed to fetch content');
+      return await response.text();
+    } catch (error) {
+      console.error(`Error fetching content for ${id}:`, error);
+      return '';
+    }
   }
 
   /**

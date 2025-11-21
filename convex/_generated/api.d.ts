@@ -13,11 +13,13 @@ import type * as inscriptions from "../inscriptions.js";
 import type * as inscriptionsActions from "../inscriptionsActions.js";
 import type * as jobs from "../jobs.js";
 import type * as jobsActions from "../jobsActions.js";
+import type * as psbt from "../psbt.js";
 import type * as sales from "../sales.js";
 import type * as testAction from "../testAction.js";
 import type * as txContexts from "../txContexts.js";
 import type * as users from "../users.js";
 import type * as utxoLocks from "../utxoLocks.js";
+import type * as zcash from "../zcash.js";
 import type * as zcashHelpers from "../zcashHelpers.js";
 import type * as zmaps from "../zmaps.js";
 
@@ -33,11 +35,13 @@ declare const fullApi: ApiFromModules<{
   inscriptionsActions: typeof inscriptionsActions;
   jobs: typeof jobs;
   jobsActions: typeof jobsActions;
+  psbt: typeof psbt;
   sales: typeof sales;
   testAction: typeof testAction;
   txContexts: typeof txContexts;
   users: typeof users;
   utxoLocks: typeof utxoLocks;
+  zcash: typeof zcash;
   zcashHelpers: typeof zcashHelpers;
   zmaps: typeof zmaps;
 }>;

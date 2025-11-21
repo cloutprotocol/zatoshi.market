@@ -109,8 +109,8 @@ export default defineSchema({
     lockedBy: v.optional(v.string()), // job id or request id
     lockedAt: v.number(),
   })
-    .index("by_txid_vout", ["txid", "vout"]) 
-    .index("by_address", ["address"]) ,
+    .index("by_txid_vout", ["txid", "vout"])
+    .index("by_address", ["address"]),
 
   // Pending transaction contexts for client-side signing flow
   txContexts: defineTable({
@@ -150,8 +150,8 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_context_id", ["contextId"]) 
-    .index("by_address", ["address"]) ,
+    .index("by_context_id", ["contextId"])
+    .index("by_address", ["address"]),
 
   // Long-running orchestration jobs (e.g., batch mint)
   jobs: defineTable({
@@ -166,7 +166,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_status", ["status"]) ,
+    .index("by_status", ["status"]),
 
   // Sales tracking for marketplace
   sales: defineTable({
@@ -182,4 +182,21 @@ export default defineSchema({
     .index("by_seller", ["sellerAddress"])
     .index("by_buyer", ["buyerAddress"])
     .index("by_timestamp", ["timestamp"]),
+
+  // PSBT Listings for the Launchpad
+  psbtListings: defineTable({
+    psbtBase64: v.string(), // The PSBT content
+    sellerAddress: v.string(), // Seller's wallet address
+    price: v.number(), // Price in ZEC (or other unit)
+    tokenTicker: v.string(), // Ticker of the token being sold
+    tokenAmount: v.number(), // Amount of tokens
+    status: v.string(), // "active" | "completed" | "cancelled"
+    createdAt: v.number(), // Timestamp
+    txid: v.optional(v.string()), // Final transaction ID if completed
+    buyerAddress: v.optional(v.string()), // Buyer's address if completed
+  })
+    .index("by_status", ["status"])
+    .index("by_seller", ["sellerAddress"])
+    .index("by_ticker", ["tokenTicker"])
+    .index("by_created_at", ["createdAt"]),
 });

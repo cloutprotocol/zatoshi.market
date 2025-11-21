@@ -404,7 +404,8 @@ function InscribePageContent() {
   // Integrated UTXO view; no toggle needed
   const [batchCount, setBatchCount] = useState(5);
   const [batchJobId, setBatchJobId] = useState<string | null>(null);
-  const [batchStatus, setBatchStatus] = useState<{ status: string; completed: number; total: number; ids: string[] } | null>(null);
+  const [batchStatus, setBatchStatus] = useState<{ status: string; completed: number; total: number; ids: string[]; estimatedProgress?: number } | null>(null);
+  const [batchStartTime, setBatchStartTime] = useState<number | null>(null);
   const [safety, setSafety] = useState<'unknown'|'on'|'off'>('unknown');
   const [demoOpen, setDemoOpen] = useState(false);
   const [demoContent, setDemoContent] = useState('hello from client-signing demo');
@@ -627,17 +628,77 @@ function InscribePageContent() {
     } finally { setDemoRunning(false); }
   };
 
+  // Utility to clean Convex error messages
+  const cleanErrorMessage = (errorMsg: string): string => {
+    let cleaned = errorMsg
+      .replace(/\[CONVEX.*?\]/g, '')
+      .replace(/\[Request ID:.*?\]/g, '')
+      .replace(/Server Error/gi, '')
+      .replace(/Uncaught Error:/gi, '')
+      .replace(/at handler \(.*?\)/g, '')
+      .replace(/at async.*$/gm, '')
+      .replace(/Called by client/gi, '')
+      .replace(/\.\.\/convex\/.*?\.ts:\d+:\d+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Make specific errors more user-friendly
+    if (cleaned.includes('Not enough spendable funds')) {
+      const match = cleaned.match(/Need at least (\d+) zats/);
+      if (match) {
+        const needed = parseInt(match[1]);
+        const neededZEC = (needed / 100000000).toFixed(8);
+        return `Insufficient funds: You need at least ${needed.toLocaleString()} zats (${neededZEC} ZEC) to complete this batch. Please add more ZEC to your wallet or reduce the batch count.`;
+      }
+    }
+
+    return cleaned || 'An error occurred';
+  };
+
   const handleBatchMint = async () => {
     if (!wallet?.privateKey || !wallet?.address) { setError('Please connect your wallet first'); return; }
     if (!tick.trim() || !amount.trim()) { setError('Please enter ticker and amount'); return; }
+
     setLoading(true);
     setError(null);
     setBatchStatus(null);
     setBatchJobId(null);
+
     try {
       const convex = getConvexClient(); if (!convex) throw new Error('Convex client not available');
       const payload = JSON.stringify({ p: 'zrc-20', op: 'mint', tick: tick.toUpperCase(), amt: amount });
       const batchFees = calculateTotalCost(PLATFORM_FEES.INSCRIPTION, new TextEncoder().encode(payload).length);
+
+      // Pre-check: Verify user has enough funds for the batch
+      const perInscriptionCost = batchFees.total;
+      const totalRequired = perInscriptionCost * batchCount;
+      const totalRequiredZEC = (totalRequired / 100000000).toFixed(8);
+
+      console.log(`Batch requires ${totalRequired.toLocaleString()} zats (${totalRequiredZEC} ZEC) for ${batchCount} inscriptions`);
+
+      // Check wallet balance before starting
+      try {
+        const balance = await zcashRPC.getBalance(wallet.address, true);
+        const availableFunds = balance.confirmed;
+
+        if (availableFunds < totalRequired) {
+          const shortfall = totalRequired - availableFunds;
+          const shortfallZEC = (shortfall / 100000000).toFixed(8);
+          throw new Error(
+            `Insufficient funds: You need ${totalRequired.toLocaleString()} zats (${totalRequiredZEC} ZEC) for this batch, ` +
+            `but only have ${availableFunds.toLocaleString()} zats available. ` +
+            `You're short by ${shortfall.toLocaleString()} zats (${shortfallZEC} ZEC). ` +
+            `Please add more ZEC to your wallet or reduce the batch count to ${Math.floor(availableFunds / perInscriptionCost)} or fewer.`
+          );
+        }
+        console.log(`✓ Balance check passed: ${availableFunds.toLocaleString()} zats available`);
+      } catch (balanceError: any) {
+        // If balance check fails (network issue), still allow the operation but log warning
+        if (balanceError.message.includes('Insufficient funds')) {
+          throw balanceError; // Re-throw our custom insufficient funds error
+        }
+        console.warn('Could not verify balance, proceeding anyway:', balanceError);
+      }
 
       const res = await convex.action(api.inscriptionsActions.batchMintAction, {
         wif: wallet.privateKey,
@@ -650,22 +711,144 @@ function InscribePageContent() {
         waitMs: 10000,
       });
       setBatchJobId(res.jobId);
-      // Start polling job status
-      const interval = setInterval(async () => {
+      const startTime = Date.now();
+      setBatchStartTime(startTime);
+      setBatchStatus({ status: 'running', completed: 0, total: batchCount, ids: [], estimatedProgress: 0 });
+
+      // Estimate: ~12 seconds per inscription
+      const estimatedSecondsPerInscription = 12;
+
+      // Update estimated progress every 500ms
+      const estimateInterval = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        const estimatedCompleted = Math.min(batchCount, elapsed / estimatedSecondsPerInscription);
+        const estimatedProgress = (estimatedCompleted / batchCount) * 100;
+
+        setBatchStatus(prev => {
+          if (!prev || prev.status !== 'running') return prev;
+          // Only use estimated progress if we haven't completed any yet
+          if (prev.completed === 0) {
+            return { ...prev, estimatedProgress: Math.min(estimatedProgress, 95) }; // Cap at 95% until real data
+          }
+          return prev;
+        });
+      }, 500);
+
+      // Poll immediately once, then start interval
+      const pollJob = async () => {
         try {
           const job = await convex.query(api.jobs.getJob, { jobId: res.jobId });
           if (job) {
             setBatchStatus({ status: job.status, completed: job.completedCount, total: job.totalCount, ids: job.inscriptionIds });
-            if (job.status === 'completed' || job.status === 'failed') clearInterval(interval);
+            if (job.status === 'completed' || job.status === 'failed') {
+              clearInterval(estimateInterval);
+              if (job.status === 'completed') {
+                triggerFireworks(job.totalCount);
+              }
+              return true; // Done
+            }
           }
         } catch (e) {
           console.error('Job poll error', e);
         }
-      }, 3000);
+        return false; // Continue polling
+      };
+
+      // Poll immediately
+      const done = await pollJob();
+      if (!done) {
+        // Start polling every 1.5 seconds for more responsive updates
+        const interval = setInterval(async () => {
+          const isDone = await pollJob();
+          if (isDone) {
+            clearInterval(interval);
+            clearInterval(estimateInterval);
+          }
+        }, 1500);
+      }
     } catch (err) {
       console.error('Batch mint error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to batch mint');
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      setError(cleanErrorMessage(errorMsg));
     } finally { setLoading(false); }
+  };
+
+  const triggerFireworks = (count: number) => {
+    console.log('🎆 Triggering fireworks! Count:', count);
+
+    const canvas = document.createElement('canvas');
+    canvas.style.position = 'fixed';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
+    canvas.style.width = '100vw';
+    canvas.style.height = '100vh';
+    canvas.style.pointerEvents = 'none';
+    canvas.style.zIndex = '50';
+    canvas.style.background = 'transparent';
+    document.body.appendChild(canvas);
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      console.error('Failed to get canvas context');
+      return;
+    }
+
+    const particles: Array<{ x: number; y: number; vx: number; vy: number; life: number }> = [];
+    const burstCount = Math.min(count * 2, 10); // 2 bursts per batch, max 10
+    let burstsCreated = 0;
+
+    for (let i = 0; i < burstCount; i++) {
+      setTimeout(() => {
+        const x = Math.random() * canvas.width;
+        const y = Math.random() * canvas.height * 0.6 + canvas.height * 0.1;
+
+        // Create 50 tiny particles per burst
+        for (let j = 0; j < 50; j++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = Math.random() * 5 + 2;
+          particles.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 2,
+            life: 1
+          });
+        }
+        burstsCreated++;
+      }, i * 250);
+    }
+
+    const animate = () => {
+      // Clear with fade
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.2; // gravity
+        p.life -= 0.012;
+
+        if (p.life <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+
+        // Draw 1px yellow pixel
+        ctx.fillStyle = `rgba(255, 215, 0, ${p.life})`;
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
+      }
+
+      if (particles.length > 0 || burstsCreated < burstCount) {
+        requestAnimationFrame(animate);
+      } else {
+        console.log('Fireworks complete!');
+        document.body.removeChild(canvas);
+      }
+    };
+
+    animate();
   };
 
   const nameCost = calculateTotalCost(PLATFORM_FEES.NAME_REGISTRATION, 0);
@@ -674,6 +857,12 @@ function InscribePageContent() {
 
   return (
     <main className="min-h-screen h-screen bg-black text-gold-300 lg:pt-20 pb-4 overflow-hidden">
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}} />
       {/* Mobile Tab Bar - Integrated with header */}
       <div className="fixed top-16 left-0 right-0 z-40 lg:hidden bg-black/95 backdrop-blur-xl border-b border-gold-500/20">
         <div className="flex gap-1 px-2 py-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
@@ -1510,18 +1699,18 @@ function InscribePageContent() {
                 {zrcOp !== 'deploy' && (
                   <div>
                     <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Amount</label>
-                    <input type="number" value={amount} onChange={(e)=>setAmount(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
+                    <input type="number" value={amount} onChange={(e)=>setAmount(e.target.value)} onWheel={(e)=>e.currentTarget.blur()} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
                   </div>
                 )}
                 {zrcOp === 'deploy' && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Max Supply</label>
-                      <input type="number" value={maxSupply} onChange={(e)=>setMaxSupply(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="21000000" disabled={loading} />
+                      <input type="number" value={maxSupply} onChange={(e)=>setMaxSupply(e.target.value)} onWheel={(e)=>e.currentTarget.blur()} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="21000000" disabled={loading} />
                     </div>
                     <div>
                       <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Mint Limit</label>
-                      <input type="number" value={mintLimit} onChange={(e)=>setMintLimit(e.target.value)} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
+                      <input type="number" value={mintLimit} onChange={(e)=>setMintLimit(e.target.value)} onWheel={(e)=>e.currentTarget.blur()} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
                     </div>
                   </div>
                 )}
@@ -1621,6 +1810,7 @@ function InscribePageContent() {
                           max={10}
                           value={batchCount}
                           onChange={e=>setBatchCount(Math.max(1, Math.min(10, parseInt(e.target.value||'1'))))}
+                          onWheel={(e) => e.currentTarget.blur()}
                           className="w-full h-full bg-transparent text-4xl font-bold text-gold-300 text-center outline-none tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
@@ -1657,34 +1847,121 @@ function InscribePageContent() {
                   {/* Holographic Button */}
                   <button
                     onClick={handleBatchMint}
-                    disabled={loading || !isConnected || !tick.trim() || !amount.trim()}
+                    disabled={(loading && !batchJobId) || !isConnected || !tick.trim() || !amount.trim() || (batchJobId && batchStatus?.status === 'running')}
                     className="relative w-full px-6 py-4 bg-gradient-to-r from-gold-500 via-yellow-400 to-gold-500 text-black font-bold text-lg rounded transition-all duration-300 shadow-lg shadow-gold-500/30 hover:shadow-2xl hover:shadow-gold-500/60 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-lg border-2 border-gold-400/50 overflow-hidden before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-white/30 before:to-transparent before:-translate-x-full hover:before:translate-x-full before:transition-transform before:duration-700"
                   >
-                    <span className="relative z-10">{loading ? (
+                    <span className="relative z-10">{loading && !batchJobId ? (
                       <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                    ) : 'Start Batch Mint'}</span>
+                    ) : batchJobId ? 'Batch Running...' : 'Start Batch Mint'}</span>
                   </button>
 
                   {batchJobId && (
-                    <div className="text-xs text-gold-400/80 text-center">Job ID: <span className="font-mono break-all">{batchJobId}</span></div>
-                  )}
-                  {batchStatus && (
-                    <div className="space-y-3 bg-black/40 rounded p-4 border border-gold-500/20">
-                      <div className="flex items-center justify-between text-sm text-gold-300 font-semibold">
-                        <span>Status: {batchStatus.status}</span>
-                        <span>{batchStatus.completed}/{batchStatus.total}</span>
+                    <div className="mt-4 space-y-4">
+                      {/* Job ID Display */}
+                      <div className="bg-black/60 border border-gold-500/30 rounded-lg p-4">
+                        <div className="text-xs text-gold-400/60 mb-1">Batch Job ID</div>
+                        <div className="font-mono text-xs text-gold-300 break-all">{batchJobId}</div>
                       </div>
-                      <div className="w-full h-3 bg-black/60 border border-gold-500/30 rounded-full overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-gold-500 to-yellow-400 rounded-full transition-all duration-300" style={{ width: `${Math.min(100, (batchStatus.completed / Math.max(1, batchStatus.total)) * 100)}%` }} />
-                      </div>
-                      <div className="space-y-1.5 text-xs text-gold-300 max-h-40 overflow-auto">
-                        {batchStatus.ids.map((id, idx)=>(
-                          <div key={idx} className="flex items-center gap-2 hover:bg-gold-500/10 rounded px-2 py-1"><span className="opacity-70 font-mono">{idx+1}.</span> <a className="underline flex-1 truncate" href={`https://zerdinals.com/zerdinals/${id}`} target="_blank" rel="noreferrer">{id}</a></div>
-                        ))}
-                      </div>
+
+                      {/* Status Display */}
+                      {batchStatus && (
+                        <div className={`bg-gradient-to-br from-gold-500/20 via-black/40 to-gold-500/10 border-2 border-gold-500/40 rounded-lg p-5 space-y-4 ${batchStatus.status === 'running' ? 'animate-pulse' : ''}`}>
+                          {/* Header with status */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              {batchStatus.status === 'running' && (
+                                <svg className="animate-spin h-5 w-5 text-gold-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                              )}
+                              {batchStatus.status === 'completed' && (
+                                <svg className="h-5 w-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              )}
+                              {batchStatus.status === 'failed' && (
+                                <svg className="h-5 w-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              )}
+                              <span className="text-gold-300 font-bold text-lg">
+                                {batchStatus.status === 'pending' && 'Initializing...'}
+                                {batchStatus.status === 'running' && `Minting ${tick.toUpperCase()}...`}
+                                {batchStatus.status === 'completed' && 'Batch Complete!'}
+                                {batchStatus.status === 'failed' && 'Batch Failed'}
+                              </span>
+                            </div>
+                            <div className="text-gold-300 font-bold text-lg">
+                              {batchStatus.completed}/{batchStatus.total}
+                            </div>
+                          </div>
+
+                          {/* Progress bar */}
+                          <div className="space-y-3">
+                            <div className="relative">
+                              <div className="w-full h-8 bg-black/80 border-2 border-gold-500/40 rounded-full overflow-hidden shadow-inner">
+                                <div
+                                  className="h-full bg-gradient-to-r from-gold-500 via-yellow-400 to-gold-500 rounded-full transition-all duration-700 ease-out shadow-lg shadow-gold-500/50"
+                                  style={{
+                                    width: `${Math.min(100, batchStatus.completed > 0
+                                      ? (batchStatus.completed / Math.max(1, batchStatus.total)) * 100
+                                      : (batchStatus.estimatedProgress || 0)
+                                    )}%`
+                                  }}
+                                />
+                              </div>
+                              <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                                {Math.round(batchStatus.completed > 0
+                                  ? (batchStatus.completed / Math.max(1, batchStatus.total)) * 100
+                                  : (batchStatus.estimatedProgress || 0)
+                                )}%
+                              </div>
+                            </div>
+                            <div className="text-center text-sm text-gold-400/90 font-medium">
+                              {batchStatus.status === 'running' && batchStatus.completed < batchStatus.total && (
+                                <div className="flex items-center justify-center gap-2">
+                                  <span className="inline-block w-2 h-2 bg-gold-400 rounded-full animate-ping"></span>
+                                  <span>Processing inscription {batchStatus.completed + 1} of {batchStatus.total}</span>
+                                </div>
+                              )}
+                              {batchStatus.status === 'completed' && (
+                                `All ${batchStatus.total} inscriptions successfully minted!`
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Inscription list */}
+                          {batchStatus.ids.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="text-xs text-gold-400/70 font-semibold">
+                                Inscriptions Created: {batchStatus.ids.length}/{batchStatus.total}
+                              </div>
+                              <div className="space-y-1.5 text-xs max-h-48 overflow-auto bg-black/40 rounded p-3 border border-gold-500/20">
+                                {batchStatus.ids.map((id, idx)=>(
+                                  <div key={id} className="flex items-center gap-2 hover:bg-gold-500/10 rounded px-2 py-1.5 transition-all duration-300 group animate-[fadeIn_0.5s_ease-out_forwards]" style={{ animationDelay: `${idx * 50}ms`, opacity: 0 }}>
+                                    <span className="opacity-70 font-mono text-gold-400/60 min-w-[24px]">{idx+1}.</span>
+                                    <a
+                                      className="flex-1 truncate text-gold-300 hover:text-gold-200 font-mono group-hover:underline"
+                                      href={`https://zerdinals.com/zerdinals/${id}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      {id}
+                                    </a>
+                                    <svg className="w-3.5 h-3.5 text-gold-400/40 group-hover:text-gold-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1713,12 +1990,12 @@ function InscribePageContent() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-gold-200/80 text-xs mb-1">Split Count</label>
-                      <input type="number" min="2" max="10" value={splitCount} onChange={e=>setSplitCount(parseInt(e.target.value||'2'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                      <input type="number" min="2" max="10" value={splitCount} onChange={e=>setSplitCount(parseInt(e.target.value||'2'))} onWheel={(e)=>e.currentTarget.blur()} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
                       <p className="text-gold-400/60 text-xs mt-1">2–10 outputs</p>
                     </div>
                     <div>
                       <label className="block text-gold-200/80 text-xs mb-1">Target Amount (zats)</label>
-                      <input type="number" min="10000" value={targetAmount} onChange={e=>setTargetAmount(parseInt(e.target.value||'70000'))} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                      <input type="number" min="10000" value={targetAmount} onChange={e=>setTargetAmount(parseInt(e.target.value||'70000'))} onWheel={(e)=>e.currentTarget.blur()} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
                       <p className="text-gold-400/60 text-xs mt-1">{(targetAmount / 100000000).toFixed(8)} ZEC each</p>
                       {targetAmount < 60000 && (
                         <p className="text-red-400/70 text-xs mt-1">Recommended ≥ 60,000 zats to fund future inscriptions.</p>
@@ -1729,7 +2006,7 @@ function InscribePageContent() {
                       <input type="number" min={MIN_SPLIT_FEE} value={splitFee} onChange={e=>{
                         const v = parseInt(e.target.value || String(MIN_SPLIT_FEE));
                         setSplitFee(Number.isFinite(v) ? Math.max(v, MIN_SPLIT_FEE) : MIN_SPLIT_FEE);
-                      }} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
+                      }} onWheel={(e)=>e.currentTarget.blur()} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 text-gold-300" />
                       <p className="text-gold-400/60 text-xs mt-1">{(Math.max(splitFee, MIN_SPLIT_FEE) / 100000000).toFixed(8)} ZEC</p>
                     </div>
                   </div>
@@ -1949,7 +2226,7 @@ function InscribePageContent() {
                   </svg>
                 </button>
                 <h3 className="text-red-300 font-bold mb-3 text-base">⚠ Transaction Error</h3>
-                {error.includes('mempool-conflict') ? (
+                {cleanErrorMessage(error).includes('mempool-conflict') ? (
                   <p className="text-red-400 text-sm">
                     A previous transaction is still pending. Wait a few minutes and try again, or use the{' '}
                     <button
@@ -1980,7 +2257,7 @@ function InscribePageContent() {
                     Failed to prepare inscription transaction. This may be due to insufficient balance or unavailable UTXOs. Please check your wallet balance and try again.
                   </p>
                 ) : (
-                  <p className="text-red-400 text-sm">{error}</p>
+                  <p className="text-red-400 text-sm">{cleanErrorMessage(error)}</p>
                 )}
               </div>
             )}
