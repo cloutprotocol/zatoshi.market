@@ -239,7 +239,8 @@ export default defineSchema({
   })
     .index("by_collection_token", ["collectionSlug", "tokenId"])
     .index("by_collection_status", ["collectionSlug", "status"])
-    .index("by_collection_address", ["collectionSlug", "address"]),
+    .index("by_collection_address", ["collectionSlug", "address"])
+    .index("by_inscription", ["inscriptionId"]),
 
   collectionClaimEvents: defineTable({
     collectionSlug: v.string(),

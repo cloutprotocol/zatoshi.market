@@ -117,6 +117,7 @@ export const runNextMint = action({
       let zrc20Tick: string | undefined;
       let zrc20Op: string | undefined;
       let zrc20Amount: string | undefined;
+      let inscriptionType = p.type ?? (contentType.startsWith("application/json") ? "zrc20" : "text");
       if (contentType.startsWith('application/json')) {
         try {
           const parsed = JSON.parse(contentStr);
@@ -124,6 +125,9 @@ export const runNextMint = action({
             zrc20Tick = parsed.tick?.toString()?.toUpperCase();
             zrc20Op = parsed.op?.toString();
             zrc20Amount = parsed.amt?.toString();
+            inscriptionType = "zrc20";
+          } else if (parsed?.p?.toLowerCase?.() === 'zrc-721') {
+            inscriptionType = "zrc-721";
           }
         } catch { }
       }
@@ -133,7 +137,7 @@ export const runNextMint = action({
         contentType,
         contentPreview: preview,
         contentSize: new TextEncoder().encode(contentStr).length,
-        type: p.type ?? (contentType.startsWith("application/json") ? "zrc20" : "text"),
+        type: inscriptionType,
         platformFeeZat: platformFeeZats,
         treasuryAddress: PLATFORM_TREASURY,
         zrc20Tick,
@@ -249,9 +253,16 @@ export const createMintJobAndRun = action({
       fee: args.fee,
       waitMs: args.waitMs,
     };
+    // Infer inscription type for downstream history
+    let inscriptionType = params.contentType.startsWith("application/json") ? "zrc20" : "text";
+    try {
+      const parsed = JSON.parse(params.contentJson);
+      if (parsed?.p?.toLowerCase?.() === "zrc-721") inscriptionType = "zrc-721";
+    } catch { /* non-JSON payload, keep default */ }
+
     const jobId = await ctx.runMutation(internal.jobs.createJob, {
       type: "batch-mint",
-      params,
+      params: { ...params, type: inscriptionType },
       totalCount: 1,
     });
     await ctx.runAction(api.jobsActions.runNextMint, { jobId });

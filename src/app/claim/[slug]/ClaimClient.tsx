@@ -1,16 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
 import { BadgePill } from '@/components/BadgePill';
 import type { CollectionConfig } from '@/config/collections';
 import { getConvexClient } from '@/lib/convexClient';
 import { api } from '../../../../convex/_generated/api';
-import bs58check from 'bs58check';
-import * as secp from '@noble/secp256k1';
-import { safeMintInscription } from '@/utils/inscribe';
 import { ConfirmTransaction } from '@/components/ConfirmTransaction';
 import { PLATFORM_FEES, calculateTotalCost } from '@/config/fees';
+import { buildImageUrls, buildTokenName, fetchCollectionMetadata } from '@/lib/collectionAssets';
 
 type Props = {
   collection: CollectionConfig;
@@ -22,6 +20,20 @@ type Allocation = {
   isVip: boolean;
 };
 
+type MintResult = {
+  tokenId: number;
+  status: 'minted' | 'failed';
+  inscriptionId?: string;
+  error?: string;
+};
+
+type ClaimedToken = {
+  tokenId: number;
+  inscriptionId?: string;
+  imageUrls: string[];
+  name: string;
+};
+
 export function ClaimClient({ collection }: Props) {
   const { wallet, badges, mounted } = useWallet();
   const [loadingAlloc, setLoadingAlloc] = useState(false);
@@ -29,7 +41,6 @@ export function ClaimClient({ collection }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [claiming, setClaiming] = useState(false);
   const [claimCount, setClaimCount] = useState(1);
-  const [lastMinted, setLastMinted] = useState<{ tokenId: number; inscriptionId: string; txid: string }[]>([]);
   const [claimStats, setClaimStats] = useState<{ mintedCount: number; mintedForAddress: { count: number } } | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [pendingTokens, setPendingTokens] = useState<number[]>([]);
@@ -42,7 +53,9 @@ export function ClaimClient({ collection }: Props) {
   const [selectedFeeTier, setSelectedFeeTier] = useState<typeof feeTiers[number]>(feeTiers[1]);
   const [minting, setMinting] = useState(false);
   const [batchId, setBatchId] = useState<string | null>(null);
-  const [batchResults, setBatchResults] = useState<{ tokenId: number; status: 'minted' | 'failed'; inscriptionId?: string; txid?: string; error?: string }[]>([]);
+  const [mintResults, setMintResults] = useState<MintResult[]>([]);
+  const [claimedTokens, setClaimedTokens] = useState<ClaimedToken[]>([]);
+  const [loadingClaims, setLoadingClaims] = useState(false);
 
   const vipBadgePresent = useMemo(
     () => badges.some((b) => b.badgeSlug === 'vip'),
@@ -98,7 +111,46 @@ export function ClaimClient({ collection }: Props) {
       setClaimStats(res as any);
     };
     loadStats();
-  }, [collection.slug, wallet?.address, lastMinted.length, claiming]);
+  }, [collection.slug, wallet?.address, mintResults.length, claiming]);
+
+  const refreshClaimedTokens = useCallback(async () => {
+    const convex = getConvexClient();
+    if (!convex || !wallet?.address) {
+      setClaimedTokens([]);
+      setLoadingClaims(false);
+      return;
+    }
+    setLoadingClaims(true);
+    try {
+      const res = await convex.query(api.collectionClaims.listMinted, {
+        collectionSlug: collection.slug,
+        address: wallet.address,
+        limit: 24,
+      });
+      const minted = (res as any[]) ?? [];
+      const enriched = await Promise.all(
+        minted.map(async (mint: any) => {
+          const metadata = await fetchCollectionMetadata(collection, mint.tokenId);
+          const imageUrls = buildImageUrls(collection, mint.tokenId, metadata);
+          return {
+            tokenId: mint.tokenId,
+            inscriptionId: mint.inscriptionId,
+            imageUrls,
+            name: buildTokenName(collection, mint.tokenId, metadata),
+          } as ClaimedToken;
+        })
+      );
+      setClaimedTokens(enriched);
+    } catch (e) {
+      console.error('Failed to load claimed tokens', e);
+    } finally {
+      setLoadingClaims(false);
+    }
+  }, [collection.imageCid, collection.metaCid, collection.name, collection.slug, wallet?.address]);
+
+  useEffect(() => {
+    refreshClaimedTokens();
+  }, [refreshClaimedTokens]);
 
   const remainingAllowlist = useMemo(() => {
     if (!allocation) return 0;
@@ -128,6 +180,7 @@ export function ClaimClient({ collection }: Props) {
     }
 
     setError(null);
+    setMintResults([]);
     setClaiming(true);
     try {
       const reserve = await convex.mutation(api.collectionClaims.reserveTokens, {
@@ -175,6 +228,7 @@ export function ClaimClient({ collection }: Props) {
     );
     setPendingTokens([]);
     setPendingPayloads([]);
+    setBatchId(null);
   };
 
   const confirmAndMint = async () => {
@@ -195,17 +249,14 @@ export function ClaimClient({ collection }: Props) {
 
     const newBatchId = `batch-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     setBatchId(newBatchId);
-    setBatchResults([]);
+    setMintResults([]);
     setError(null);
     setShowConfirm(false);
     setClaiming(true);
     setMinting(true);
     try {
-      const wifPayload = bs58check.decode(wallet.privateKey);
-      const priv = wifPayload.slice(1, wifPayload.length === 34 ? 33 : undefined);
       const wif = wallet.privateKey;
 
-      const mintedResults: { tokenId: number; inscriptionId: string; txid?: string }[] = [];
       for (let idx = 0; idx < pendingTokens.length; idx++) {
         const tokenId = pendingTokens[idx];
         const contentJson = pendingPayloads[idx];
@@ -225,8 +276,7 @@ export function ClaimClient({ collection }: Props) {
           const inscriptionId = job?.inscriptionIds?.[0];
           if (!inscriptionId) throw new Error('Mint job completed without inscription id');
 
-          mintedResults.push({ tokenId, inscriptionId, txid: undefined });
-          setBatchResults((prev) => [...prev, { tokenId, status: 'minted', inscriptionId }]);
+          setMintResults((prev) => [...prev, { tokenId, status: 'minted', inscriptionId }]);
           await convex.mutation(api.collectionClaims.finalizeToken, {
             collectionSlug: collection.slug,
             tokenId,
@@ -238,7 +288,7 @@ export function ClaimClient({ collection }: Props) {
           } as any);
         } catch (err: any) {
           const msg = err?.message || String(err);
-          setBatchResults((prev) => [...prev, { tokenId, status: 'failed', error: msg }]);
+          setMintResults((prev) => [...prev, { tokenId, status: 'failed', error: msg }]);
           await convex.mutation(api.collectionClaims.finalizeToken, {
             collectionSlug: collection.slug,
             tokenId,
@@ -252,15 +302,28 @@ export function ClaimClient({ collection }: Props) {
           continue;
         }
       }
-      setLastMinted((prev) => [...mintedResults, ...prev]);
+      await refreshClaimedTokens();
       setPendingTokens([]);
       setPendingPayloads([]);
+      setBatchId(null);
     } catch (e: any) {
       console.error('Mint failed:', e);
       setError(e?.message || String(e));
     } finally {
       setClaiming(false);
       setMinting(false);
+    }
+  };
+
+  const handleImageError = (img: HTMLImageElement, urls: string[]) => {
+    const currentIndex = Number(img.dataset.index || '0');
+    const nextIndex = currentIndex + 1;
+    if (nextIndex < urls.length) {
+      img.dataset.index = String(nextIndex);
+      img.src = urls[nextIndex];
+    } else {
+      img.onerror = null;
+      img.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
     }
   };
 
@@ -361,39 +424,24 @@ export function ClaimClient({ collection }: Props) {
             {error && <div className="text-sm text-red-300">{error}</div>}
           </div>
 
-          {lastMinted.length > 0 && (
-            <div className="mt-4">
-              <div className="text-sm text-gold-200/70 mb-2">Recent mints</div>
-              <div className="grid gap-3">
-                {lastMinted.map((m) => (
-                  <div key={m.inscriptionId} className="p-3 rounded border border-gold-500/20 bg-black/40">
-                    <div className="text-gold-100 font-semibold">Token #{m.tokenId}</div>
-                    <div className="text-xs text-gold-200/70 break-all">Inscription: {m.inscriptionId}</div>
-                    <a
-                      href={`/inscription/${m.inscriptionId}`}
-                      className="text-xs text-gold-300 underline"
-                    >
-                      View inscription
-                    </a>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {batchResults.length > 0 && (
+          {mintResults.length > 0 && (
             <div className="mt-6">
-              <div className="text-sm text-gold-200/70 mb-2">Batch results</div>
+              <div className="text-sm text-gold-200/70 mb-2">Mint results</div>
               <div className="grid gap-2">
-                {batchResults.map((r) => (
-                  <div key={`${batchId || 'batch'}-${r.tokenId}`} className="p-3 rounded border border-gold-500/20 bg-black/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                {mintResults.map((r, idx) => (
+                  <div key={`mint-${r.tokenId}-${idx}`} className="p-3 rounded border border-gold-500/20 bg-black/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div className="text-gold-100 font-semibold">Mint ID #{r.tokenId}</div>
                     <div className="text-xs text-gold-200/70">
                       {r.status === 'minted' ? (
                         <>
                           Minted{' '}
                           {r.inscriptionId ? (
-                            <a href={`/inscription/${r.inscriptionId}`} className="underline text-gold-300">
+                            <a
+                              href={`/inscription/${r.inscriptionId}`}
+                              className="underline text-gold-300"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
                               {r.inscriptionId}
                             </a>
                           ) : null}
@@ -405,6 +453,73 @@ export function ClaimClient({ collection }: Props) {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+        </div>
+
+        <div className="glass-card p-6 border border-gold-500/20 rounded-lg mt-6">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-xl font-semibold">My claimed ZGODS</h3>
+              <p className="text-sm text-gold-200/70">Pulled from Convex and rendered with collection art.</p>
+            </div>
+            {claimStats?.mintedForAddress?.count !== undefined && (
+              <span className="text-sm text-gold-200/80 border border-gold-500/20 rounded-full px-3 py-1">
+                Claimed {claimStats.mintedForAddress.count}
+              </span>
+            )}
+          </div>
+
+          {loadingClaims ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <div
+                  key={`skeleton-${idx}`}
+                  className="p-3 rounded border border-gold-500/10 bg-black/40 animate-pulse h-full"
+                >
+                  <div className="aspect-square rounded bg-gold-500/10 mb-3" />
+                  <div className="h-4 bg-gold-500/10 rounded w-2/3 mb-2" />
+                  <div className="h-3 bg-gold-500/10 rounded w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : !wallet?.address ? (
+            <div className="text-sm text-gold-200/70">Connect your wallet to see claimed tokens.</div>
+          ) : claimedTokens.length === 0 ? (
+            <div className="text-sm text-gold-200/70">No claims yet. Mint to reveal your artwork.</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {claimedTokens.map((token) => (
+                <div key={token.tokenId} className="p-3 rounded border border-gold-500/20 bg-black/40 flex flex-col gap-3">
+                  <div className="aspect-square overflow-hidden rounded border border-gold-500/10 bg-black/60 flex items-center justify-center">
+                    {token.imageUrls.length ? (
+                      <img
+                        src={token.imageUrls[0]}
+                        data-index={0}
+                        onError={(e) => handleImageError(e.currentTarget, token.imageUrls)}
+                        alt={token.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="text-xs text-gold-200/60">Image unavailable</div>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="font-semibold text-gold-100">{token.name}</div>
+                    <div className="text-xs text-gold-200/70">#{token.tokenId.toLocaleString()}</div>
+                    {token.inscriptionId && (
+                      <a
+                        href={`/inscription/${token.inscriptionId}`}
+                        className="text-xs text-gold-300 underline"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View inscription
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

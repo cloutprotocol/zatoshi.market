@@ -30,6 +30,31 @@ export const getClaimStats = query({
   },
 });
 
+export const listMinted = query({
+  args: {
+    collectionSlug: v.string(),
+    address: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const slug = args.collectionSlug.toLowerCase();
+    const limit = Math.max(1, Math.min(args.limit ?? 25, 200));
+
+    // Pull minted entries for this collection and then filter by address (case-insensitive)
+    const minted = await ctx.db
+      .query("collectionClaims")
+      .withIndex("by_collection_status", (q) => q.eq("collectionSlug", slug).eq("status", "minted"))
+      .order("desc")
+      .collect();
+
+    const filtered = args.address
+      ? minted.filter((m) => m.address.toLowerCase() === args.address!.toLowerCase())
+      : minted;
+
+    return filtered.slice(0, limit);
+  },
+});
+
 export const reserveTokens = mutation({
   args: {
     collectionSlug: v.string(),
@@ -156,5 +181,17 @@ export const finalizeToken = mutation({
       inscriptionId: args.inscriptionId,
       createdAt: Date.now(),
     });
+  },
+});
+
+export const getByInscriptionId = query({
+  args: {
+    inscriptionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("collectionClaims")
+      .withIndex("by_inscription", (q) => q.eq("inscriptionId", args.inscriptionId))
+      .first();
   },
 });
