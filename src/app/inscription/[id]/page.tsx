@@ -56,7 +56,7 @@ export default function InscriptionPage() {
   const parseInscription = useAction(api.inscriptionParser.parseInscriptionFromChain);
 
   useEffect(() => {
-    const MAX_RETRIES = 12;
+    const MAX_RETRIES = 20;
     let cancelled = false;
 
     async function fetchInscription(attempt = 0) {
@@ -85,7 +85,7 @@ export default function InscriptionPage() {
             setLoading(false);
             setRetryCount(attempt + 1);
             setWaitingMessage('Inscription seen in mempool. Waiting for confirmation...');
-            setTimeout(() => fetchInscription(attempt + 1), 5000);
+            setTimeout(() => fetchInscription(attempt + 1), 60000);
             return;
           }
           throw new Error(`Failed to fetch inscription: ${metaResponse.status}`);
@@ -155,7 +155,7 @@ export default function InscriptionPage() {
                 setLoading(false);
                 setRetryCount(attempt + 1);
                 setWaitingMessage('Inscription detected but content is still indexing. This can take a few minutes.');
-                setTimeout(() => fetchInscription(attempt + 1), 5000);
+                setTimeout(() => fetchInscription(attempt + 1), 60000);
                 return;
               }
             } catch (imgErr) {
@@ -166,7 +166,7 @@ export default function InscriptionPage() {
             setWaitingConfirm(true);
             setLoading(false);
             setRetryCount(attempt + 1);
-            setTimeout(() => fetchInscription(attempt + 1), 5000);
+            setTimeout(() => fetchInscription(attempt + 1), 60000);
             return;
           }
         } else {
@@ -177,12 +177,16 @@ export default function InscriptionPage() {
             // If the indexer returns a 404 payload body, treat as pending and retry
             try {
               const parsedMaybeError = JSON.parse(contentText);
-              if (parsedMaybeError?.code === 404 && attempt < MAX_RETRIES) {
-                setWaitingConfirm(true);
-                setLoading(false);
-                setRetryCount(attempt + 1);
-                setWaitingMessage('Inscription detected but not fully indexed yet. Waiting for confirmation...');
-                setTimeout(() => fetchInscription(attempt + 1), 5000);
+              if (parsedMaybeError?.code === 404) {
+                if (attempt < MAX_RETRIES) {
+                  setWaitingConfirm(true);
+                  setLoading(false);
+                  setRetryCount(attempt + 1);
+                  setWaitingMessage('Inscription detected but not fully indexed yet. Waiting for confirmation...');
+                  setTimeout(() => fetchInscription(attempt + 1), 60000);
+                  return;
+                }
+                setError('Inscription not yet available. Please try again later.');
                 return;
               }
             } catch {
@@ -194,7 +198,7 @@ export default function InscriptionPage() {
               setLoading(false);
               setRetryCount(attempt + 1);
               setWaitingMessage('Inscription detected but content is still indexing. This can take a few minutes.');
-              setTimeout(() => fetchInscription(attempt + 1), 5000);
+              setTimeout(() => fetchInscription(attempt + 1), 60000);
               return;
             }
 
@@ -216,7 +220,7 @@ export default function InscriptionPage() {
             setWaitingConfirm(true);
             setLoading(false);
             setRetryCount(attempt + 1);
-            setTimeout(() => fetchInscription(attempt + 1), 5000);
+            setTimeout(() => fetchInscription(attempt + 1), 60000);
             return;
           }
         }

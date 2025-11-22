@@ -46,6 +46,7 @@ export default function RootLayout({
                        ,,,      .,,       :            ,                     ,;.
         */}
         <meta name="mobile-web-app-capable" content="yes" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link href="https://fonts.cdnfonts.com/css/vcr-osd-mono" rel="stylesheet" />
       </head>
       <body style={{ fontFamily: "'VCR OSD Mono', monospace" }}>
