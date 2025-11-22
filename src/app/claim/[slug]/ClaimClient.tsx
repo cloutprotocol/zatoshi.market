@@ -58,6 +58,8 @@ export function ClaimClient({ collection }: Props) {
   const [loadingClaims, setLoadingClaims] = useState(false);
   const [claimedImageLoaded, setClaimedImageLoaded] = useState<Record<string, boolean>>({});
   const [claimedImageError, setClaimedImageError] = useState<Record<string, boolean>>({});
+  const [showCodeForToken, setShowCodeForToken] = useState<Record<number, boolean>>({});
+  const [copiedInscription, setCopiedInscription] = useState<string | null>(null);
 
   const vipBadgePresent = useMemo(
     () => badges.some((b) => b.badgeSlug === 'vip'),
@@ -127,7 +129,7 @@ export function ClaimClient({ collection }: Props) {
       const res = await convex.query(api.collectionClaims.listMinted, {
         collectionSlug: collection.slug,
         address: wallet.address,
-        limit: 24,
+        limit: 50,
       });
       const minted = (res as any[]) ?? [];
       const enriched = await Promise.all(
@@ -472,15 +474,15 @@ export function ClaimClient({ collection }: Props) {
           </div>
 
           {loadingClaims ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Array.from({ length: 6 }).map((_, idx) => (
+            <div className="grid grid-cols-5 lg:grid-cols-10 gap-4">
+              {Array.from({ length: 10 }).map((_, idx) => (
                 <div
                   key={`skeleton-${idx}`}
                   className="p-3 rounded border border-gold-500/10 bg-black/40 animate-pulse h-full"
                 >
                   <div className="aspect-square rounded bg-gold-500/10 mb-3" />
-                  <div className="h-4 bg-gold-500/10 rounded w-2/3 mb-2" />
-                  <div className="h-3 bg-gold-500/10 rounded w-1/2" />
+                  <div className="h-3 bg-gold-500/10 rounded w-2/3 mb-2" />
+                  <div className="h-2 bg-gold-500/10 rounded w-1/2" />
                 </div>
               ))}
             </div>
@@ -489,39 +491,69 @@ export function ClaimClient({ collection }: Props) {
           ) : claimedTokens.length === 0 ? (
             <div className="text-sm text-gold-200/70">No claims yet. Mint to reveal your artwork.</div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {claimedTokens.map((token) => (
-                <div key={token.tokenId} className="p-3 rounded border border-gold-500/20 bg-black/40 flex flex-col gap-3">
-                  <div className="relative aspect-square overflow-hidden rounded border border-gold-500/10 bg-black/60 flex items-center justify-center">
-                    {token.imageUrls.length ? (
-                      <>
-                        {!claimedImageLoaded[String(token.tokenId)] && !claimedImageError[String(token.tokenId)] && (
-                          <div className="absolute inset-0 bg-black/30 skeleton" />
-                        )}
-                        <img
-                          src={token.imageUrls[0]}
-                          data-index={0}
-                          onLoad={() => setClaimedImageLoaded((prev) => ({ ...prev, [String(token.tokenId)]: true }))}
-                          onError={(e) => handleImageError(e.currentTarget, token.imageUrls, String(token.tokenId))}
-                          alt={token.name}
-                          className={`w-full h-full object-cover transition-opacity duration-300 ${claimedImageLoaded[String(token.tokenId)] ? 'opacity-100' : 'opacity-0'}`}
-                        />
-                      </>
-                    ) : (
-                      <div className="text-xs text-gold-200/60">Image unavailable</div>
-                    )}
+            <div className="grid grid-cols-5 lg:grid-cols-10 gap-4">
+              {claimedTokens.map((token) => {
+                const showingCode = showCodeForToken[token.tokenId];
+                const payload = JSON.stringify({
+                  p: 'zrc-721',
+                  op: 'mint',
+                  collection: collection.name.toUpperCase(),
+                  id: String(token.tokenId),
+                }, null, 2);
+
+                return (
+                  <div key={token.tokenId} className="p-3 rounded border border-gold-500/20 bg-black/40 flex flex-col gap-3">
+                    <div className="relative aspect-square overflow-hidden rounded border border-gold-500/10 bg-black/60 flex items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setShowCodeForToken((prev) => ({ ...prev, [token.tokenId]: !prev[token.tokenId] }))}
+                        className="absolute top-2 right-2 z-10 text-[10px] uppercase tracking-[0.1em] px-2 py-1 bg-black/70 border border-gold-500/40 text-gold-100 hover:border-gold-300 transition"
+                      >
+                        {showingCode ? 'View Art' : 'View Code'}
+                      </button>
+
+                      {showingCode ? (
+                        <pre className="absolute inset-0 m-0 p-2 text-[9px] leading-tight text-gold-100/80 bg-black/80 overflow-auto">
+                          {payload}
+                        </pre>
+                      ) : token.imageUrls.length ? (
+                        <>
+                          {!claimedImageLoaded[String(token.tokenId)] && !claimedImageError[String(token.tokenId)] && (
+                            <div className="absolute inset-0 bg-black/30 skeleton" />
+                          )}
+                          <img
+                            src={token.imageUrls[0]}
+                            data-index={0}
+                            onLoad={() => setClaimedImageLoaded((prev) => ({ ...prev, [String(token.tokenId)]: true }))}
+                            onError={(e) => handleImageError(e.currentTarget, token.imageUrls, String(token.tokenId))}
+                            alt={token.name}
+                            className={`w-full h-full object-cover transition-opacity duration-300 ${claimedImageLoaded[String(token.tokenId)] ? 'opacity-100' : 'opacity-0'}`}
+                          />
+                        </>
+                      ) : (
+                        <div className="text-xs text-gold-200/60">Image unavailable</div>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="font-semibold text-gold-100 text-xs">{token.name}</div>
+                      <div className="text-[10px] text-gold-200/70">#{token.tokenId.toLocaleString()}</div>
+                      {token.inscriptionId && (
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(token.inscriptionId);
+                            setCopiedInscription(token.inscriptionId);
+                            setTimeout(() => setCopiedInscription(null), 2000);
+                          }}
+                          className="text-[9px] text-gold-300/60 font-mono break-all hover:text-gold-300 transition-colors w-full text-left"
+                          title="Click to copy"
+                        >
+                          {copiedInscription === token.inscriptionId ? 'Copied!' : token.inscriptionId}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <div className="font-semibold text-gold-100">{token.name}</div>
-                    <div className="text-xs text-gold-200/70">#{token.tokenId.toLocaleString()}</div>
-                    {token.inscriptionId && (
-                      <div className="text-xs text-gold-300/60 font-mono break-all">
-                        {token.inscriptionId}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
