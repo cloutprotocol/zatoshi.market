@@ -410,7 +410,7 @@ export function ClaimClient({ collection }: Props) {
               Remaining allocation: <span className="font-semibold text-gold-100">{remainingAllowlist}</span>
             </div>
             <label className="flex items-center gap-3 text-sm">
-              <span>Quantity (max 5)</span>
+              <span>Batch Inscribe (max 5)</span>
               <input
                 type="number"
                 min={1}
@@ -468,7 +468,6 @@ export function ClaimClient({ collection }: Props) {
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
               <h3 className="text-xl font-semibold">My claimed ZGODS</h3>
-              <p className="text-sm text-gold-200/70">Pulled from Convex and rendered with collection art.</p>
             </div>
             {claimStats?.mintedForAddress?.count !== undefined && (
               <span className="text-xs sm:text-sm text-gold-200/80 border border-gold-500/20 rounded-full px-2 sm:px-3 py-1 whitespace-nowrap">
