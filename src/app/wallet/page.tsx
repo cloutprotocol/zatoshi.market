@@ -6,6 +6,8 @@ import { BadgePill } from '@/components/BadgePill';
 import { generateWallet, importFromMnemonic, importFromPrivateKey } from '@/lib/wallet';
 import { zcashRPC } from '@/services/zcash';
 import { sendZEC } from '@/services/transaction';
+import { getCollectionConfig } from '@/config/collections';
+import { buildImageUrls, buildTokenName, fetchCollectionMetadata } from '@/lib/collectionAssets';
 import QRCode from 'qrcode';
 
 export default function WalletPage() {
@@ -13,7 +15,7 @@ export default function WalletPage() {
   const [balance, setBalance] = useState({ confirmed: 0, unconfirmed: 0 });
   const [usdPrice, setUsdPrice] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'zrc20' | 'inscriptions'>('zrc20');
+  const [activeTab, setActiveTab] = useState<'zrc20' | 'inscriptions' | 'zrc721'>('zrc20');
   const [showMnemonic, setShowMnemonic] = useState(false);
   const [showReceive, setShowReceive] = useState(false);
   const [showSend, setShowSend] = useState(false);
@@ -23,6 +25,21 @@ export default function WalletPage() {
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [sendForm, setSendForm] = useState({ to: '', amount: '' });
   const [isSending, setIsSending] = useState(false);
+  const [inscriptions, setInscriptions] = useState<any[]>([]);
+  const [inscriptionContents, setInscriptionContents] = useState<Record<string, string>>({});
+  const [loadingInscriptions, setLoadingInscriptions] = useState(false);
+  const [zrc721Assets, setZrc721Assets] = useState<Record<string, {
+    collection: string;
+    tokenId: number;
+    name: string;
+    collectionName: string;
+    imageUrls: string[];
+  }>>({});
+  const [zrcImageLoaded, setZrcImageLoaded] = useState<Record<string, boolean>>({});
+  const [zrcImageError, setZrcImageError] = useState<Record<string, boolean>>({});
+  const [inscriptionImages, setInscriptionImages] = useState<Record<string, string>>({});
+  const [inscriptionImageLoaded, setInscriptionImageLoaded] = useState<Record<string, boolean>>({});
+  const [inscriptionImageError, setInscriptionImageError] = useState<Record<string, boolean>>({});
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasFetchedFresh, setHasFetchedFresh] = useState(false);
@@ -64,6 +81,122 @@ export default function WalletPage() {
       fetchPrice();
     }
   }, [wallet?.address, hasFetchedFresh, fetchBalance, fetchPrice]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchInscriptions = async () => {
+      if (!wallet?.address) return;
+      setLoadingInscriptions(true);
+      try {
+        const data = await zcashRPC.getInscriptions(wallet.address, true);
+        if (cancelled) return;
+        const list = data.inscriptions || [];
+        setInscriptions(list);
+
+        const contents: Record<string, string> = {};
+        const imageMap: Record<string, string> = {};
+        await Promise.all(
+          list.slice(0, 30).map(async (insc: any) => {
+            try {
+              if ((insc.contentType || insc.content_type || '').startsWith('image/')) {
+                const response = await fetch(`/api/zcash/inscription-content/${insc.id}`);
+                if (response.ok) {
+                  const blob = await response.blob();
+                  imageMap[insc.id] = URL.createObjectURL(blob);
+                }
+              } else {
+                const response = await fetch(`/api/zcash/inscription-content/${insc.id}`);
+                if (response.ok) {
+                  const text = await response.text();
+                  contents[insc.id] = text;
+                }
+              }
+            } catch (err) {
+              console.error(`Failed to fetch content for ${insc.id}:`, err);
+            }
+          })
+        );
+        if (cancelled) return;
+        setInscriptionContents(contents);
+        setInscriptionImages(imageMap);
+        setZrcImageLoaded({});
+        setZrcImageError({});
+        setInscriptionImageLoaded({});
+        setInscriptionImageError({});
+      } catch (err) {
+        console.error('Failed to fetch inscriptions:', err);
+        if (!cancelled) {
+          setInscriptions([]);
+          setInscriptionContents({});
+        }
+      } finally {
+        if (!cancelled) setLoadingInscriptions(false);
+      }
+    };
+
+    fetchInscriptions();
+    return () => {
+      cancelled = true;
+    };
+  }, [wallet?.address]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadZrc721Assets = async () => {
+      const entries = Object.entries(inscriptionContents);
+      if (!entries.length) {
+        setZrc721Assets({});
+        return;
+      }
+
+      const nextAssets: Record<string, {
+        collection: string;
+        tokenId: number;
+        name: string;
+        collectionName: string;
+        imageUrls: string[];
+      }> = {};
+
+      for (const [id, content] of entries) {
+        try {
+          const parsed = JSON.parse(content);
+          if (parsed?.p === 'zrc-721' && parsed?.id) {
+            const tokenIdNum = Number(parsed.id);
+            const slugFromPayload = String(parsed.collection || parsed.slug || parsed.tick || '').toLowerCase();
+            if (!Number.isNaN(tokenIdNum) && slugFromPayload) {
+              const config = getCollectionConfig(slugFromPayload);
+              if (!config) continue;
+              try {
+                const metadata = await fetchCollectionMetadata(config, tokenIdNum);
+                const imageUrls = buildImageUrls(config, tokenIdNum, metadata);
+                nextAssets[id] = {
+                  collection: slugFromPayload,
+                  tokenId: tokenIdNum,
+                  name: buildTokenName(config, tokenIdNum, metadata),
+                  collectionName: config.name,
+                  imageUrls,
+                };
+              } catch (assetErr) {
+                console.error('Failed to load zrc721 asset', assetErr);
+              }
+            }
+          }
+        } catch {
+          // not JSON
+        }
+      }
+
+      if (!cancelled) {
+        setZrc721Assets(nextAssets);
+      }
+    };
+
+    loadZrc721Assets();
+    return () => {
+      cancelled = true;
+    };
+  }, [inscriptionContents]);
 
   const handleCreateWallet = async () => {
     setLoading(true);
@@ -234,6 +367,11 @@ export default function WalletPage() {
   const totalBalance = balance.confirmed + balance.unconfirmed;
   const usdValue = totalBalance * usdPrice;
 
+  const formatFileType = (contentType: string) => {
+    const match = contentType?.match(/\/(.+)$/);
+    return match ? match[1].toUpperCase() : (contentType || 'UNKNOWN').toUpperCase();
+  };
+
   if (!wallet) {
     return (
       <main className="relative min-h-screen bg-black">
@@ -291,7 +429,7 @@ export default function WalletPage() {
     <main className="relative min-h-screen bg-black">
       <div className="fixed inset-0 bg-gradient-to-br from-black via-gray-900 to-black" />
 
-      <div className="relative z-10 container mx-auto px-6 py-12">
+      <div className="relative z-10 container mx-auto px-6 py-12 mt-10">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="glass-card p-6 mb-6">
@@ -339,7 +477,7 @@ export default function WalletPage() {
                   title="Refresh balance"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
                   </svg>
                 </button>
               </div>
@@ -372,21 +510,28 @@ export default function WalletPage() {
           <div className="flex gap-4 mb-6">
             <button
               onClick={() => setActiveTab('zrc20')}
-              className={`flex-1 px-6 py-4 font-bold rounded-lg transition-all ${
-                activeTab === 'zrc20'
-                  ? 'bg-gold-500 text-black'
-                  : 'glass-card text-gold-400'
-              }`}
+              className={`flex-1 px-6 py-4 font-bold rounded-lg transition-all ${activeTab === 'zrc20'
+                ? 'bg-gold-500 text-black'
+                : 'glass-card text-gold-400'
+                }`}
             >
               ZRC20 <span className="ml-2 opacity-60">1</span>
             </button>
             <button
+              onClick={() => setActiveTab('zrc721')}
+              className={`flex-1 px-6 py-4 font-bold rounded-lg transition-all ${activeTab === 'zrc721'
+                ? 'bg-gold-500 text-black'
+                : 'glass-card text-gold-400'
+                }`}
+            >
+              ZRC-721
+            </button>
+            <button
               onClick={() => setActiveTab('inscriptions')}
-              className={`flex-1 px-6 py-4 font-bold rounded-lg transition-all ${
-                activeTab === 'inscriptions'
-                  ? 'bg-gold-500 text-black'
-                  : 'glass-card text-gold-400'
-              }`}
+              className={`flex-1 px-6 py-4 font-bold rounded-lg transition-all ${activeTab === 'inscriptions'
+                ? 'bg-gold-500 text-black'
+                : 'glass-card text-gold-400'
+                }`}
             >
               Inscriptions <span className="ml-2 opacity-60">0</span>
             </button>
@@ -409,8 +554,187 @@ export default function WalletPage() {
           )}
 
           {activeTab === 'inscriptions' && (
-            <div className="glass-card p-12 text-center">
-              <div className="text-gold-200/60">No inscriptions yet</div>
+            <div className="glass-card p-6">
+              {loadingInscriptions && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {Array.from({ length: 4 }).map((_, idx) => (
+                    <div key={idx} className="bg-black/30 border border-gold-500/10 rounded p-3 space-y-3">
+                      <div className="w-full aspect-square bg-black/40 border border-gold-500/10 skeleton rounded" />
+                      <div className="h-4 w-3/4 skeleton rounded" />
+                      <div className="h-3 w-1/2 skeleton rounded" />
+                      <div className="h-3 w-1/3 skeleton rounded" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!loadingInscriptions && inscriptions.length === 0 && (
+                <div className="text-center py-12 text-gold-200/60">No inscriptions yet</div>
+              )}
+
+              {!loadingInscriptions && inscriptions.length > 0 && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {inscriptions.map((insc) => {
+                    const asset = zrc721Assets[insc.id];
+                    const contentType = insc.contentType || insc.content_type || 'text/plain';
+                    const imageLoaded = zrcImageLoaded[insc.id];
+                    const imageErrored = zrcImageError[insc.id];
+                    const rawContent = inscriptionContents[insc.id];
+                    let rawPreview: string | null = null;
+                    if (!asset && rawContent) {
+                      try {
+                        rawPreview = JSON.stringify(JSON.parse(rawContent), null, 2);
+                      } catch {
+                        rawPreview = rawContent;
+                      }
+                    }
+
+                    return (
+                      <div key={insc.id} className="bg-black/30 border border-gold-500/10 rounded p-3 flex flex-col gap-3">
+                        <a href={`/inscription/${insc.id}`} className="relative block w-full aspect-square bg-black/40 border border-gold-500/10 overflow-hidden">
+                          {asset && asset.imageUrls.length > 0 ? (
+                            <img
+                              src={asset.imageUrls[0]}
+                              data-index={0}
+                              loading="lazy"
+                              onLoad={() => setZrcImageLoaded((prev) => ({ ...prev, [insc.id]: true }))}
+                              onError={(e) => {
+                                const nextIndex = Number(e.currentTarget.dataset.index || '0') + 1;
+                                const fallback = asset.imageUrls[nextIndex];
+                                if (fallback) {
+                                  setZrcImageLoaded((prev) => ({ ...prev, [insc.id]: false }));
+                                  setZrcImageError((prev) => ({ ...prev, [insc.id]: false }));
+                                  e.currentTarget.dataset.index = String(nextIndex);
+                                  e.currentTarget.src = fallback;
+                                } else {
+                                  setZrcImageError((prev) => ({ ...prev, [insc.id]: true }));
+                                  e.currentTarget.onerror = null;
+                                }
+                              }}
+                              alt=""
+                              className={`w-full h-full object-contain transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'} ${(!imageLoaded && !imageErrored) ? 'skeleton' : ''}`}
+                            />
+                          ) : inscriptionImages[insc.id] ? (
+                            <img
+                              src={inscriptionImages[insc.id]}
+                              loading="lazy"
+                              onLoad={() => setInscriptionImageLoaded((prev) => ({ ...prev, [insc.id]: true }))}
+                              onError={() => setInscriptionImageError((prev) => ({ ...prev, [insc.id]: true }))}
+                              alt=""
+                              className={`w-full h-full object-contain transition-opacity duration-300 ${inscriptionImageLoaded[insc.id] ? 'opacity-100' : 'opacity-0'} ${(!inscriptionImageLoaded[insc.id] && !inscriptionImageError[insc.id]) ? 'skeleton' : ''}`}
+                            />
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center text-gold-200/50 text-xs uppercase tracking-[0.2em]">
+                              {formatFileType(contentType)}
+                            </div>
+                          )}
+                          {(imageErrored || inscriptionImageError[insc.id]) && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-gold-200/70 text-xs">
+                              Artwork unavailable
+                            </div>
+                          )}
+                        </a>
+
+                        <div className="space-y-1">
+                          <div className="text-sm font-semibold text-gold-100/90 truncate">
+                            {asset ? `${asset.collectionName} #${asset.tokenId}` : insc.id}
+                          </div>
+                          <div className="text-[11px] uppercase tracking-[0.2em] text-gold-200/60">
+                            {asset ? 'ZRC-721' : formatFileType(contentType)}
+                          </div>
+                          <div className="text-xs text-gold-200/50 font-mono break-all">
+                            {insc.id}
+                          </div>
+                          {!asset && rawPreview && (
+                            <pre className="mt-2 bg-black/30 border border-gold-500/10 rounded p-2 text-[11px] leading-tight text-gold-100/80 max-h-32 overflow-auto whitespace-pre-wrap">
+                              {rawPreview}
+                            </pre>
+                          )}
+                        </div>
+
+                        <div className="flex justify-between items-center text-xs text-gold-200/70">
+                          <a href={`/inscription/${insc.id}`} className="text-gold-300 hover:text-gold-100 transition-colors">View</a>
+                          {insc.number && <span>#{insc.number}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'zrc721' && (
+            <div className="glass-card p-6">
+              {loadingInscriptions && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {Array.from({ length: 4 }).map((_, idx) => (
+                    <div key={idx} className="bg-black/30 border border-gold-500/10 rounded p-3 space-y-3">
+                      <div className="w-full aspect-square bg-black/40 border border-gold-500/10 skeleton rounded" />
+                      <div className="h-4 w-3/4 skeleton rounded" />
+                      <div className="h-3 w-1/2 skeleton rounded" />
+                      <div className="h-3 w-1/3 skeleton rounded" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!loadingInscriptions && Object.keys(zrc721Assets).length === 0 && (
+                <div className="text-center py-12 text-gold-200/60">No ZRC-721 inscriptions yet</div>
+              )}
+
+              {!loadingInscriptions && Object.keys(zrc721Assets).length > 0 && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {Object.entries(zrc721Assets).map(([id, asset]) => {
+                    const imageLoaded = zrcImageLoaded[id];
+                    const imageErrored = zrcImageError[id];
+                    return (
+                      <div key={id} className="bg-black/30 border border-gold-500/10 rounded p-3 flex flex-col gap-3">
+                        <a href={`/inscription/${id}`} className="relative block w-full aspect-square bg-black/40 border border-gold-500/10 overflow-hidden">
+                          <img
+                            src={asset.imageUrls[0]}
+                            data-index={0}
+                            loading="lazy"
+                            onLoad={() => setZrcImageLoaded((prev) => ({ ...prev, [id]: true }))}
+                            onError={(e) => {
+                              const nextIndex = Number(e.currentTarget.dataset.index || '0') + 1;
+                              const fallback = asset.imageUrls[nextIndex];
+                              if (fallback) {
+                                setZrcImageLoaded((prev) => ({ ...prev, [id]: false }));
+                                setZrcImageError((prev) => ({ ...prev, [id]: false }));
+                                e.currentTarget.dataset.index = String(nextIndex);
+                                e.currentTarget.src = fallback;
+                              } else {
+                                setZrcImageError((prev) => ({ ...prev, [id]: true }));
+                                e.currentTarget.onerror = null;
+                              }
+                            }}
+                            alt=""
+                            className={`w-full h-full object-contain transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'} ${(!imageLoaded && !imageErrored) ? 'skeleton' : ''}`}
+                          />
+                          {imageErrored && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-gold-200/70 text-xs">
+                              Artwork unavailable
+                            </div>
+                          )}
+                        </a>
+
+                        <div className="space-y-1">
+                          <div className="text-sm font-semibold text-gold-100/90 truncate">
+                            {asset.collectionName} #{asset.tokenId}
+                          </div>
+                          <div className="text-[11px] uppercase tracking-[0.2em] text-gold-200/60">ZRC-721</div>
+                          <div className="text-xs text-gold-200/50 font-mono break-all">{id}</div>
+                        </div>
+
+                        <div className="flex justify-between items-center text-xs text-gold-200/70">
+                          <a href={`/inscription/${id}`} className="text-gold-300 hover:text-gold-100 transition-colors">View</a>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

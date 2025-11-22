@@ -261,7 +261,7 @@ export default function InscriptionPage() {
       return (
         <div className="flex flex-col gap-4">
           <div className="flex justify-center items-center p-4 sm:p-8 lg:p-12">
-            <div className={`relative w-full max-w-[500px] aspect-square flex items-center justify-center bg-black/30 border border-gold-500/10 overflow-hidden ${(!collectionImageLoaded && !collectionImageError && !showRawPayload) ? 'skeleton' : ''}`}>
+            <div className={`relative w-full max-w-[500px] aspect-square flex items-center justify-center bg-black/20 border border-gold-500/10 rounded overflow-hidden ${(!collectionImageLoaded && !collectionImageError && !showRawPayload) ? 'skeleton' : ''}`}>
               {isZrc721Payload && content && (
                 <button
                   type="button"
@@ -323,7 +323,7 @@ export default function InscriptionPage() {
     if (collectionToken && loadingAsset) {
       return (
         <div className="flex justify-center items-center p-4 sm:p-8 lg:p-12">
-          <div className="w-full max-w-[500px] aspect-square bg-black/30 border border-gold-500/10 skeleton" />
+          <div className="w-full max-w-[500px] aspect-square bg-black/20 border border-gold-500/10 skeleton rounded" />
         </div>
       );
     }
@@ -333,14 +333,14 @@ export default function InscriptionPage() {
       if (!imageData) {
         return (
           <div className="flex justify-center items-center p-4 sm:p-8 lg:p-12">
-            <div className="w-full max-w-[500px] aspect-square bg-black/30 border border-gold-500/10 skeleton" />
+            <div className="w-full max-w-[500px] aspect-square bg-black/20 border border-gold-500/10 skeleton rounded" />
           </div>
         );
       }
 
       return (
         <div className="flex justify-center items-center p-4 sm:p-8 lg:p-12">
-          <div className={`relative w-full max-w-[500px] aspect-square flex items-center justify-center bg-black/30 border border-gold-500/10 overflow-hidden ${(!inscriptionImageLoaded && !inscriptionImageError && !showRawPayload) ? 'skeleton' : ''}`}>
+          <div className={`relative w-full max-w-[500px] aspect-square flex items-center justify-center bg-black/20 border border-gold-500/10 rounded overflow-hidden ${(!inscriptionImageLoaded && !inscriptionImageError && !showRawPayload) ? 'skeleton' : ''}`}>
             {isZrc721Payload && content && (
               <button
                 type="button"
@@ -385,14 +385,7 @@ export default function InscriptionPage() {
 
     // For non-image content, we need the fetched content
     if (!content) {
-      return (
-        <div className="p-4 sm:p-6 bg-black/20 space-y-3">
-          <div className="h-4 w-1/3 skeleton rounded" />
-          <div className="h-4 w-full skeleton rounded" />
-          <div className="h-4 w-5/6 skeleton rounded" />
-          <div className="h-4 w-2/3 skeleton rounded" />
-        </div>
-      );
+      return null;
     }
 
     // Handle JSON
@@ -457,8 +450,8 @@ export default function InscriptionPage() {
 
         {loadingTraits && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {Array.from({ length: 6 }).map((_, idx) => (
-              <div key={idx} className="aspect-square min-h-[96px] bg-black/30 border border-gold-500/10 rounded skeleton" />
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="h-20 bg-black/20 border border-gold-500/10 rounded skeleton" />
             ))}
           </div>
         )}
@@ -559,57 +552,6 @@ export default function InscriptionPage() {
           </div>
         )}
 
-        {loading && (
-          <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
-            <div className="flex-1 lg:flex-[2]">
-              <div className="bg-black/10 backdrop-blur-sm overflow-hidden rounded">
-                <div className="w-full aspect-square bg-black/30 border border-gold-500/10 skeleton" />
-              </div>
-              <div className="mt-4 bg-black/20 backdrop-blur-sm rounded border border-gold-500/10 p-4 sm:p-6 space-y-3">
-                <div className="h-3 w-24 skeleton rounded" />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {Array.from({ length: 6 }).map((_, idx) => (
-                    <div key={idx} className="aspect-square min-h-[96px] bg-black/30 border border-gold-500/10 rounded skeleton" />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="w-full lg:w-80 lg:flex-shrink-0">
-              <div className="bg-black/30 backdrop-blur-sm rounded border border-gold-500/10 p-4 sm:p-6 space-y-4 sm:space-y-5">
-                <div className="space-y-2">
-                  <div className="h-2.5 w-20 skeleton rounded" />
-                  <div className="h-8 w-32 skeleton rounded" />
-                </div>
-                <div className="space-y-2">
-                  <div className="h-2.5 w-28 skeleton rounded" />
-                  <div className="h-4 w-36 skeleton rounded" />
-                </div>
-                <div className="space-y-2">
-                  <div className="h-2.5 w-12 skeleton rounded" />
-                  <div className="h-3 w-full skeleton rounded" />
-                </div>
-                <div className="space-y-2">
-                  <div className="h-2.5 w-16 skeleton rounded" />
-                  <div className="h-3 w-5/6 skeleton rounded" />
-                </div>
-                <div className="space-y-2">
-                  <div className="h-2.5 w-24 skeleton rounded" />
-                  <div className="h-3 w-4/6 skeleton rounded" />
-                </div>
-                <div className="space-y-2">
-                  <div className="h-2.5 w-20 skeleton rounded" />
-                  <div className="h-3 w-5/6 skeleton rounded" />
-                </div>
-                <div className="space-y-2">
-                  <div className="h-2.5 w-20 skeleton rounded" />
-                  <div className="h-3 w-3/4 skeleton rounded" />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {error && (
           <div className="bg-red-900/20 border border-red-500 rounded p-4 mb-6">
             <p className="text-red-400">{error}</p>
@@ -687,10 +629,7 @@ export default function InscriptionPage() {
                   <div className="font-semibold text-sm text-gold-100/80 space-y-1">
                     <div>{formatFileType(inscription.contentType)}</div>
                     {isZrc721Payload && (
-                      <div className="pt-1 space-y-1">
-                        <div className="text-[10px] uppercase tracking-[0.25em] text-gold-200/60">Metaprotocol</div>
-                        <div>ZRC-721</div>
-                      </div>
+                      <div className="pt-1">ZRC-721</div>
                     )}
                   </div>
                 </div>
