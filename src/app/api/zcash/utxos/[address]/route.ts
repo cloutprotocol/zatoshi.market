@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { TatumSDK, Network, ZCash } from '@tatumio/tatum';
 
+export const runtime = 'edge';
+
 /**
  * Zcash UTXO Fetcher API
  *

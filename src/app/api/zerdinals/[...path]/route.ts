@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const runtime = 'edge';
+
 const TOKEN_API_BASE = 'https://token-api.zerdinals.com';
 const INDEXER_API_BASE = 'https://indexer.zerdinals.com';
 

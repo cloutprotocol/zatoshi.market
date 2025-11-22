@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const runtime = 'edge';
+
 /**
  * Fetch inscription content from zerdinals indexer
  * Returns the raw content of an inscription

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const runtime = 'edge';
+
 export async function GET(_request: Request, { params }: { params: { path: string[] } }) {
   const path = params.path?.join('/') || '';
   const url = `https://utxos.zerdinals.com/api/${path}`;

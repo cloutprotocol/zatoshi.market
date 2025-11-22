@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const runtime = 'edge';
+
 // Cache raw transactions for 5 minutes (transactions are immutable once confirmed)
 // Used during inscription building to fetch UTXOs for signing
 const txCache = new Map<string, { raw: string; timestamp: number }>();

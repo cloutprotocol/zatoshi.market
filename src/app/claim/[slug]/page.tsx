@@ -3,6 +3,8 @@ import type { Metadata, Viewport } from 'next';
 import { ClaimClient } from './ClaimClient';
 import { getCollectionConfig } from '@/config/collections';
 
+export const runtime = 'edge';
+
 type Props = {
   params: { slug: string };
 };
