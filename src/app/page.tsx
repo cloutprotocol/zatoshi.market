@@ -71,12 +71,14 @@ export default function Home() {
              DEPLOY and MINT ZRC20 tokens | ZMAPS | .ZEC .ZCASH Names | Now Inscribing on Zcash
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link
-                href="/claim/zgods"
+              <a
+                href="https://x.com/zatoshimarket"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="px-8 py-4 bg-gold-500 text-black text-lg font-bold text-center"
               >
-                CLAIM ZGODS
-              </Link>
+                @zatoshimarket
+              </a>
             </div>
           </div>
         </section>
