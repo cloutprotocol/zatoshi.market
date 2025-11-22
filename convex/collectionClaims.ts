@@ -1,7 +1,30 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { getAllowlistEntry } from "./claimAllowlists";
 
 const MAX_RESERVE_ATTEMPTS = 200;
+
+function normalizeAddress(address: string) {
+  return (address || "").toLowerCase();
+}
+
+async function getClaimCountsForAddress(
+  ctx: any,
+  slug: string,
+  address: string
+): Promise<{ minted: number; reserved: number }> {
+  const allClaims = await ctx.db
+    .query("collectionClaims")
+    .withIndex("by_collection_status", (q: any) => q.eq("collectionSlug", slug))
+    .collect();
+  const byAddress = allClaims.filter(
+    (c: any) => (c.address || "").toLowerCase() === address
+  );
+  return {
+    minted: byAddress.filter((c: any) => c.status === "minted").length,
+    reserved: byAddress.filter((c: any) => c.status === "reserved").length,
+  };
+}
 
 export const getClaimStats = query({
   args: {
@@ -14,9 +37,16 @@ export const getClaimStats = query({
       .query("collectionClaims")
       .withIndex("by_collection_status", (q) => q.eq("collectionSlug", slug).eq("status", "minted"))
       .collect();
+    const reserved = await ctx.db
+      .query("collectionClaims")
+      .withIndex("by_collection_status", (q) => q.eq("collectionSlug", slug).eq("status", "reserved"))
+      .collect();
 
     const byAddress = args.address
       ? minted.filter((m) => m.address.toLowerCase() === args.address!.toLowerCase())
+      : [];
+    const reservedByAddress = args.address
+      ? reserved.filter((m) => m.address.toLowerCase() === args.address!.toLowerCase())
       : [];
 
     return {
@@ -25,6 +55,11 @@ export const getClaimStats = query({
       mintedForAddress: {
         count: byAddress.length,
         ids: byAddress.map((m) => m.tokenId),
+      },
+      reservedCount: reserved.length,
+      reservedForAddress: {
+        count: reservedByAddress.length,
+        ids: reservedByAddress.map((m) => m.tokenId),
       },
     };
   },
@@ -65,7 +100,23 @@ export const reserveTokens = mutation({
   },
   handler: async (ctx, args) => {
     const slug = args.collectionSlug.toLowerCase();
+    const address = normalizeAddress(args.address);
+    const allowlist = getAllowlistEntry(slug, address);
+    if (!allowlist || allowlist.max <= 0) {
+      throw new Error("Wallet is not whitelisted for this collection");
+    }
+
+    const { minted, reserved: alreadyReserved } = await getClaimCountsForAddress(ctx, slug, address);
+    const remaining = allowlist.max - minted - alreadyReserved;
+    if (remaining <= 0) {
+      throw new Error("Allocation exhausted for this wallet");
+    }
+
     const maxCount = Math.min(5, Math.max(1, args.count));
+    if (maxCount > remaining) {
+      throw new Error(`Allocation exceeded. You can claim ${remaining} more.`);
+    }
+
     const reserved: number[] = [];
     const now = Date.now();
 
@@ -98,7 +149,7 @@ export const reserveTokens = mutation({
         collectionSlug: slug,
         tokenId: id,
         status: "reserved",
-        address: args.address,
+        address,
         batchId: args.batchId,
         createdAt: now,
         updatedAt: now,
@@ -107,7 +158,7 @@ export const reserveTokens = mutation({
       await ctx.db.insert("collectionClaimEvents", {
         collectionSlug: slug,
         tokenId: id,
-        address: args.address,
+        address,
         batchId: args.batchId,
         status: "reserved",
         createdAt: now,
@@ -131,6 +182,8 @@ export const finalizeToken = mutation({
   },
   handler: async (ctx, args) => {
     const slug = args.collectionSlug.toLowerCase();
+    const address = normalizeAddress(args.address);
+    const allowlist = getAllowlistEntry(slug, address);
     const existing = await ctx.db
       .query("collectionClaims")
       .withIndex("by_collection_token", (q) => q.eq("collectionSlug", slug).eq("tokenId", args.tokenId))
@@ -139,11 +192,18 @@ export const finalizeToken = mutation({
     if (!existing) {
       // If something somehow minted without reservation, create record
       if (args.success) {
+        if (!allowlist || allowlist.max <= 0) {
+          throw new Error("Wallet is not whitelisted for this collection");
+        }
+        const { minted } = await getClaimCountsForAddress(ctx, slug, address);
+        if (minted >= allowlist.max) {
+          throw new Error("Allocation exhausted for this wallet");
+        }
         await ctx.db.insert("collectionClaims", {
           collectionSlug: slug,
           tokenId: args.tokenId,
           status: "minted",
-          address: args.address,
+          address,
           inscriptionId: args.inscriptionId,
           txid: args.txid,
           batchId: args.batchId,
@@ -156,12 +216,12 @@ export const finalizeToken = mutation({
       return;
     }
 
-    if (existing.address.toLowerCase() !== args.address.toLowerCase()) {
+    if ((existing.address || "").toLowerCase() !== address) {
       // If somehow a different address tries to finalize, log and ignore to avoid client-visible errors
       await ctx.db.insert("collectionClaimEvents", {
         collectionSlug: slug,
         tokenId: args.tokenId,
-        address: args.address,
+        address,
         batchId: args.batchId ?? existing.batchId,
         status: "failed",
         message: "Address mismatch for reserved token",
@@ -177,6 +237,53 @@ export const finalizeToken = mutation({
       return;
     }
 
+    if (args.success) {
+      if (!allowlist || allowlist.max <= 0) {
+        await ctx.db.patch(existing._id, {
+          status: "failed",
+          batchId: args.batchId ?? existing.batchId,
+          attempts: (existing.attempts ?? 0) + 1,
+          lastError: "Wallet not in allowlist",
+          updatedAt: Date.now(),
+        });
+        await ctx.db.insert("collectionClaimEvents", {
+          collectionSlug: slug,
+          tokenId: args.tokenId,
+          address,
+          batchId: args.batchId ?? existing.batchId,
+          status: "failed",
+          message: "Wallet not in allowlist",
+          txid: args.txid,
+          inscriptionId: args.inscriptionId,
+          createdAt: Date.now(),
+        });
+        return;
+      }
+
+      const { minted } = await getClaimCountsForAddress(ctx, slug, address);
+      if (minted >= allowlist.max) {
+        await ctx.db.patch(existing._id, {
+          status: "failed",
+          batchId: args.batchId ?? existing.batchId,
+          attempts: (existing.attempts ?? 0) + 1,
+          lastError: "Allocation exhausted",
+          updatedAt: Date.now(),
+        });
+        await ctx.db.insert("collectionClaimEvents", {
+          collectionSlug: slug,
+          tokenId: args.tokenId,
+          address,
+          batchId: args.batchId ?? existing.batchId,
+          status: "failed",
+          message: "Allocation exhausted",
+          txid: args.txid,
+          inscriptionId: args.inscriptionId,
+          createdAt: Date.now(),
+        });
+        return;
+      }
+    }
+
     await ctx.db.patch(existing._id, {
       status: args.success ? "minted" : "failed",
       inscriptionId: args.inscriptionId,
@@ -190,7 +297,7 @@ export const finalizeToken = mutation({
     await ctx.db.insert("collectionClaimEvents", {
       collectionSlug: slug,
       tokenId: args.tokenId,
-      address: args.address,
+      address,
       batchId: args.batchId ?? existing.batchId,
       status: args.success ? "minted" : "failed",
       message: args.error,

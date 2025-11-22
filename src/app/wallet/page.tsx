@@ -82,6 +82,8 @@ export default function WalletPage() {
     }
   }, [wallet?.address, hasFetchedFresh, fetchBalance, fetchPrice]);
 
+  const [inscriptionTypes, setInscriptionTypes] = useState<Record<string, string>>({});
+
   useEffect(() => {
     let cancelled = false;
     const fetchInscriptions = async () => {
@@ -95,18 +97,21 @@ export default function WalletPage() {
 
         const contents: Record<string, string> = {};
         const imageMap: Record<string, string> = {};
+        const types: Record<string, string> = {};
+
         await Promise.all(
           list.slice(0, 30).map(async (insc: any) => {
             try {
-              if ((insc.contentType || insc.content_type || '').startsWith('image/')) {
-                const response = await fetch(`/api/zcash/inscription-content/${insc.id}`);
-                if (response.ok) {
+              // Always fetch content to determine type
+              const response = await fetch(`/api/zcash/inscription-content/${insc.id}`);
+              if (response.ok) {
+                const type = response.headers.get('Content-Type') || 'application/octet-stream';
+                types[insc.id] = type;
+
+                if (type.startsWith('image/')) {
                   const blob = await response.blob();
                   imageMap[insc.id] = URL.createObjectURL(blob);
-                }
-              } else {
-                const response = await fetch(`/api/zcash/inscription-content/${insc.id}`);
-                if (response.ok) {
+                } else {
                   const text = await response.text();
                   contents[insc.id] = text;
                 }
@@ -119,6 +124,7 @@ export default function WalletPage() {
         if (cancelled) return;
         setInscriptionContents(contents);
         setInscriptionImages(imageMap);
+        setInscriptionTypes(types);
         setZrcImageLoaded({});
         setZrcImageError({});
         setInscriptionImageLoaded({});
@@ -576,7 +582,7 @@ export default function WalletPage() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   {inscriptions.map((insc) => {
                     const asset = zrc721Assets[insc.id];
-                    const contentType = insc.contentType || insc.content_type || 'text/plain';
+                    const contentType = inscriptionTypes[insc.id] || insc.contentType || insc.content_type || 'text/plain';
                     const imageLoaded = zrcImageLoaded[insc.id];
                     const imageErrored = zrcImageError[insc.id];
                     const rawContent = inscriptionContents[insc.id];
@@ -654,7 +660,7 @@ export default function WalletPage() {
 
                         <div className="flex justify-between items-center text-xs text-gold-200/70">
                           <a href={`/inscription/${insc.id}`} className="text-gold-300 hover:text-gold-100 transition-colors">View</a>
-                          {insc.number && <span>#{insc.number}</span>}
+                          {/* {insc.number && <span>#{insc.number}</span>} */}
                         </div>
                       </div>
                     );

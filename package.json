@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "audit:claims:export": "node scripts/audit/audit-from-export.js --slug zgods --claims temp/collectionClaims.json --events temp/collectionClaimEvents.json --whitelist public/collections/zgods/claim/whitelist.csv",
     "pages:build": "npx @cloudflare/next-on-pages",
     "pages:dev": "npx @cloudflare/next-on-pages --watch",
     "pages:deploy": "npm run pages:build && wrangler pages deploy .vercel/output/static"

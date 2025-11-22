@@ -2,7 +2,6 @@
 
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { useAction } from 'convex/react';
 import { api } from '../../../../convex/_generated/api';
 import dynamic from 'next/dynamic';
 import { getCollectionConfig } from '@/config/collections';
@@ -36,7 +35,6 @@ export default function InscriptionPage() {
   const [error, setError] = useState<string | null>(null);
   const [waitingConfirm, setWaitingConfirm] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
-  const [parseFromChain, setParseFromChain] = useState(false);
   const [collectionToken, setCollectionToken] = useState<{ collection: string; tokenId: number } | null>(null);
   const [collectionAsset, setCollectionAsset] = useState<{
     collectionName: string;
@@ -53,7 +51,6 @@ export default function InscriptionPage() {
   const [waitingMessage, setWaitingMessage] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showRawPayload, setShowRawPayload] = useState(false);
-  const parseInscription = useAction(api.inscriptionParser.parseInscriptionFromChain);
 
   useEffect(() => {
     const MAX_RETRIES = 20;
@@ -64,7 +61,6 @@ export default function InscriptionPage() {
         setLoading(true);
         setError(null);
         setWaitingConfirm(false);
-        setParseFromChain(false);
         setCollectionToken(null);
         setCollectionAsset(null);
         setLoadingAsset(false);
@@ -78,157 +74,72 @@ export default function InscriptionPage() {
         setShowRawPayload(false);
         setWaitingMessage(null);
 
-        // Use AllOrigins CORS proxy to bypass domain blocking
-        const metaUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://indexer.zerdinals.com/inscription/${inscriptionId}`)}`;
-        const metaResponse = await fetch(metaUrl);
+        // 1. Fetch Content (using our new Live RPC Decoder)
+        const contentResponse = await fetch(`/api/zcash/inscription-content/${inscriptionId}`);
 
-
-        if (!metaResponse.ok) {
-          if (attempt < MAX_RETRIES) {
-            setWaitingConfirm(true);
-            setLoading(false);
-            setRetryCount(attempt + 1);
-            setWaitingMessage('Inscription seen in mempool. Waiting for confirmation...');
-            setTimeout(() => fetchInscription(attempt + 1), 60000);
-            return;
-          }
-          throw new Error(`Failed to fetch inscription: ${metaResponse.status}`);
-        }
-
-        const metaJson = await metaResponse.json();
-        const data = metaJson.data || metaJson;
-        const contentType = data.contentType || data.content_type || 'text/plain';
-
-        if (cancelled) return;
-        setRetryCount(0);
-        setInscription({
-          id: inscriptionId,
-          contentType,
-          number: data.inscriptionNumber || data.number || data.inscription_number,
-          address: data.owner || data.address,
-          timestamp: data.time || data.timestamp || data.created_at,
-          block: data.block,
-          txid: data.txid
-        });
-
-        const contentUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://indexer.zerdinals.com/content/${inscriptionId}`)}`;
-        const contentResponse = await fetch(contentUrl);
-
-        if (contentType.startsWith('image/')) {
-          if (contentResponse.ok) {
-            try {
-              const arrayBuffer = await contentResponse.arrayBuffer();
-              const bytes = new Uint8Array(arrayBuffer);
-
-              console.log('Image loaded from Zerdinals:', {
-                size: arrayBuffer.byteLength,
-                contentType
-              });
-
-              if (bytes.length === 520 && !parseFromChain) {
-                console.log('Detected potential chunked inscription (520 bytes), parsing from chain...');
-                setParseFromChain(true);
-
-                try {
-                  const parsed = await parseInscription({ inscriptionId });
-                  console.log('Parsed from chain:', {
-                    size: parsed.size,
-                    chunks: parsed.chunks,
-                    contentType: parsed.contentType
-                  });
-
-                  const decodedBytes = Uint8Array.from(atob(parsed.content), c => c.charCodeAt(0));
-                  const fullBlob = new Blob([decodedBytes], { type: parsed.contentType });
-                  const fullUrl = URL.createObjectURL(fullBlob);
-                  if (cancelled) return;
-                  setImageData(fullUrl);
-                } catch (parseErr) {
-                  console.error('Chain parsing failed, using Zerdinals data:', parseErr);
-                  const blob = new Blob([arrayBuffer], { type: contentType });
-                  const objectUrl = URL.createObjectURL(blob);
-                  if (cancelled) return;
-                  setImageData(objectUrl);
-                }
-              } else {
-                const blob = new Blob([arrayBuffer], { type: contentType });
-                const objectUrl = URL.createObjectURL(blob);
-                if (cancelled) return;
-                setImageData(objectUrl);
-              }
-              if (arrayBuffer.byteLength === 0 && attempt < MAX_RETRIES) {
-                setWaitingConfirm(true);
-                setLoading(false);
-                setRetryCount(attempt + 1);
-                setWaitingMessage('Inscription detected but content is still indexing. This can take a few minutes.');
-                setTimeout(() => fetchInscription(attempt + 1), 60000);
-                return;
-              }
-            } catch (imgErr) {
-              console.error('Error processing image data:', imgErr);
-              setError('Failed to process image data');
-            }
-          } else if (attempt < MAX_RETRIES) {
-            setWaitingConfirm(true);
-            setLoading(false);
-            setRetryCount(attempt + 1);
-            setTimeout(() => fetchInscription(attempt + 1), 60000);
-            return;
-          }
-        } else {
-          if (contentResponse.ok) {
-            const contentText = await contentResponse.text();
-            if (cancelled) return;
-
-            // If the indexer returns a 404 payload body, treat as pending and retry
-            try {
-              const parsedMaybeError = JSON.parse(contentText);
-              if (parsedMaybeError?.code === 404) {
-                if (attempt < MAX_RETRIES) {
-                  setWaitingConfirm(true);
-                  setLoading(false);
-                  setRetryCount(attempt + 1);
-                  setWaitingMessage('Inscription detected but not fully indexed yet. Waiting for confirmation...');
-                  setTimeout(() => fetchInscription(attempt + 1), 60000);
-                  return;
-                }
-                setError('Inscription not yet available. Please try again later.');
-                return;
-              }
-            } catch {
-              // Not an error JSON
-            }
-
-            if (!contentText.trim() && attempt < MAX_RETRIES) {
+        if (!contentResponse.ok) {
+          if (contentResponse.status === 404) {
+            // Might be in mempool or invalid
+            if (attempt < MAX_RETRIES) {
               setWaitingConfirm(true);
               setLoading(false);
               setRetryCount(attempt + 1);
-              setWaitingMessage('Inscription detected but content is still indexing. This can take a few minutes.');
-              setTimeout(() => fetchInscription(attempt + 1), 60000);
+              setWaitingMessage('Inscription not found or in mempool. Retrying...');
+              setTimeout(() => fetchInscription(attempt + 1), 5000);
               return;
             }
+            throw new Error('Inscription content not found');
+          }
+          throw new Error(`Failed to fetch content: ${contentResponse.status}`);
+        }
 
-            setContent(contentText);
-            try {
-              const parsedContent = JSON.parse(contentText);
-              if (parsedContent?.p === 'zrc-721' && parsedContent?.id) {
-                setIsZrc721Payload(true);
-                const tokenIdNum = Number(parsedContent.id);
-                const slugFromPayload = String(parsedContent.collection || parsedContent.slug || parsedContent.tick || '').toLowerCase();
-                if (!Number.isNaN(tokenIdNum) && slugFromPayload) {
-                  setCollectionToken((prev) => prev ?? { collection: slugFromPayload, tokenId: tokenIdNum });
-                }
+        const contentTypeHeader = contentResponse.headers.get('Content-Type');
+        const contentType = contentTypeHeader || 'application/octet-stream';
+
+        if (cancelled) return;
+        setRetryCount(0);
+
+        // TODO: Fetch metadata (owner, timestamp) from RPC or Indexer in the future
+        setInscription({
+          id: inscriptionId,
+          contentType,
+          number: undefined, // We don't have global numbering without an indexer
+          address: undefined, // We'd need to track UTXO ownership
+          timestamp: undefined, // Could fetch block time via RPC if needed
+          block: undefined,
+          txid: inscriptionId.replace(/i\d+$/, '')
+        });
+
+        if (contentType.startsWith('image/')) {
+          const blob = await contentResponse.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          if (cancelled) return;
+          setImageData(objectUrl);
+
+          // Also try to read as text if it might be ZRC-721 hidden in image? Unlikely.
+          // But we might want the raw content for "View Code" if it's small?
+          // For images, we usually don't show "View Code" unless it's SVG.
+        } else {
+          const text = await contentResponse.text();
+          if (cancelled) return;
+          setContent(text);
+
+          // Check for ZRC-721
+          try {
+            const parsedContent = JSON.parse(text);
+            if (parsedContent?.p === 'zrc-721' && parsedContent?.id) {
+              setIsZrc721Payload(true);
+              const tokenIdNum = Number(parsedContent.id);
+              const slugFromPayload = String(parsedContent.collection || parsedContent.slug || parsedContent.tick || '').toLowerCase();
+              if (!Number.isNaN(tokenIdNum) && slugFromPayload) {
+                setCollectionToken((prev) => prev ?? { collection: slugFromPayload, tokenId: tokenIdNum });
               }
-            } catch {
-              // Not a JSON payload we can use for collection rendering
             }
-          } else if (attempt < MAX_RETRIES) {
-            setWaitingConfirm(true);
-            setLoading(false);
-            setRetryCount(attempt + 1);
-            setTimeout(() => fetchInscription(attempt + 1), 60000);
-            return;
+          } catch {
+            // Not JSON
           }
         }
+
       } catch (err) {
         console.error('Error fetching inscription:', err);
         setError(err instanceof Error ? err.message : 'Failed to load inscription');
@@ -245,7 +156,7 @@ export default function InscriptionPage() {
     return () => {
       cancelled = true;
     };
-  }, [inscriptionId, parseInscription, refreshKey]);
+  }, [inscriptionId, refreshKey]);
 
   useEffect(() => {
     const lookupClaim = async () => {

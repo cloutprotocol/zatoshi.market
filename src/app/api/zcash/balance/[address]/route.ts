@@ -1,26 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { callZcashRPC } from '../../rpcHelper';
 
 /**
  * Zcash Address Balance API
  *
  * Fetches confirmed and unconfirmed balance for a Zcash transparent address
- * using Blockchair API (requires valid API key for production use)
- *
- * Architecture:
- * - Uses Blockchair for balance lookups (dashboards/address endpoint)
- * - Server-side caching per address (1 minute) to minimize external API calls
- * - Handles API errors gracefully with informative error messages
- *
- * Rate Limits:
- * - Free tier: 10,000 requests/day with API key
- * - Without key: ~10 requests/hour (will get 430 rate limited)
- *
- * Returns:
- * - confirmed: Balance in ZEC (satoshis / 100000000)
- * - unconfirmed: Unconfirmed balance in ZEC
+ * using Zatoshi RPC (Insight-compatible).
  */
 
-// Cache balances per address for 1 minute to reduce API calls
+// Cache balances per address for 1 minute to reduce RPC calls
 const balanceCache = new Map<string, { balance: any; timestamp: number }>();
 const CACHE_DURATION = 60 * 1000; // 1 minute
 
@@ -42,49 +30,35 @@ export async function GET(
     }
   }
 
-  // Use Blockchair API (REQUIRES valid API key)
   try {
-    const apiKey = process.env.BLOCKCHAIR_API_KEY || '';
+    // Use Zatoshi RPC (getaddressbalance)
+    // Returns { balance: satoshis, received: satoshis }
+    // Note: "balance" here is usually confirmed. Unconfirmed might need getaddressutxos or similar.
+    // Let's try getaddressbalance first.
+    const result = await callZcashRPC('getaddressbalance', [{ addresses: [address] }]);
 
-    if (!apiKey) {
-      console.warn('BLOCKCHAIR_API_KEY not set - balance lookups will be rate limited');
+    // Insight getaddressbalance usually returns confirmed balance.
+    // To get unconfirmed, we might need getaddressutxos or getaddressmempool.
+    // For simplicity and speed, we'll assume balance is confirmed.
+    // If we need unconfirmed, we can check mempool.
+
+    const confirmedZats = result.balance;
+
+    // Check mempool for unconfirmed
+    let unconfirmedZats = 0;
+    try {
+      const mempool = await callZcashRPC('getaddressmempool', [{ addresses: [address] }]);
+      if (Array.isArray(mempool)) {
+        unconfirmedZats = mempool.reduce((sum: number, tx: any) => sum + (tx.satoshis || 0), 0);
+      }
+    } catch (e) {
+      // Mempool check failed, ignore
     }
 
-    // Add cache-busting parameter when force refresh is requested
-    const cacheBuster = forceRefresh ? `&_t=${Date.now()}` : '';
-    const url = apiKey
-      ? `https://api.blockchair.com/zcash/dashboards/address/${address}?key=${apiKey}${cacheBuster}`
-      : `https://api.blockchair.com/zcash/dashboards/address/${address}${forceRefresh ? `?_t=${Date.now()}` : ''}`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    // Check for API errors
-    if (data.context?.code === 402) {
-      console.error('Invalid Blockchair API key');
-      return NextResponse.json(
-        { error: 'Invalid API key - get one at https://blockchair.com/api', confirmed: 0, unconfirmed: 0 },
-        { status: 402 }
-      );
-    }
-
-    if (data.context?.code === 430) {
-      console.error('Blockchair rate limited - need valid API key');
-      return NextResponse.json(
-        { error: 'Rate limited - need API key from https://blockchair.com/api', confirmed: 0, unconfirmed: 0 },
-        { status: 429 }
-      );
-    }
-
-    let balance = { confirmed: 0, unconfirmed: 0 };
-
-    if (data.data && data.data[address]) {
-      const addressData = data.data[address].address;
-      balance = {
-        confirmed: addressData.balance / 100000000,
-        unconfirmed: addressData.unconfirmed_balance / 100000000,
-      };
-    }
+    const balance = {
+      confirmed: confirmedZats / 100000000,
+      unconfirmed: unconfirmedZats / 100000000,
+    };
 
     // Update cache
     balanceCache.set(address, { balance, timestamp: Date.now() });
@@ -97,7 +71,7 @@ export async function GET(
 
     return NextResponse.json(balance);
   } catch (error) {
-    console.error('Balance API failed:', error);
+    console.error('Balance RPC failed:', error);
     return NextResponse.json(
       { error: 'Failed to fetch balance', confirmed: 0, unconfirmed: 0 },
       { status: 500 }

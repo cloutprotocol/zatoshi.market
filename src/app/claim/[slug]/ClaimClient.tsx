@@ -34,6 +34,13 @@ type ClaimedToken = {
   name: string;
 };
 
+type ClaimStats = {
+  mintedCount: number;
+  mintedForAddress: { count: number };
+  reservedCount?: number;
+  reservedForAddress?: { count: number };
+};
+
 export function ClaimClient({ collection }: Props) {
   const { wallet, badges, mounted } = useWallet();
   const [loadingAlloc, setLoadingAlloc] = useState(false);
@@ -41,14 +48,15 @@ export function ClaimClient({ collection }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [claiming, setClaiming] = useState(false);
   const [claimCount, setClaimCount] = useState(1);
-  const [claimStats, setClaimStats] = useState<{ mintedCount: number; mintedForAddress: { count: number } } | null>(null);
+  const [claimStats, setClaimStats] = useState<ClaimStats | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [pendingTokens, setPendingTokens] = useState<number[]>([]);
   const [pendingPayloads, setPendingPayloads] = useState<string[]>([]);
+  // Fee tiers (zatoshis per tx). Increased minimum for production reliability.
   const feeTiers = [
-    { key: 'low', label: 'Low', perTx: 20000 },
-    { key: 'normal', label: 'Normal', perTx: 50000 },
-    { key: 'high', label: 'High', perTx: 100000 },
+    { key: 'low', label: 'Low', perTx: 300000 },
+    { key: 'normal', label: 'Normal', perTx: 400000 },
+    { key: 'high', label: 'High', perTx: 500000 },
   ] as const;
   const [selectedFeeTier, setSelectedFeeTier] = useState<typeof feeTiers[number]>(feeTiers[1]);
   const [minting, setMinting] = useState(false);
@@ -160,8 +168,9 @@ export function ClaimClient({ collection }: Props) {
 
   const remainingAllowlist = useMemo(() => {
     if (!allocation) return 0;
-    const already = claimStats?.mintedForAddress?.count ?? 0;
-    return Math.max(0, allocation.max - already);
+    const minted = claimStats?.mintedForAddress?.count ?? 0;
+    const reserved = claimStats?.reservedForAddress?.count ?? 0;
+    return Math.max(0, allocation.max - minted - reserved);
   }, [allocation, claimStats]);
 
   const handleClaim = async () => {

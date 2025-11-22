@@ -60,134 +60,198 @@ export const runNextMint = action({
 
     const required = finalInscriptionAmount + fee + platformFeeZats;
     // Filter safe only
+    // Filter safe only
     const candidates = utxos.filter(u => u.value >= required);
-    let utxo = undefined as undefined | typeof candidates[number];
-    for (const c of candidates) {
-      const hasInsc = await checkInscriptionAt(`${c.txid}:${c.vout}`);
-      if (!hasInsc) { utxo = c; break; }
+
+    // Retry loop: Try up to 3 candidates (or all if fewer) to handle race conditions/stale UTXOs
+    let lastError: any = null;
+    let success = false;
+
+    // Sort candidates by value (ascending) to use smallest sufficient UTXOs first, 
+    // or shuffle/randomize if we want to reduce collision probability further.
+    // For now, just taking the first few valid ones.
+    for (const utxoCandidate of candidates) {
+      // Check inscription status
+      const hasInsc = await checkInscriptionAt(`${utxoCandidate.txid}:${utxoCandidate.vout}`);
+      if (hasInsc) continue;
+
+      // Try lock
+      const lockRes = await ctx.runMutation(internal.utxoLocks.lockUtxo, {
+        txid: utxoCandidate.txid,
+        vout: utxoCandidate.vout,
+        address: p.address,
+        lockedBy: String(args.jobId)
+      });
+
+      if (!lockRes.locked) {
+        // If locked by someone else, just skip to next candidate
+        continue;
+      }
+
+      // We have the lock, try to mint
+      try {
+        const branchId = await getConsensusBranchId();
+        const chunks = buildInscriptionChunks(contentType, contentStr);
+        // Provisional to get p2sh
+        const redeemProvisional = createRevealScript(new Uint8Array(0), chunks);
+        const p2sh = p2shFromRedeem(redeemProvisional);
+        // Build commit (get pubkey)
+        const commitBuilt = await buildCommitTxHex({
+          utxo: utxoCandidate,
+          address: p.address,
+          wif: p.wif,
+          inscriptionAmount: finalInscriptionAmount,
+          fee,
+          consensusBranchId: branchId,
+          redeemScript: new Uint8Array(0),
+          p2shScript: p2sh.script,
+        });
+        const redeemScript = createRevealScript(commitBuilt.pubKey, chunks);
+        const p2shFixed = p2shFromRedeem(redeemScript);
+        const commit = await buildCommitTxHex({
+          utxo: utxoCandidate,
+          address: p.address,
+          wif: p.wif,
+          inscriptionAmount: finalInscriptionAmount,
+          fee,
+          consensusBranchId: branchId,
+          redeemScript,
+          p2shScript: p2shFixed.script,
+          platformFeeZats,
+          platformTreasuryAddress: PLATFORM_TREASURY,
+        });
+
+        // Broadcast Commit
+        let commitTxid: string;
+        try {
+          commitTxid = await broadcastTransaction(commit.hex);
+        } catch (broadcastErr: any) {
+          const msg = String(broadcastErr?.message || broadcastErr);
+          // If inputs are spent, this UTXO is bad. Unlock and try next.
+          if (msg.includes('bad-txns-inputs-spent') || msg.includes('missing inputs') || msg.includes('txn-mempool-conflict')) {
+            console.warn(`[runNextMint] UTXO ${utxoCandidate.txid}:${utxoCandidate.vout} spent/conflict, retrying next...`);
+            await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxoCandidate.txid, vout: utxoCandidate.vout });
+            lastError = broadcastErr;
+            continue; // Try next candidate
+          }
+          throw broadcastErr; // Other errors are fatal for this attempt
+        }
+
+        // Wait for propagation
+        await new Promise((r) => setTimeout(r, waitMs));
+
+        const inscriptionData = buildInscriptionDataBuffer(contentStr, contentType);
+        const revealHex = await buildRevealTxHex({
+          commitTxid,
+          address: p.address,
+          wif: p.wif,
+          inscriptionAmount: finalInscriptionAmount,
+          fee,
+          consensusBranchId: branchId,
+          redeemScript,
+          inscriptionData
+        });
+
+        const revealTxid = await broadcastTransaction(revealHex);
+        const inscriptionId = `${revealTxid}i0`;
+        const preview = contentStr.slice(0, 200);
+        let zrc20Tick: string | undefined;
+        let zrc20Op: string | undefined;
+        let zrc20Amount: string | undefined;
+        let inscriptionType = p.type ?? (contentType.startsWith("application/json") ? "zrc20" : "text");
+        if (contentType.startsWith('application/json')) {
+          try {
+            const parsed = JSON.parse(contentStr);
+            if (parsed?.p === 'zrc-20') {
+              zrc20Tick = parsed.tick?.toString()?.toUpperCase();
+              zrc20Op = parsed.op?.toString();
+              zrc20Amount = parsed.amt?.toString();
+              inscriptionType = "zrc20";
+            } else if (parsed?.p?.toLowerCase?.() === 'zrc-721') {
+              inscriptionType = "zrc-721";
+            }
+          } catch { }
+        }
+
+        const docId = await ctx.runMutation(api.inscriptions.createInscription, {
+          txid: revealTxid,
+          address: p.address,
+          contentType,
+          contentPreview: preview,
+          contentSize: new TextEncoder().encode(contentStr).length,
+          type: inscriptionType,
+          platformFeeZat: platformFeeZats,
+          treasuryAddress: PLATFORM_TREASURY,
+          zrc20Tick,
+          zrc20Op,
+          zrc20Amount,
+        } as any);
+
+        // Actual on-chain cost calculation
+        const change = utxoCandidate.value - finalInscriptionAmount - fee - platformFeeZats;
+        const changeReturned = change > 546 ? change : 0;
+        const revealDustReturned = 547;
+        const actualCostZats = utxoCandidate.value - changeReturned - revealDustReturned;
+
+        await ctx.runMutation(api.jobs.addJobProgress, {
+          jobId: args.jobId,
+          inscriptionId,
+          inscriptionDocId: docId,
+          costZats: actualCostZats,
+        });
+
+        const updated = await ctx.runQuery(api.jobs.getJob, { jobId: args.jobId });
+        if (updated && updated.completedCount >= updated.totalCount) {
+          await ctx.runMutation(api.jobs.setJobStatus, { jobId: args.jobId, status: "completed" });
+          await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxoCandidate.txid, vout: utxoCandidate.vout });
+          return { status: "completed" };
+        }
+
+        await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxoCandidate.txid, vout: utxoCandidate.vout });
+        // Tail-chain next mint
+        await ctx.runAction(api.jobsActions.runNextMint, { jobId: args.jobId });
+        success = true;
+        return { status: "running" };
+
+      } catch (e: any) {
+        // If we failed AFTER locking but BEFORE broadcasting commit (or during non-retryable broadcast error),
+        // we must unlock and handle error.
+        // If we are here, it means we either didn't 'continue' (fatal error) or something else broke.
+        // We should try to unlock the current UTXO.
+        await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxoCandidate.txid, vout: utxoCandidate.vout });
+
+        // If it was a "spent" error that bubbled up (unlikely given the catch above, but possible if logic changes),
+        // we might want to continue. But for now, treat other errors as fatal for this UTXO.
+        // Actually, if we are here, it's likely a fatal error for this UTXO or a general error.
+        // Let's capture it and try the next UTXO if it looks transient, otherwise throw.
+
+        const msg = String(e?.message || e);
+        if (msg.includes('bad-txns-inputs-spent') || msg.includes('missing inputs')) {
+          lastError = e;
+          continue;
+        }
+
+        // For other errors, we might want to abort the whole job or just this attempt?
+        // Current logic: throw immediately for non-spent errors.
+        throw e;
+      }
     }
-    if (!utxo) {
-      throw new Error(
+
+    // If we exit the loop without success, throw the last error or a generic one
+    if (!success) {
+      const e = lastError || new Error(
         `Not enough spendable funds. Need at least ${required} zats to proceed. ` +
         `Add funds and try again.`
       );
-    }
-    // Try lock
-    const lockRes = await ctx.runMutation(internal.utxoLocks.lockUtxo, { txid: utxo.txid, vout: utxo.vout, address: p.address, lockedBy: String(args.jobId) });
-    if (!lockRes.locked) throw new Error("UTXO lock failed; retry later");
 
-    try {
-      const branchId = await getConsensusBranchId();
-      const chunks = buildInscriptionChunks(contentType, contentStr);
-      // Provisional to get p2sh
-      const redeemProvisional = createRevealScript(new Uint8Array(0), chunks);
-      const p2sh = p2shFromRedeem(redeemProvisional);
-      // Build commit (get pubkey)
-      const commitBuilt = await buildCommitTxHex({
-        utxo,
-        address: p.address,
-        wif: p.wif,
-        inscriptionAmount: finalInscriptionAmount,
-        fee,
-        consensusBranchId: branchId,
-        redeemScript: new Uint8Array(0),
-        p2shScript: p2sh.script,
-      });
-      const redeemScript = createRevealScript(commitBuilt.pubKey, chunks);
-      const p2shFixed = p2shFromRedeem(redeemScript);
-      const commit = await buildCommitTxHex({
-        utxo,
-        address: p.address,
-        wif: p.wif,
-        inscriptionAmount: finalInscriptionAmount,
-        fee,
-        consensusBranchId: branchId,
-        redeemScript,
-        p2shScript: p2shFixed.script,
-        platformFeeZats,
-        platformTreasuryAddress: PLATFORM_TREASURY,
-      });
-      const commitTxid = await broadcastTransaction(commit.hex);
-      await new Promise((r) => setTimeout(r, waitMs));
-      const inscriptionData = buildInscriptionDataBuffer(contentStr, contentType);
-      const revealHex = await buildRevealTxHex({ commitTxid, address: p.address, wif: p.wif, inscriptionAmount: finalInscriptionAmount, fee, consensusBranchId: branchId, redeemScript, inscriptionData });
-      const revealTxid = await broadcastTransaction(revealHex);
-      const inscriptionId = `${revealTxid}i0`;
-      const preview = contentStr.slice(0, 200);
-      let zrc20Tick: string | undefined;
-      let zrc20Op: string | undefined;
-      let zrc20Amount: string | undefined;
-      let inscriptionType = p.type ?? (contentType.startsWith("application/json") ? "zrc20" : "text");
-      if (contentType.startsWith('application/json')) {
-        try {
-          const parsed = JSON.parse(contentStr);
-          if (parsed?.p === 'zrc-20') {
-            zrc20Tick = parsed.tick?.toString()?.toUpperCase();
-            zrc20Op = parsed.op?.toString();
-            zrc20Amount = parsed.amt?.toString();
-            inscriptionType = "zrc20";
-          } else if (parsed?.p?.toLowerCase?.() === 'zrc-721') {
-            inscriptionType = "zrc-721";
-          }
-        } catch { }
-      }
-      const docId = await ctx.runMutation(api.inscriptions.createInscription, {
-        txid: revealTxid,
-        address: p.address,
-        contentType,
-        contentPreview: preview,
-        contentSize: new TextEncoder().encode(contentStr).length,
-        type: inscriptionType,
-        platformFeeZat: platformFeeZats,
-        treasuryAddress: PLATFORM_TREASURY,
-        zrc20Tick,
-        zrc20Op,
-        zrc20Amount,
-      } as any);
-      // Actual on-chain cost calculation:
-      // Total spent = UTXO input - what we got back (change + reveal dust)
-      // 
-      // Commit tx: utxo.value -> inscriptionAmount (P2SH) + platformFee (treasury) + change + commitFee
-      // Reveal tx: inscriptionAmount -> 547 (dust) + revealFee
-      //
-      // What we got back:
-      // - Change from commit (if > dust limit)
-      // - Dust output from reveal (547 zats)
-      const change = utxo.value - finalInscriptionAmount - fee - platformFeeZats;
-      const changeReturned = change > 546 ? change : 0; // Change only returned if above dust limit
-      const revealDustReturned = 547;
-
-      // Everything else was consumed (platform fee + both transaction fees)
-      const actualCostZats = utxo.value - changeReturned - revealDustReturned;
-
-      await ctx.runMutation(api.jobs.addJobProgress, {
-        jobId: args.jobId,
-        inscriptionId,
-        inscriptionDocId: docId,
-        costZats: actualCostZats,
-      });
-
-      const updated = await ctx.runQuery(api.jobs.getJob, { jobId: args.jobId });
-      if (updated && updated.completedCount >= updated.totalCount) {
-        await ctx.runMutation(api.jobs.setJobStatus, { jobId: args.jobId, status: "completed" });
-        await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxo.txid, vout: utxo.vout });
-        return { status: "completed" };
-      }
-      await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxo.txid, vout: utxo.vout });
-      // Tail-chain next mint
-      await ctx.runAction(api.jobsActions.runNextMint, { jobId: args.jobId });
-      return { status: "running" };
-    } catch (e: any) {
       // Sanitize error message before storing/throwing
       let errorMsg = e?.message ? String(e.message) : String(e);
 
       // Remove provider names and internal details
       errorMsg = errorMsg
-        .replace(/zerdinals\(\d+\):\s*/gi, '')
         .replace(/tatum:\s*/gi, '')
         .replace(/blockchair\(\d+\):\s*/gi, '')
         .replace(/\[broadcast\]\s*All providers failed:\s*\[/gi, '')
-        .replace(/'[^']*zerdinals[^']*'/gi, '')
         .replace(/'[^']*tatum[^']*'/gi, '')
         .replace(/'[^']*blockchair[^']*'/gi, '')
         .replace(/,\s*,/g, ',')
@@ -206,7 +270,6 @@ export const runNextMint = action({
       }
 
       await ctx.runMutation(api.jobs.setJobStatus, { jobId: args.jobId, status: "failed", error: errorMsg });
-      await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxo.txid, vout: utxo.vout });
       throw new Error(errorMsg);
     }
   }

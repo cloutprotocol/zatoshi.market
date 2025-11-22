@@ -912,15 +912,17 @@ export const broadcastSignedRevealAction = action({
       }
 
       // Generic fallback: Sanitize message by removing provider names and internal details
-      let sanitized = msg
+      // Sanitize error message before storing/throwing
+      let sanitized = e?.message ? String(e.message) : String(e);
+
+      // Remove provider names and internal details
+      sanitized = sanitized
         .replace(/convex/gi, '')
         .replace(/inscriptionsActions/gi, '')
         .replace(/\\.ts:\\d+/g, '')
-        .replace(/zerdinals\(\d+\):\s*/gi, '')
         .replace(/tatum:\s*/gi, '')
         .replace(/blockchair\(\d+\):\s*/gi, '')
         .replace(/\[broadcast\]\s*All providers failed:\s*\[/gi, '')
-        .replace(/'[^']*zerdinals[^']*'/gi, '')
         .replace(/'[^']*tatum[^']*'/gi, '')
         .replace(/'[^']*blockchair[^']*'/gi, '')
         .replace(/,\s*,/g, ',')

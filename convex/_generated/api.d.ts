@@ -10,7 +10,9 @@
 
 import type * as badges from "../badges.js";
 import type * as badgesActions from "../badgesActions.js";
+import type * as claimAllowlists from "../claimAllowlists.js";
 import type * as collectionClaims from "../collectionClaims.js";
+import type * as debugClaims from "../debugClaims.js";
 import type * as inscriptionParser from "../inscriptionParser.js";
 import type * as inscriptions from "../inscriptions.js";
 import type * as inscriptionsActions from "../inscriptionsActions.js";
@@ -35,7 +37,9 @@ import type {
 declare const fullApi: ApiFromModules<{
   badges: typeof badges;
   badgesActions: typeof badgesActions;
+  claimAllowlists: typeof claimAllowlists;
   collectionClaims: typeof collectionClaims;
+  debugClaims: typeof debugClaims;
   inscriptionParser: typeof inscriptionParser;
   inscriptions: typeof inscriptions;
   inscriptionsActions: typeof inscriptionsActions;

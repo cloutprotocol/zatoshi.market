@@ -1,9 +1,10 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
+import { callZcashRPC, hexToBytes } from "./zcashHelpers";
 
 /**
  * Parse inscription content from raw transaction data
- * This reassembles chunked inscriptions that Zerdinals indexer cannot read
+ * This reassembles chunked inscriptions directly from the chain via RPC
  */
 export const parseInscriptionFromChain = action({
   args: { inscriptionId: v.string() },
@@ -11,66 +12,110 @@ export const parseInscriptionFromChain = action({
     const txid = args.inscriptionId.replace(/i\d+$/, '');
 
     try {
-      // Fetch raw transaction from Blockchair
-      const response = await fetch(
-        `https://api.blockchair.com/zcash/raw/transaction/${txid}`
-      );
+      // Fetch raw transaction from Zatoshi RPC
+      const tx = await callZcashRPC('getrawtransaction', [txid, 1]);
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch tx: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const rawTx = data.data?.[txid]?.raw_transaction;
-
-      if (!rawTx) {
+      if (!tx) {
         throw new Error('Transaction not found');
       }
 
-      // Parse scriptSig hex to extract inscription data
-      const scriptSigHex = data.data[txid].decoded_raw_transaction.vin[0].scriptSig.hex;
+      // Inscriptions are in the input scriptSig (witness data in BTC, but scriptSig in ZEC usually)
+      // We look at the first input usually, or iterate inputs to find the one with "ord"
+      const vin = tx.vin.find((v: any) => v.scriptSig?.hex?.includes('6f7264')); // 'ord'
+
+      if (!vin || !vin.scriptSig?.hex) {
+        throw new Error('No inscription data found in transaction');
+      }
+
+      const scriptSigHex = vin.scriptSig.hex;
       const buf = hexToBytes(scriptSigHex);
 
       // Parse Ordinals envelope
+      // Standard format: ... OP_FALSE OP_IF push("ord") OP_1 push(contentType) OP_0 push(content) ... OP_ENDIF
+      // Zerdinals often just does: push("ord") OP_1 push(contentType) OP_0 push(content)
+
       let pos = 0;
 
-      // Skip "ord" push
-      const ordLen = buf[pos++];
-      pos += ordLen;
+      // Scan for "ord" marker (0x03 0x6f 0x72 0x64)
+      // This allows us to skip signature data at the start
+      const ordMarker = [0x03, 0x6f, 0x72, 0x64];
+      let foundStart = -1;
 
-      // Skip OP_1 (content type tag)
-      pos += 1;
-
-      // Read content type
-      const ctLen = buf[pos++];
-      const contentType = bytesToUtf8(buf.slice(pos, pos + ctLen));
-      pos += ctLen;
-
-      // Skip OP_0 (content tag)
-      pos += 1;
-
-      // Extract all content chunks
-      const chunks: Uint8Array[] = [];
-      while (pos < buf.length - 150) { // Stop before signature/pubkey area
-        const opcode = buf[pos++];
-
-        if (opcode === 0x4c) { // OP_PUSHDATA1
-          const len = buf[pos++];
-          chunks.push(buf.slice(pos, pos + len));
-          pos += len;
-        } else if (opcode === 0x4d) { // OP_PUSHDATA2
-          const len = buf[pos] | (buf[pos + 1] << 8);
-          pos += 2;
-          chunks.push(buf.slice(pos, pos + len));
-          pos += len;
-        } else if (opcode === 0x4e) { // OP_PUSHDATA4
-          const len = buf[pos] | (buf[pos + 1] << 8) | (buf[pos + 2] << 16) | (buf[pos + 3] << 24);
-          pos += 4;
-          chunks.push(buf.slice(pos, pos + len));
-          pos += len;
-        } else {
-          break; // Hit signature or other data
+      for (let i = 0; i < buf.length - 3; i++) {
+        if (buf[i] === ordMarker[0] && buf[i + 1] === ordMarker[1] && buf[i + 2] === ordMarker[2] && buf[i + 3] === ordMarker[3]) {
+          foundStart = i;
+          break;
         }
+      }
+
+      if (foundStart === -1) {
+        throw new Error('Ordinals protocol marker not found');
+      }
+
+      pos = foundStart + 4; // Skip "ord" push
+
+      // Expect OP_1 (0x51) - Content Type Tag
+      if (buf[pos] !== 0x51) {
+        // Try to be lenient? No, strictly follow protocol for now.
+        // Some implementations might differ.
+      }
+      pos++;
+
+      // Read Content Type
+      let contentType = 'application/octet-stream';
+      // Next opcode should be a push
+      let opcode = buf[pos++];
+      let len = 0;
+
+      if (opcode > 0 && opcode <= 0x4b) { len = opcode; }
+      else if (opcode === 0x4c) { len = buf[pos++]; }
+      else if (opcode === 0x4d) { len = buf[pos] | (buf[pos + 1] << 8); pos += 2; }
+
+      if (len > 0) {
+        contentType = new TextDecoder().decode(buf.slice(pos, pos + len));
+        pos += len;
+      }
+
+      // Expect OP_0 (0x00) - Content Tag
+      if (buf[pos] !== 0x00) {
+        // Maybe metadata? Skip until OP_0
+        while (pos < buf.length && buf[pos] !== 0x00 && buf[pos] !== 0x68) { // 0x68 is OP_ENDIF
+          pos++;
+        }
+      }
+
+      if (buf[pos] === 0x00) {
+        pos++; // Consume OP_0
+      }
+
+      // Extract content chunks
+      const chunks: Uint8Array[] = [];
+
+      while (pos < buf.length) {
+        opcode = buf[pos++];
+
+        if (opcode === 0x68) break; // OP_ENDIF - End of envelope
+
+        len = 0;
+        if (opcode > 0 && opcode <= 0x4b) {
+          len = opcode;
+        } else if (opcode === 0x4c) {
+          len = buf[pos++];
+        } else if (opcode === 0x4d) {
+          len = buf[pos] | (buf[pos + 1] << 8);
+          pos += 2;
+        } else if (opcode === 0x4e) {
+          len = buf[pos] | (buf[pos + 1] << 8) | (buf[pos + 2] << 16) | (buf[pos + 3] << 24);
+          pos += 4;
+        } else {
+          // Unexpected opcode, might be end of script or signature
+          break;
+        }
+
+        if (pos + len > buf.length) break; // Safety check
+
+        chunks.push(buf.slice(pos, pos + len));
+        pos += len;
       }
 
       // Reassemble content
@@ -100,14 +145,6 @@ export const parseInscriptionFromChain = action({
 });
 
 // Helper functions
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
-  }
-  return bytes;
-}
-
 function bytesToUtf8(bytes: Uint8Array): string {
   return new TextDecoder().decode(bytes);
 }

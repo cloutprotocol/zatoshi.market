@@ -75,7 +75,8 @@ export const calculateTotalCost = (
   // ZIP-317 based fee calculation
   const calculatedFee = Math.ceil(estimatedTxSize * NETWORK_FEE_UNIT_ZATS_PER_BYTE);
 
-  const ZIP_317_CAP = 100000;
+  // Allow higher user-selected fee floors during heavy network conditions
+  const ZIP_317_CAP = 1000000; // 1,000,000 zats cap (~0.01 ZEC)
   const floor = Math.max(FEE_FLOOR_ZATS, opts?.feePerTx ?? 0);
   const networkFee = Math.min(Math.max(calculatedFee, floor), ZIP_317_CAP);
 
@@ -132,7 +133,8 @@ export const calculateImageInscriptionFees = (fileSizeBytes: number, opts?: { fe
 
   // Enforce minimum fee floor (50,000 zats) to avoid "unpaid action limit exceeded"
   // Cap at reasonable maximum (100,000 zats) to keep large inscriptions affordable
-  const ZIP_317_CAP = 100000;
+  // Allow higher user-selected fee floors during heavy network conditions
+  const ZIP_317_CAP = 1000000; // 1,000,000 zats cap (~0.01 ZEC)
   const floor = Math.max(FEE_FLOOR_ZATS, opts?.feePerTx ?? 0);
   const networkFee = Math.min(Math.max(calculatedFee, floor), ZIP_317_CAP);
 

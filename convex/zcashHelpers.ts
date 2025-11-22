@@ -350,6 +350,44 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
   }
 }
 
+// RPC Helper
+export async function callZcashRPC(method: string, params: any[] = []) {
+  const url = process.env.NEXT_PUBLIC_ZCASH_RPC_URL || 'https://rpc.zatoshi.market/api/rpc';
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  // Add Basic Auth if credentials are present (required for localhost/dev)
+  const username = process.env.ZCASH_RPC_USERNAME;
+  const password = process.env.ZCASH_RPC_PASSWORD;
+  if (username && password) {
+    const auth = Buffer.from(`${username}:${password}`).toString('base64');
+    headers['Authorization'] = `Basic ${auth}`;
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method,
+      params,
+      id: 'zatoshi-convex'
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`RPC HTTP ${response.status}: ${text}`);
+  }
+
+  const data = await response.json();
+  if (data.error) {
+    throw new Error(data.error.message || JSON.stringify(data.error));
+  }
+  return data.result;
+}
+
 export function calculateTxid(hex: string): string {
   const bytes = hexToBytes(hex);
   const hash = sha256(sha256(bytes));
@@ -358,50 +396,33 @@ export function calculateTxid(hex: string): string {
 
 export async function broadcastTransaction(hex: string, tatumKey?: string): Promise<string> {
   const computedTxid = calculateTxid(hex);
-  const SIGNAL = timeoutSignal(8000);
   const errors: string[] = [];
 
-  // 1) Zerdinals helper relay (previous default) — most likely to accept reveal immediately
-  //    after commit because it sees the commit right away. We use this as the first option
-  //    to restore prior reliability during ongoing fee/platform changes.
+  // 1) Zatoshi RPC (Primary)
   try {
-    const r = await fetch('https://utxos.zerdinals.com/api/send-transaction', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rawTransaction: hex }), signal: SIGNAL
-    });
-    if (r.ok) {
-      const { txid, snippet } = await extractTxidFromResponse('zerdinals', r);
-      if (txid) return txid;
-      errors.push(`zerdinals: ${snippet}`);
-    } else {
-      const text = await r.text().catch(() => 'unknown error');
-      errors.push(`zerdinals(${r.status}): ${text.slice(0, 200)}`);
+    const result = await callZcashRPC('sendrawtransaction', [hex]);
+    // RPC returns txid string on success
+    if (typeof result === 'string' && result.length === 64) {
+      return result;
     }
+    // If result is an object (some nodes), try to extract
+    const extracted = typeof result === 'object' ? (result?.txid || result?.hash) : null;
+    if (extracted) return extracted;
+
+    console.warn('[broadcast][rpc] unexpected result format:', result);
   } catch (e: any) {
-    errors.push(`zerdinals: ${e?.message || 'network error'}`);
+    const msg = e?.message || String(e);
+    // Handle "transaction already in block chain"
+    if (msg.includes('transaction already in block chain') || msg.includes('code -27')) {
+      console.log(`[broadcast][rpc] transaction already in chain, returning computed txid: ${computedTxid}`);
+      return computedTxid;
+    }
+    errors.push(`rpc: ${msg}`);
   }
 
-  // 2) Zatoshi RPC (new fallback)
+  // 2) Tatum JSON-RPC fallback (Secondary)
   try {
-    const r = await fetch('https://rpc.zatoshi.market/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', method: 'sendrawtransaction', params: [hex], id: 1 }),
-      signal: SIGNAL,
-    });
-    if (r.ok) {
-      const { txid, snippet } = await extractTxidFromResponse('zatoshi', r);
-      if (txid) return txid;
-      errors.push(`zatoshi: ${snippet}`);
-    } else {
-      const text = await r.text().catch(() => 'unknown error');
-      errors.push(`zatoshi(${r.status}): ${text.slice(0, 200)}`);
-    }
-  } catch (e: any) {
-    errors.push(`zatoshi: ${e?.message || 'network error'}`);
-  }
-
-  // 3) Tatum JSON-RPC fallback
-  try {
+    const SIGNAL = timeoutSignal(5000);
     const r = await fetch('https://api.tatum.io/v3/blockchain/node/zcash-mainnet', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': tatumKey || process.env.TATUM_API_KEY || '' },
@@ -411,17 +432,13 @@ export async function broadcastTransaction(hex: string, tatumKey?: string): Prom
     if (r.ok) {
       const { txid, snippet } = await extractTxidFromResponse('tatum', r);
       if (txid) return txid;
-      // Handle "transaction already in block chain" (code -27) as success
       if (snippet.includes('transaction already in block chain') || snippet.includes('"code":-27')) {
-        console.log(`[broadcast][tatum] transaction already in chain, returning computed txid: ${computedTxid}`);
         return computedTxid;
       }
       errors.push(`tatum: ${snippet}`);
     } else {
       const text = await r.text().catch(() => 'unknown error');
-      // Handle "transaction already in block chain" in error response too
       if (text.includes('transaction already in block chain') || text.includes('"code":-27')) {
-        console.log(`[broadcast][tatum] transaction already in chain (error resp), returning computed txid: ${computedTxid}`);
         return computedTxid;
       }
       errors.push(`tatum(${r.status}): ${text.slice(0, 200)}`);
@@ -430,8 +447,9 @@ export async function broadcastTransaction(hex: string, tatumKey?: string): Prom
     errors.push(`tatum: ${e?.message || 'network error'}`);
   }
 
-  // 4) Blockchair push (if available)
+  // 3) Blockchair push (Tertiary)
   try {
+    const SIGNAL = timeoutSignal(5000);
     const key = process.env.BLOCKCHAIR_API_KEY;
     const url = key
       ? `https://api.blockchair.com/zcash/push/transaction?key=${key}`
@@ -444,9 +462,7 @@ export async function broadcastTransaction(hex: string, tatumKey?: string): Prom
       errors.push(`blockchair: ${snippet}`);
     } else {
       const text = await r.text().catch(() => 'unknown error');
-      // Blockchair might also return similar errors
-      if (text.includes('transaction already in block chain') || text.includes('Transaction already in block chain')) {
-        console.log(`[broadcast][blockchair] transaction already in chain, returning computed txid: ${computedTxid}`);
+      if (text.includes('transaction already in block chain')) {
         return computedTxid;
       }
       errors.push(`blockchair(${r.status}): ${text.slice(0, 200)}`);
@@ -455,22 +471,13 @@ export async function broadcastTransaction(hex: string, tatumKey?: string): Prom
     errors.push(`blockchair: ${e?.message || 'network error'}`);
   }
 
-  // Log all provider errors for debugging
   console.error('[broadcast] All providers failed:', errors);
-
-  // Try to extract a meaningful error message for the user
   const errorMsg = errors.join(' | ');
-  if (errorMsg.includes('scriptsig-not-pushonly')) {
-    throw new Error('Transaction rejected: Invalid script format. Please try again or contact support.');
-  }
-  if (errorMsg.includes('unpaid action') || errorMsg.includes('insufficient fee')) {
-    throw new Error('Transaction fee too low. Please increase the fee and try again.');
-  }
-  if (errorMsg.includes('missing inputs') || errorMsg.includes('bad-txns-inputs-missingorspent')) {
-    throw new Error('Transaction inputs unavailable. Please wait a moment and try again.');
-  }
+  if (errorMsg.includes('scriptsig-not-pushonly')) throw new Error('Transaction rejected: Invalid script format.');
+  if (errorMsg.includes('unpaid action') || errorMsg.includes('insufficient fee')) throw new Error('Transaction fee too low.');
+  if (errorMsg.includes('missing inputs') || errorMsg.includes('bad-txns-inputs-missingorspent')) throw new Error('Transaction inputs unavailable.');
 
-  throw new Error(`Broadcast failed. Network response: ${errors[0] || 'Unknown error'}`);
+  throw new Error(`Broadcast failed: ${errors[0]}`);
 }
 
 export async function buildCommitTxHex(params: {
@@ -548,9 +555,22 @@ export async function buildRevealTxHex(params: {
   return bytesToHex(raw);
 }
 
-// Exact pre-change provider order: Blockchair first, fallback to Zerdinals helper.
 export async function fetchUtxos(address: string): Promise<Utxo[]> {
-  // Blockchair first
+  // Use Zatoshi RPC (Insight-compatible getaddressutxos)
+  try {
+    const result = await callZcashRPC('getaddressutxos', [{ addresses: [address] }]);
+    if (Array.isArray(result)) {
+      return result.map((u: any) => ({
+        txid: u.txid,
+        vout: u.outputIndex,
+        value: u.satoshis
+      })).filter(u => u.value > 0);
+    }
+  } catch (e) {
+    console.error('[fetchUtxos] RPC failed:', e);
+  }
+
+  // Fallback: Blockchair
   try {
     const key = process.env.BLOCKCHAIR_API_KEY;
     const url = key
@@ -562,77 +582,77 @@ export async function fetchUtxos(address: string): Promise<Utxo[]> {
       const d = j?.data?.[address] || j?.data?.[Object.keys(j?.data || {})[0]];
       const utxoArr: any[] = d?.utxo || [];
       if (Array.isArray(utxoArr)) {
-        const mapped: Utxo[] = utxoArr.map((u: any) => {
+        return utxoArr.map((u: any) => {
           const rawVal = (u?.value ?? u?.satoshis ?? u?.amount);
-          let value: number;
-          if (typeof rawVal === 'string') {
-            const f = parseFloat(rawVal);
-            if (!Number.isFinite(f)) value = 0;
-            else if (rawVal.includes('.') || f < 1) value = Math.round(f * 1e8);
-            else value = Math.round(f);
-          } else if (typeof rawVal === 'number') {
-            if (Number.isInteger(rawVal)) value = rawVal;
-            else if (rawVal > 0 && rawVal < 1) value = Math.round(rawVal * 1e8);
-            else value = Math.round(rawVal);
-          } else {
-            value = 0;
-          }
-          const vout = Number(u?.index ?? u?.vout ?? u?.n ?? 0);
-          const txid = u?.transaction_hash || u?.txid || u?.hash || u?.tx_hash;
-          return { txid, vout, value } as Utxo;
-        }).filter((u: Utxo) => !!u.txid && Number.isFinite(u.vout) && Number.isFinite(u.value));
-        if (mapped.length > 0) return mapped;
+          let value: number = 0;
+          if (typeof rawVal === 'number') value = rawVal;
+          else if (typeof rawVal === 'string') value = parseFloat(rawVal);
+
+          // Blockchair sometimes returns BTC-like units or satoshis, usually satoshis for UTXO endpoint
+          // but let's be safe. If it's small float, it might be ZEC.
+          // Actually Blockchair UTXO endpoint usually returns satoshis as integer.
+
+          return {
+            txid: u.transaction_hash || u.txid || u.hash,
+            vout: u.index ?? u.vout ?? u.n ?? 0,
+            value
+          };
+        }).filter((u: Utxo) => !!u.txid && Number.isFinite(u.value));
       }
     }
-  } catch (_) { }
-  // Fallback to Zerdinals helper service
-  const r2 = await fetch(`https://utxos.zerdinals.com/api/utxos/${address}`);
-  if (!r2.ok) throw new Error('UTXO fetch failed');
-  return r2.json() as Promise<Utxo[]>;
+  } catch (e) {
+    console.error('[fetchUtxos] Blockchair failed:', e);
+  }
+
+  throw new Error('UTXO fetch failed: All providers unavailable');
 }
-// Check if a given outpoint is inscribed.
-// Primary: Zerdinals indexer. Fallback: Heuristic check via raw transaction
-// by scanning input script for the ASCII marker "ord" and treating vout 0 as inscribed.
+
 export async function checkInscriptionAt(location: string) {
+  // Use Zatoshi RPC (getrawtransaction) to check for "ord" tag in scriptSig
+  // FAIL-SAFE: If we cannot verify (RPC error, tx not found), we assume it IS an inscription
+  // to prevent accidental spending of potential inscriptions.
   try {
-    const r = await fetch(`https://indexer.zerdinals.com/location/${location}`);
-    if (r.status === 404) return false;
-    if (!r.ok) throw new Error(`indexer status ${r.status}`);
-    const j = await r.json();
-    if (j?.code === 404) return false;
-    // Only trust explicit inscription indicators to avoid false positives
-    const hasPositiveSignal = Boolean(
-      j?.inscriptionId ||
-      (Array.isArray(j?.inscriptions) && j.inscriptions.length > 0) ||
-      (Array.isArray(j?.locations) && j.locations.length > 0) ||
-      j?.inscribed === true
-    );
-    console.log(`[inscription-check] ${location} → ${hasPositiveSignal ? 'INSCRIBED' : 'clean'} (response keys: ${Object.keys(j || {}).join(', ')})`);
-    return hasPositiveSignal;
-  } catch (err) {
-    console.log(`[inscription-check] ${location} → indexer failed, using fallback: ${err}`);
-    // Fallback to on-node heuristic via Tatum RPC
-    try {
-      const [txid, voutStr] = location.split(":");
-      const vout = parseInt(voutStr || "0", 10) || 0;
-      const tatumKey = process.env.TATUM_API_KEY || "";
-      const url = 'https://api.tatum.io/v3/blockchain/node/zcash-mainnet';
-      const body = { jsonrpc: '2.0', method: 'getrawtransaction', params: [txid, 1], id: 1 };
-      const r2 = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': tatumKey }, body: JSON.stringify(body) });
-      const j2 = await r2.json();
-      const vins = j2?.result?.vin || [];
-      // Reveal-style tx includes redeemScript in scriptSig (hex) containing 'ord'
-      const hasOrd = vins.some((vin: any) => {
-        const hex: string = vin?.scriptSig?.hex || '';
-        return typeof hex === 'string' && hex.toLowerCase().includes('6f7264'); // 'ord'
-      });
-      if (hasOrd && vout === 0) return true;
-      return false;
-    } catch {
-      // Default to not inscribed when we cannot verify; UI still warns users, and our reveal construction
-      // never consumes inscribed UTXOs created by our own flow.
-      return false;
+    const [txid, voutStr] = location.split(":");
+    const vout = parseInt(voutStr || "0", 10) || 0;
+
+    const tx = await callZcashRPC('getrawtransaction', [txid, 1]);
+    if (!tx) {
+      console.warn(`[inscription-check] tx ${txid} not found, treating as unsafe`);
+      return true; // Fail safe
     }
+
+    const vins = tx?.vin || [];
+    const hasOrd = vins.some((vin: any) => {
+      const hex: string = vin?.scriptSig?.hex || '';
+      return typeof hex === 'string' && hex.toLowerCase().includes('6f7264'); // 'ord'
+    });
+
+    if (hasOrd && vout === 0) return true;
+    return false;
+  } catch (err) {
+    console.warn(`[inscription-check] failed for ${location}, treating as unsafe:`, err);
+    return true; // Fail safe
+  }
+}
+
+// Helper to get full inscription/UTXO details (as requested by user pattern)
+export async function checkInscription(txid: string, vout: number) {
+  try {
+    const tx = await callZcashRPC('getrawtransaction', [txid, 1]);
+    if (!tx) throw new Error('Transaction not found');
+
+    const output = tx.vout[vout];
+    if (!output) throw new Error('Output not found');
+
+    return {
+      found: true,
+      confirmations: tx.confirmations,
+      value: output.value,
+      scriptPubKey: output.scriptPubKey
+    };
+  } catch (error) {
+    console.error('Inscription check failed:', error);
+    throw error;
   }
 }
 

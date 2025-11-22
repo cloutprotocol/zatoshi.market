@@ -65,6 +65,8 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
     setUsdPrice(price);
   }, []);
 
+  const [inscriptionTypes, setInscriptionTypes] = useState<Record<string, string>>({});
+
   const fetchInscriptions = useCallback(async (forceRefresh: boolean = false) => {
     if (!wallet?.address) return;
     setLoadingInscriptions(true);
@@ -78,15 +80,19 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
       const contentsToFetch = inscriptionList.slice(0, 30);
       const contents: Record<string, string> = {};
       const images: Record<string, string> = {};
+      const types: Record<string, string> = {};
 
       await Promise.all(
         contentsToFetch.map(async (insc) => {
           try {
-            const ct = insc.contentType || insc.content_type || '';
+            // Always fetch content to determine type
             const response = await fetch(`/api/zcash/inscription-content/${insc.id}`);
             if (!response.ok) return;
 
-            if (ct.startsWith('image/')) {
+            const type = response.headers.get('Content-Type') || 'application/octet-stream';
+            types[insc.id] = type;
+
+            if (type.startsWith('image/')) {
               const blob = await response.blob();
               images[insc.id] = URL.createObjectURL(blob);
             } else {
@@ -100,6 +106,7 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
 
       setInscriptionContents(contents);
       setInscriptionImages(images);
+      setInscriptionTypes(types);
       setInscriptionImageLoaded({});
       setInscriptionImageError({});
       setZrcImageLoaded({});
@@ -585,7 +592,7 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
                           .filter((insc) => inscriptionFilter === 'all' ? true : Boolean(zrc721Assets[insc.id]))
                           .map((insc) => {
                             const asset = zrc721Assets[insc.id];
-                            const contentType = insc.contentType || insc.content_type || 'text/plain';
+                            const contentType = inscriptionTypes[insc.id] || insc.contentType || insc.content_type || 'text/plain';
                             const imageLoaded = zrcImageLoaded[insc.id];
                             const imageErrored = zrcImageError[insc.id];
                             const rawContent = inscriptionContents[insc.id];
@@ -687,10 +694,9 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
                                 )}
 
                                 <div className="flex items-center justify-between text-[10px]">
-                                  <span className="text-gold-400/60">#{insc.inscriptionNumber || '?'}</span>
-                                  <div className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                                    isJSON ? 'bg-blue-500/20 text-blue-300' : 'bg-gold-500/20 text-gold-300'
-                                  }`}>
+                                  {/* <span className="text-gold-400/60">#{insc.inscriptionNumber || '?'}</span> */}
+                                  <div className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${isJSON ? 'bg-blue-500/20 text-blue-300' : 'bg-gold-500/20 text-gold-300'
+                                    }`}>
                                     {isJSON ? 'JSON' : formatFileType(contentType)}
                                   </div>
                                 </div>

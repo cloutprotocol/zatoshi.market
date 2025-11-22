@@ -1,26 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { callZcashRPC } from '../../rpcHelper';
 
 /**
  * Zcash Inscriptions Lookup API
  *
- * Fetches all inscriptions owned by a Zcash address from zerdinals indexer
- * Used to identify inscribed UTXOs that must not be spent in regular transactions
- *
- * Architecture:
- * - Queries zerdinals.com indexer API
- * - Returns inscription locations (txid:vout format)
- * - Client filters these out when selecting UTXOs for sends
- *
- * Critical Use Case:
- * - **UTXO Protection**: Prevents accidental spending of inscribed UTXOs
- * - If you spend an inscribed UTXO, the inscription is permanently lost
- *
- * Returns:
- * - inscribedLocations: Array of "txid:vout" strings for inscribed UTXOs
- * - count: Total number of inscriptions owned by address
+ * Fetches all inscriptions owned by a Zcash address using Zatoshi RPC.
+ * Used to identify inscribed UTXOs that must not be spent in regular transactions.
  */
 
-// Cache inscriptions for 30 seconds (inscriptions don't change frequently)
+// Cache inscriptions for 30 seconds
 const inscriptionCache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_DURATION = 30 * 1000; // 30 seconds
 
@@ -44,43 +32,47 @@ export async function GET(
     }
 
     // Step 1: Fetch UTXOs for this address
-    // Add cache-busting parameter when force refresh is requested
-    const cacheBuster = forceRefresh ? `&_t=${Date.now()}` : '';
-    const utxoResponse = await fetch(
-      `https://api.blockchair.com/zcash/dashboards/address/${address}?key=A___e4MleX7tmjVk50SHfdfZR0pLqcOs${cacheBuster}`
-    );
+    const utxos = await callZcashRPC('getaddressutxos', [{ addresses: [address] }]);
 
-    if (!utxoResponse.ok) {
-      throw new Error(`Failed to fetch UTXOs: ${utxoResponse.statusText}`);
+    if (!Array.isArray(utxos)) {
+      return NextResponse.json({ inscribedLocations: [], count: 0, inscriptions: [] });
     }
-
-    const utxoData = await utxoResponse.json();
-    const utxos = utxoData.data?.[address]?.utxo || [];
 
     // Step 2: Check each UTXO for inscriptions by location
     const inscriptions: any[] = [];
     const inscribedLocations: string[] = [];
 
+    // Process in parallel
     await Promise.all(
       utxos.map(async (utxo: any) => {
-        const location = `${utxo.transaction_hash}:${utxo.index}`;
+        const location = `${utxo.txid}:${utxo.outputIndex}`;
         try {
-          const response = await fetch(
-            `https://indexer.zerdinals.com/location/${location}`
-          );
+          // Check for "ord" tag in scriptSig using getrawtransaction
+          const tx = await callZcashRPC('getrawtransaction', [utxo.txid, 1]);
+          const vins = tx?.vin || [];
 
-          if (response.ok) {
-            const data = await response.json();
-            // If location has inscriptions, add them
-            if (data.data?.result && data.data.result.length > 0) {
-              for (const insc of data.data.result) {
-                inscriptions.push(insc);
-                inscribedLocations.push(location);
-              }
-            }
+          const hasOrd = vins.some((vin: any) => {
+            const hex: string = vin?.scriptSig?.hex || '';
+            return typeof hex === 'string' && hex.toLowerCase().includes('6f7264'); // 'ord'
+          });
+
+          if (hasOrd && utxo.outputIndex === 0) {
+            // It's an inscription!
+            // We don't have full inscription data (content type etc) easily available 
+            // without parsing the scriptSig fully, but we can flag it as inscribed.
+            // For the wallet view, we might need more data, but for protection, this is enough.
+            // The wallet page fetches content via /api/zcash/inscription-content/[id] anyway.
+
+            inscribedLocations.push(location);
+            inscriptions.push({
+              id: `${utxo.txid}i0`,
+              txid: utxo.txid,
+              vout: utxo.outputIndex,
+              // Placeholder data - real data fetched by content API
+              contentType: 'unknown',
+            });
           }
         } catch (err) {
-          // Silently ignore errors for individual UTXO checks
           console.error(`Failed to check location ${location}:`, err);
         }
       })
@@ -95,7 +87,7 @@ export async function GET(
     // Update cache
     inscriptionCache.set(address, { data: result, timestamp: Date.now() });
 
-    // Clean old cache entries (keep last 50 addresses)
+    // Clean old cache entries
     if (inscriptionCache.size > 50) {
       const firstKey = inscriptionCache.keys().next().value;
       inscriptionCache.delete(firstKey);
@@ -105,8 +97,6 @@ export async function GET(
 
   } catch (error) {
     console.error('Inscription lookup error:', error);
-
-    // Return empty result on error (safer to show no inscriptions than fail send)
     return NextResponse.json({
       inscribedLocations: [],
       count: 0,
