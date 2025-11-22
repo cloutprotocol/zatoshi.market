@@ -31,9 +31,6 @@ export default function Header() {
           <Link href="/inscribe" className="px-4 py-2 text-gold-400 hover:text-gold-300">
             INSCRIBE
           </Link>
-          <Link href="/tokens" className="px-4 py-2 text-gold-400 hover:text-gold-300">
-            ZRC20
-          </Link>
           {!mounted ? (
             <button
               className="px-6 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 font-bold hover:bg-gold-500/30 transition-all"
@@ -89,13 +86,6 @@ export default function Header() {
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   INSCRIBE
-                </Link>
-                <Link
-                  href="/tokens"
-                  className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  ZRC20
                 </Link>
               </div>
 
