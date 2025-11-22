@@ -60,6 +60,8 @@ export function ClaimClient({ collection }: Props) {
   const [claimedImageError, setClaimedImageError] = useState<Record<string, boolean>>({});
   const [showCodeForToken, setShowCodeForToken] = useState<Record<number, boolean>>({});
   const [copiedInscription, setCopiedInscription] = useState<string | null>(null);
+  const [selectedToken, setSelectedToken] = useState<ClaimedToken | null>(null);
+  const [selectedTokenMetadata, setSelectedTokenMetadata] = useState<any>(null);
 
   const vipBadgePresent = useMemo(
     () => badges.some((b) => b.badgeSlug === 'vip'),
@@ -336,6 +338,18 @@ export function ClaimClient({ collection }: Props) {
     }
   };
 
+  const handleTokenClick = async (token: ClaimedToken) => {
+    setSelectedToken(token);
+    setShowCodeForToken((prev) => ({ ...prev, [token.tokenId]: false }));
+    try {
+      const metadata = await fetchCollectionMetadata(collection, token.tokenId);
+      setSelectedTokenMetadata(metadata);
+    } catch (err) {
+      console.error('Failed to load metadata for modal', err);
+      setSelectedTokenMetadata(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-black text-gold-100">
       <div className="container mt-14 mx-auto px-6 py-28 max-w-4xl">
@@ -492,68 +506,37 @@ export function ClaimClient({ collection }: Props) {
             <div className="text-sm text-gold-200/70">No claims yet. Mint to reveal your artwork.</div>
           ) : (
             <div className="grid grid-cols-5 gap-4">
-              {claimedTokens.map((token) => {
-                const showingCode = showCodeForToken[token.tokenId];
-                const payload = JSON.stringify({
-                  p: 'zrc-721',
-                  op: 'mint',
-                  collection: collection.name.toUpperCase(),
-                  id: String(token.tokenId),
-                }, null, 2);
-
-                return (
-                  <div key={token.tokenId} className="p-3 rounded border border-gold-500/20 bg-black/40 flex flex-col gap-3">
-                    <div className="relative aspect-square overflow-hidden rounded border border-gold-500/10 bg-black/60 flex items-center justify-center">
-                      <button
-                        type="button"
-                        onClick={() => setShowCodeForToken((prev) => ({ ...prev, [token.tokenId]: !prev[token.tokenId] }))}
-                        className="absolute top-2 right-2 z-10 text-[10px] uppercase tracking-[0.1em] px-2 py-1 bg-black/70 border border-gold-500/40 text-gold-100 hover:border-gold-300 transition"
-                      >
-                        {showingCode ? 'View Art' : 'View Code'}
-                      </button>
-
-                      {showingCode ? (
-                        <pre className="absolute inset-0 m-0 p-2 text-[9px] leading-tight text-gold-100/80 bg-black/80 overflow-auto">
-                          {payload}
-                        </pre>
-                      ) : token.imageUrls.length ? (
-                        <>
-                          {!claimedImageLoaded[String(token.tokenId)] && !claimedImageError[String(token.tokenId)] && (
-                            <div className="absolute inset-0 bg-black/30 skeleton" />
-                          )}
-                          <img
-                            src={token.imageUrls[0]}
-                            data-index={0}
-                            onLoad={() => setClaimedImageLoaded((prev) => ({ ...prev, [String(token.tokenId)]: true }))}
-                            onError={(e) => handleImageError(e.currentTarget, token.imageUrls, String(token.tokenId))}
-                            alt={token.name}
-                            className={`w-full h-full object-cover transition-opacity duration-300 ${claimedImageLoaded[String(token.tokenId)] ? 'opacity-100' : 'opacity-0'}`}
-                          />
-                        </>
-                      ) : (
-                        <div className="text-xs text-gold-200/60">Image unavailable</div>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <div className="font-semibold text-gold-100 text-xs">{token.name}</div>
-                      <div className="text-[10px] text-gold-200/70">#{token.tokenId.toLocaleString()}</div>
-                      {token.inscriptionId && (
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(token.inscriptionId);
-                            setCopiedInscription(token.inscriptionId);
-                            setTimeout(() => setCopiedInscription(null), 2000);
-                          }}
-                          className="text-[9px] text-gold-300/60 font-mono break-all hover:text-gold-300 transition-colors w-full text-left"
-                          title="Click to copy"
-                        >
-                          {copiedInscription === token.inscriptionId ? 'Copied!' : token.inscriptionId}
-                        </button>
-                      )}
-                    </div>
+              {claimedTokens.map((token) => (
+                <div
+                  key={token.tokenId}
+                  className="p-3 rounded border border-gold-500/20 bg-black/40 flex flex-col gap-3 cursor-pointer hover:border-gold-400/60 transition-all"
+                  onClick={() => handleTokenClick(token)}
+                >
+                  <div className="relative aspect-square overflow-hidden rounded border border-gold-500/10 bg-black/60 flex items-center justify-center">
+                    {token.imageUrls.length ? (
+                      <>
+                        {!claimedImageLoaded[String(token.tokenId)] && !claimedImageError[String(token.tokenId)] && (
+                          <div className="absolute inset-0 bg-black/30 skeleton" />
+                        )}
+                        <img
+                          src={token.imageUrls[0]}
+                          data-index={0}
+                          onLoad={() => setClaimedImageLoaded((prev) => ({ ...prev, [String(token.tokenId)]: true }))}
+                          onError={(e) => handleImageError(e.currentTarget, token.imageUrls, String(token.tokenId))}
+                          alt={token.name}
+                          className={`w-full h-full object-cover transition-opacity duration-300 ${claimedImageLoaded[String(token.tokenId)] ? 'opacity-100' : 'opacity-0'}`}
+                        />
+                      </>
+                    ) : (
+                      <div className="text-xs text-gold-200/60">Image unavailable</div>
+                    )}
                   </div>
-                );
-              })}
+                  <div className="space-y-1">
+                    <div className="font-semibold text-gold-100 text-xs">{token.name}</div>
+                    <div className="text-[10px] text-gold-200/70">#{token.tokenId.toLocaleString()}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -635,6 +618,98 @@ export function ClaimClient({ collection }: Props) {
             ) : null
           }
         />
+
+        {/* Token Detail Modal */}
+        {selectedToken && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6 overflow-y-auto">
+            <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded max-w-2xl w-full p-8 my-8">
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h3 className="text-2xl font-bold text-gold-300 mb-2">{selectedToken.name}</h3>
+                  <div className="text-sm text-gold-200/70">#{selectedToken.tokenId.toLocaleString()}</div>
+                </div>
+                <button
+                  onClick={() => {
+                    setSelectedToken(null);
+                    setSelectedTokenMetadata(null);
+                    setShowCodeForToken({});
+                  }}
+                  className="text-gold-400 hover:text-gold-300 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Artwork / Code Display */}
+              <div className="relative aspect-square mb-6 overflow-hidden rounded border border-gold-500/20 bg-black/60">
+                <button
+                  type="button"
+                  onClick={() => setShowCodeForToken((prev) => ({ ...prev, [selectedToken.tokenId]: !prev[selectedToken.tokenId] }))}
+                  className="absolute top-3 right-3 z-10 text-[10px] uppercase tracking-[0.1em] px-3 py-1 bg-black/70 border border-gold-500/40 text-gold-100 hover:border-gold-300 transition"
+                >
+                  {showCodeForToken[selectedToken.tokenId] ? 'View Artwork' : 'View Code'}
+                </button>
+
+                {showCodeForToken[selectedToken.tokenId] ? (
+                  <pre className="absolute inset-0 m-0 p-4 text-[11px] leading-tight text-gold-100/80 bg-black/80 overflow-auto">
+                    {JSON.stringify({
+                      p: 'zrc-721',
+                      op: 'mint',
+                      collection: collection.name.toUpperCase(),
+                      id: String(selectedToken.tokenId),
+                    }, null, 2)}
+                  </pre>
+                ) : selectedToken.imageUrls.length ? (
+                  <img
+                    src={selectedToken.imageUrls[0]}
+                    alt={selectedToken.name}
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-gold-200/60">
+                    Image unavailable
+                  </div>
+                )}
+              </div>
+
+              {/* Inscription ID */}
+              {selectedToken.inscriptionId && (
+                <div className="mb-6">
+                  <div className="text-xs text-gold-200/60 uppercase tracking-wider mb-2">Inscription ID</div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(selectedToken.inscriptionId);
+                      setCopiedInscription(selectedToken.inscriptionId);
+                      setTimeout(() => setCopiedInscription(null), 2000);
+                    }}
+                    className="w-full text-left bg-black/40 p-3 rounded border border-gold-500/20 hover:border-gold-500/40 transition-all"
+                  >
+                    <span className="text-sm text-gold-300 font-mono break-all">
+                      {copiedInscription === selectedToken.inscriptionId ? '✓ Copied!' : selectedToken.inscriptionId}
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              {/* Traits */}
+              {selectedTokenMetadata?.attributes && selectedTokenMetadata.attributes.length > 0 && (
+                <div className="bg-black/20 backdrop-blur-sm rounded border border-gold-500/10 p-4 space-y-4">
+                  <div className="text-xs text-gold-200/60 uppercase tracking-wider">Traits</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {selectedTokenMetadata.attributes
+                      .filter((attr: any) => Boolean(attr?.trait_type) && attr?.value !== undefined && attr?.value !== null)
+                      .map((trait: any, idx: number) => (
+                        <div key={`${trait.trait_type}-${idx}`} className="bg-black/30 border border-gold-500/10 rounded p-3">
+                          <div className="text-xs text-gold-200/60 uppercase tracking-wider mb-1">{trait.trait_type}</div>
+                          <div className="text-sm font-semibold text-gold-100/80">{String(trait.value)}</div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
