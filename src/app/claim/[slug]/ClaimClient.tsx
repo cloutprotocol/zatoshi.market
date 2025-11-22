@@ -56,6 +56,8 @@ export function ClaimClient({ collection }: Props) {
   const [mintResults, setMintResults] = useState<MintResult[]>([]);
   const [claimedTokens, setClaimedTokens] = useState<ClaimedToken[]>([]);
   const [loadingClaims, setLoadingClaims] = useState(false);
+  const [claimedImageLoaded, setClaimedImageLoaded] = useState<Record<string, boolean>>({});
+  const [claimedImageError, setClaimedImageError] = useState<Record<string, boolean>>({});
 
   const vipBadgePresent = useMemo(
     () => badges.some((b) => b.badgeSlug === 'vip'),
@@ -273,6 +275,9 @@ export function ClaimClient({ collection }: Props) {
           } as any);
           // fetch job to get inscriptionId
           const job = await convex.query(api.jobs.getJob, { jobId: jobRes.jobId });
+          if (job?.status === 'failed' && job.error) {
+            throw new Error(job.error);
+          }
           const inscriptionId = job?.inscriptionIds?.[0];
           if (!inscriptionId) throw new Error('Mint job completed without inscription id');
 
@@ -315,15 +320,17 @@ export function ClaimClient({ collection }: Props) {
     }
   };
 
-  const handleImageError = (img: HTMLImageElement, urls: string[]) => {
+  const handleImageError = (img: HTMLImageElement, urls: string[], tokenKey: string) => {
     const currentIndex = Number(img.dataset.index || '0');
     const nextIndex = currentIndex + 1;
     if (nextIndex < urls.length) {
       img.dataset.index = String(nextIndex);
       img.src = urls[nextIndex];
+      setClaimedImageLoaded((prev) => ({ ...prev, [tokenKey]: false }));
+      setClaimedImageError((prev) => ({ ...prev, [tokenKey]: false }));
     } else {
       img.onerror = null;
-      img.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+      setClaimedImageError((prev) => ({ ...prev, [tokenKey]: true }));
     }
   };
 
@@ -464,7 +471,7 @@ export function ClaimClient({ collection }: Props) {
               <p className="text-sm text-gold-200/70">Pulled from Convex and rendered with collection art.</p>
             </div>
             {claimStats?.mintedForAddress?.count !== undefined && (
-              <span className="text-sm text-gold-200/80 border border-gold-500/20 rounded-full px-3 py-1">
+              <span className="text-xs sm:text-sm text-gold-200/80 border border-gold-500/20 rounded-full px-2 sm:px-3 py-1 whitespace-nowrap">
                 Claimed {claimStats.mintedForAddress.count}
               </span>
             )}
@@ -493,13 +500,24 @@ export function ClaimClient({ collection }: Props) {
                 <div key={token.tokenId} className="p-3 rounded border border-gold-500/20 bg-black/40 flex flex-col gap-3">
                   <div className="aspect-square overflow-hidden rounded border border-gold-500/10 bg-black/60 flex items-center justify-center">
                     {token.imageUrls.length ? (
-                      <img
-                        src={token.imageUrls[0]}
-                        data-index={0}
-                        onError={(e) => handleImageError(e.currentTarget, token.imageUrls)}
-                        alt={token.name}
-                        className="w-full h-full object-cover"
-                      />
+                      <>
+                        {!claimedImageLoaded[String(token.tokenId)] && !claimedImageError[String(token.tokenId)] && (
+                          <div className="absolute inset-0 bg-black/30 skeleton" />
+                        )}
+                        {claimedImageError[String(token.tokenId)] && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-xs text-gold-200/70">
+                            Artwork unavailable
+                          </div>
+                        )}
+                        <img
+                          src={token.imageUrls[0]}
+                          data-index={0}
+                          onLoad={() => setClaimedImageLoaded((prev) => ({ ...prev, [String(token.tokenId)]: true }))}
+                          onError={(e) => handleImageError(e.currentTarget, token.imageUrls, String(token.tokenId))}
+                          alt={token.name}
+                          className={`w-full h-full object-cover transition-opacity duration-300 ${claimedImageLoaded[String(token.tokenId)] ? 'opacity-100' : 'opacity-0'}`}
+                        />
+                      </>
                     ) : (
                       <div className="text-xs text-gold-200/60">Image unavailable</div>
                     )}
@@ -566,10 +584,10 @@ export function ClaimClient({ collection }: Props) {
             })(),
             pendingTokens.length > 1
               ? {
-                  label: 'Note',
-                  valueText: 'Batch mint: keep the window open and ensure enough ZEC for all mints.',
-                  hidden: true,
-                }
+                label: 'Note',
+                valueText: 'Batch mint: keep the window open and ensure enough ZEC for all mints.',
+                hidden: true,
+              }
               : { label: '', hidden: true },
           ]}
           disclaimer="Your wallet will sign this transaction locally. Private keys never leave your device."
