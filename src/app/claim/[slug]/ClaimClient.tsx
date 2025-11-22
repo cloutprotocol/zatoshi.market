@@ -621,11 +621,11 @@ export function ClaimClient({ collection }: Props) {
 
         {/* Token Detail Modal */}
         {selectedToken && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6 overflow-y-auto">
-            <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded max-w-2xl w-full p-8 my-8">
-              <div className="flex items-start justify-between mb-6">
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4 md:p-6 overflow-y-auto">
+            <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded max-w-5xl w-full p-4 md:p-8 my-8">
+              <div className="flex items-start justify-between mb-4 md:mb-6">
                 <div>
-                  <h3 className="text-2xl font-bold text-gold-300 mb-2">{selectedToken.name}</h3>
+                  <h3 className="text-xl md:text-2xl font-bold text-gold-300 mb-2">{selectedToken.name}</h3>
                   <div className="text-sm text-gold-200/70">#{selectedToken.tokenId.toLocaleString()}</div>
                 </div>
                 <button
@@ -640,73 +640,81 @@ export function ClaimClient({ collection }: Props) {
                 </button>
               </div>
 
-              {/* Artwork / Code Display */}
-              <div className="relative aspect-square mb-6 overflow-hidden rounded border border-gold-500/20 bg-black/60">
-                <button
-                  type="button"
-                  onClick={() => setShowCodeForToken((prev) => ({ ...prev, [selectedToken.tokenId]: !prev[selectedToken.tokenId] }))}
-                  className="absolute top-3 right-3 z-10 text-[10px] uppercase tracking-[0.1em] px-3 py-1 bg-black/70 border border-gold-500/40 text-gold-100 hover:border-gold-300 transition"
-                >
-                  {showCodeForToken[selectedToken.tokenId] ? 'View Artwork' : 'View Code'}
-                </button>
+              {/* Two-column layout: Art left, Details right */}
+              <div className="flex flex-col md:flex-row gap-4 md:gap-6">
+                {/* Left: Artwork / Code Display */}
+                <div className="w-full md:w-1/2">
+                  <div className="relative aspect-square overflow-hidden rounded border border-gold-500/20 bg-black/60">
+                    <button
+                      type="button"
+                      onClick={() => setShowCodeForToken((prev) => ({ ...prev, [selectedToken.tokenId]: !prev[selectedToken.tokenId] }))}
+                      className="absolute top-3 right-3 z-10 text-[10px] uppercase tracking-[0.1em] px-3 py-1 bg-black/70 border border-gold-500/40 text-gold-100 hover:border-gold-300 transition"
+                    >
+                      {showCodeForToken[selectedToken.tokenId] ? 'View Artwork' : 'View Code'}
+                    </button>
 
-                {showCodeForToken[selectedToken.tokenId] ? (
-                  <pre className="absolute inset-0 m-0 p-4 text-[11px] leading-tight text-gold-100/80 bg-black/80 overflow-auto">
-                    {JSON.stringify({
-                      p: 'zrc-721',
-                      op: 'mint',
-                      collection: collection.name.toUpperCase(),
-                      id: String(selectedToken.tokenId),
-                    }, null, 2)}
-                  </pre>
-                ) : selectedToken.imageUrls.length ? (
-                  <img
-                    src={selectedToken.imageUrls[0]}
-                    alt={selectedToken.name}
-                    className="w-full h-full object-contain"
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-gold-200/60">
-                    Image unavailable
+                    {showCodeForToken[selectedToken.tokenId] ? (
+                      <pre className="absolute inset-0 m-0 p-4 text-[11px] leading-tight text-gold-100/80 bg-black/80 overflow-auto">
+                        {JSON.stringify({
+                          p: 'zrc-721',
+                          op: 'mint',
+                          collection: collection.name.toUpperCase(),
+                          id: String(selectedToken.tokenId),
+                        }, null, 2)}
+                      </pre>
+                    ) : selectedToken.imageUrls.length ? (
+                      <img
+                        src={selectedToken.imageUrls[0]}
+                        alt={selectedToken.name}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-gold-200/60">
+                        Image unavailable
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
+
+                {/* Right: Inscription ID + Traits */}
+                <div className="w-full md:w-1/2 flex flex-col gap-4">
+                  {/* Inscription ID */}
+                  {selectedToken.inscriptionId && (
+                    <div>
+                      <div className="text-xs text-gold-200/60 uppercase tracking-wider mb-2">Inscription ID</div>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(selectedToken.inscriptionId);
+                          setCopiedInscription(selectedToken.inscriptionId);
+                          setTimeout(() => setCopiedInscription(null), 2000);
+                        }}
+                        className="w-full text-left bg-black/40 p-3 rounded border border-gold-500/20 hover:border-gold-500/40 transition-all"
+                      >
+                        <span className="text-sm text-gold-300 font-mono break-all">
+                          {copiedInscription === selectedToken.inscriptionId ? '✓ Copied!' : selectedToken.inscriptionId}
+                        </span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Traits */}
+                  {selectedTokenMetadata?.attributes && selectedTokenMetadata.attributes.length > 0 && (
+                    <div className="bg-black/20 backdrop-blur-sm rounded border border-gold-500/10 p-4 space-y-4 flex-1">
+                      <div className="text-xs text-gold-200/60 uppercase tracking-wider">Traits</div>
+                      <div className="grid grid-cols-1 gap-3 max-h-[400px] overflow-y-auto">
+                        {selectedTokenMetadata.attributes
+                          .filter((attr: any) => Boolean(attr?.trait_type) && attr?.value !== undefined && attr?.value !== null)
+                          .map((trait: any, idx: number) => (
+                            <div key={`${trait.trait_type}-${idx}`} className="bg-black/30 border border-gold-500/10 rounded p-3">
+                              <div className="text-xs text-gold-200/60 uppercase tracking-wider mb-1">{trait.trait_type}</div>
+                              <div className="text-sm font-semibold text-gold-100/80">{String(trait.value)}</div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-
-              {/* Inscription ID */}
-              {selectedToken.inscriptionId && (
-                <div className="mb-6">
-                  <div className="text-xs text-gold-200/60 uppercase tracking-wider mb-2">Inscription ID</div>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(selectedToken.inscriptionId);
-                      setCopiedInscription(selectedToken.inscriptionId);
-                      setTimeout(() => setCopiedInscription(null), 2000);
-                    }}
-                    className="w-full text-left bg-black/40 p-3 rounded border border-gold-500/20 hover:border-gold-500/40 transition-all"
-                  >
-                    <span className="text-sm text-gold-300 font-mono break-all">
-                      {copiedInscription === selectedToken.inscriptionId ? '✓ Copied!' : selectedToken.inscriptionId}
-                    </span>
-                  </button>
-                </div>
-              )}
-
-              {/* Traits */}
-              {selectedTokenMetadata?.attributes && selectedTokenMetadata.attributes.length > 0 && (
-                <div className="bg-black/20 backdrop-blur-sm rounded border border-gold-500/10 p-4 space-y-4">
-                  <div className="text-xs text-gold-200/60 uppercase tracking-wider">Traits</div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {selectedTokenMetadata.attributes
-                      .filter((attr: any) => Boolean(attr?.trait_type) && attr?.value !== undefined && attr?.value !== null)
-                      .map((trait: any, idx: number) => (
-                        <div key={`${trait.trait_type}-${idx}`} className="bg-black/30 border border-gold-500/10 rounded p-3">
-                          <div className="text-xs text-gold-200/60 uppercase tracking-wider mb-1">{trait.trait_type}</div>
-                          <div className="text-sm font-semibold text-gold-100/80">{String(trait.value)}</div>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
