@@ -1,0 +1,9 @@
+{
+  "build": {
+    "command": "npx @cloudflare/next-on-pages",
+    "output_directory": ".vercel/output/static"
+  },
+  "environment_variables": {
+    "NODE_VERSION": "20"
+  }
+}
