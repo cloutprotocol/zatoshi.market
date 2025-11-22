@@ -337,10 +337,10 @@ export function ClaimClient({ collection }: Props) {
               alt="ZGODS"
               className="w-28 h-28 rounded border border-gold-500/40"
             />
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold tracking-tight">{collection.name} Claim</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight leading-tight">{collection.name} Claim</h1>
               {collection.supply ? (
-                <span className="text-sm text-gold-300/80 border border-gold-500/30 rounded-full px-3 py-1">
+                <span className="text-xs sm:text-sm text-gold-300/80 border border-gold-500/30 rounded-full px-2 sm:px-3 py-1">
                   Supply {collection.supply.toLocaleString()}
                 </span>
               ) : null}
@@ -395,11 +395,11 @@ export function ClaimClient({ collection }: Props) {
 
         <div className="glass-card p-6 border border-gold-500/20 rounded-lg">
           <div className="flex items-center justify-between gap-3 mb-4">
-            <h2 className="text-xl font-semibold">Claim</h2>
+            <h2 className="text-lg sm:text-xl font-semibold">Claim</h2>
           </div>
 
           <div className="flex flex-col gap-3 mb-4">
-            <div className="text-sm text-gold-200/70">
+            <div className="text-sm text-gold-200/70 leading-tight">
               Remaining allocation: <span className="font-semibold text-gold-100">{remainingAllowlist}</span>
             </div>
             <label className="flex items-center gap-3 text-sm">
@@ -410,12 +410,12 @@ export function ClaimClient({ collection }: Props) {
                 max={Math.min(5, remainingAllowlist || 1)}
                 value={claimCount}
                 onChange={(e) => setClaimCount(Math.max(1, Math.min(5, Number(e.target.value) || 1)))}
-                className="bg-black/30 border border-gold-500/30 rounded px-3 py-2 w-24 text-gold-100"
+                className="bg-black/30 border border-gold-500/30 rounded px-3 py-2 w-24 text-gold-100 text-base sm:text-sm"
                 disabled={claiming || remainingAllowlist <= 0}
               />
             </label>
             <button
-              className="px-6 py-3 rounded-lg bg-gold-500 text-black font-bold hover:bg-gold-400 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-5 sm:px-6 py-3 rounded-lg bg-gold-500 text-black font-bold hover:bg-gold-400 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
               disabled={claiming || remainingAllowlist <= 0}
               onClick={handleClaim}
             >
