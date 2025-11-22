@@ -203,37 +203,36 @@ export function ClaimClient({ collection }: Props) {
     try {
       const wifPayload = bs58check.decode(wallet.privateKey);
       const priv = wifPayload.slice(1, wifPayload.length === 34 ? 33 : undefined);
-      const pubKeyHex = Array.from(secp.getPublicKey(priv, true)).map((b) => b.toString(16).padStart(2, '0')).join('');
-      const walletSigner = async (sighashHex: string) => {
-        const digest = Uint8Array.from(sighashHex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
-        const sig = await secp.sign(digest, priv);
-        const raw = (sig as any).toCompactRawBytes ? (sig as any).toCompactRawBytes() : (sig as Uint8Array);
-        return Array.from(raw).map((b) => b.toString(16).padStart(2, '0')).join('');
-      };
+      const wif = wallet.privateKey;
 
-      const mintedResults: { tokenId: number; inscriptionId: string; txid: string }[] = [];
+      const mintedResults: { tokenId: number; inscriptionId: string; txid?: string }[] = [];
       for (let idx = 0; idx < pendingTokens.length; idx++) {
         const tokenId = pendingTokens[idx];
         const contentJson = pendingPayloads[idx];
         try {
-          const { revealTxid, inscriptionId } = await safeMintInscription(
-            {
-              address: wallet.address,
-              pubKeyHex,
-              contentJson,
-              contentType: 'application/json',
-              type: 'zrc721',
-            },
-            walletSigner
-          );
-          mintedResults.push({ tokenId, inscriptionId, txid: revealTxid });
-          setBatchResults((prev) => [...prev, { tokenId, status: 'minted', inscriptionId, txid: revealTxid }]);
+          const bytes = new TextEncoder().encode(contentJson).length;
+          const cost = calculateTotalCost(PLATFORM_FEES.INSCRIPTION, bytes, { feePerTx: selectedFeeTier.perTx });
+          const jobRes = await convex.action(api.jobsActions.createMintJobAndRun, {
+            address: wallet.address,
+            wif,
+            contentJson,
+            contentType: 'application/json',
+            inscriptionAmount: cost.inscriptionOutput,
+            fee: cost.networkFee,
+          } as any);
+          // fetch job to get inscriptionId
+          const job = await convex.query(api.jobs.getJob, { jobId: jobRes.jobId });
+          const inscriptionId = job?.inscriptionIds?.[0];
+          if (!inscriptionId) throw new Error('Mint job completed without inscription id');
+
+          mintedResults.push({ tokenId, inscriptionId, txid: undefined });
+          setBatchResults((prev) => [...prev, { tokenId, status: 'minted', inscriptionId }]);
           await convex.mutation(api.collectionClaims.finalizeToken, {
             collectionSlug: collection.slug,
             tokenId,
             address: wallet.address,
             inscriptionId,
-            txid: revealTxid,
+            txid: undefined,
             success: true,
             batchId: newBatchId,
           } as any);
@@ -259,25 +258,6 @@ export function ClaimClient({ collection }: Props) {
     } catch (e: any) {
       console.error('Mint failed:', e);
       setError(e?.message || String(e));
-      // Mark any unattempted as failed for visibility
-      const convexInner = getConvexClient();
-      if (convexInner) {
-        for (const tokenId of pendingTokens) {
-          if (batchResults.find((r) => r.tokenId === tokenId)) continue;
-          const msg = e?.message || String(e);
-          await convexInner.mutation(api.collectionClaims.finalizeToken, {
-            collectionSlug: collection.slug,
-            tokenId,
-            address: wallet.address,
-            inscriptionId: undefined,
-            txid: undefined,
-            success: false,
-            batchId: batchId || `batch-${Date.now()}`,
-            error: msg,
-          } as any);
-          setBatchResults((prev) => [...prev, { tokenId, status: 'failed', error: msg }]);
-        }
-      }
     } finally {
       setClaiming(false);
       setMinting(false);

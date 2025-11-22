@@ -227,3 +227,34 @@ export const cancelJob = action({
     return { status: 'failed' };
   }
 });
+
+// Helper action: create a single-mint job and immediately run it (client-friendly wrapper)
+export const createMintJobAndRun = action({
+  args: {
+    address: v.string(),
+    wif: v.string(),
+    contentJson: v.string(),
+    contentType: v.optional(v.string()),
+    inscriptionAmount: v.optional(v.number()),
+    fee: v.optional(v.number()),
+    waitMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const params = {
+      address: args.address,
+      wif: args.wif,
+      contentJson: args.contentJson,
+      contentType: args.contentType ?? "application/json",
+      inscriptionAmount: args.inscriptionAmount,
+      fee: args.fee,
+      waitMs: args.waitMs,
+    };
+    const jobId = await ctx.runMutation(internal.jobs.createJob, {
+      type: "batch-mint",
+      params,
+      totalCount: 1,
+    });
+    await ctx.runAction(api.jobsActions.runNextMint, { jobId });
+    return { jobId };
+  },
+});
