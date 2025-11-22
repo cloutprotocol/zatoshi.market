@@ -50,6 +50,8 @@ export default function InscriptionPage() {
   const [collectionImageError, setCollectionImageError] = useState(false);
   const [inscriptionImageLoaded, setInscriptionImageLoaded] = useState(false);
   const [inscriptionImageError, setInscriptionImageError] = useState(false);
+  const [waitingMessage, setWaitingMessage] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [showRawPayload, setShowRawPayload] = useState(false);
   const parseInscription = useAction(api.inscriptionParser.parseInscriptionFromChain);
 
@@ -74,6 +76,7 @@ export default function InscriptionPage() {
         setInscriptionImageLoaded(false);
         setInscriptionImageError(false);
         setShowRawPayload(false);
+        setWaitingMessage(null);
 
         const metaResponse = await fetch(`https://indexer.zerdinals.com/inscription/${inscriptionId}`);
         if (!metaResponse.ok) {
@@ -81,6 +84,7 @@ export default function InscriptionPage() {
             setWaitingConfirm(true);
             setLoading(false);
             setRetryCount(attempt + 1);
+            setWaitingMessage('Inscription seen in mempool. Waiting for confirmation...');
             setTimeout(() => fetchInscription(attempt + 1), 5000);
             return;
           }
@@ -146,6 +150,14 @@ export default function InscriptionPage() {
                 if (cancelled) return;
                 setImageData(objectUrl);
               }
+              if (arrayBuffer.byteLength === 0 && attempt < MAX_RETRIES) {
+                setWaitingConfirm(true);
+                setLoading(false);
+                setRetryCount(attempt + 1);
+                setWaitingMessage('Inscription detected but content is still indexing. This can take a few minutes.');
+                setTimeout(() => fetchInscription(attempt + 1), 5000);
+                return;
+              }
             } catch (imgErr) {
               console.error('Error processing image data:', imgErr);
               setError('Failed to process image data');
@@ -169,11 +181,21 @@ export default function InscriptionPage() {
                 setWaitingConfirm(true);
                 setLoading(false);
                 setRetryCount(attempt + 1);
+                setWaitingMessage('Inscription detected but not fully indexed yet. Waiting for confirmation...');
                 setTimeout(() => fetchInscription(attempt + 1), 5000);
                 return;
               }
             } catch {
               // Not an error JSON
+            }
+
+            if (!contentText.trim() && attempt < MAX_RETRIES) {
+              setWaitingConfirm(true);
+              setLoading(false);
+              setRetryCount(attempt + 1);
+              setWaitingMessage('Inscription detected but content is still indexing. This can take a few minutes.');
+              setTimeout(() => fetchInscription(attempt + 1), 5000);
+              return;
             }
 
             setContent(contentText);
@@ -214,7 +236,7 @@ export default function InscriptionPage() {
     return () => {
       cancelled = true;
     };
-  }, [inscriptionId, parseInscription]);
+  }, [inscriptionId, parseInscription, refreshKey]);
 
   useEffect(() => {
     const lookupClaim = async () => {
@@ -271,6 +293,23 @@ export default function InscriptionPage() {
     if (!inscription) return null;
 
     const { contentType } = inscription;
+
+    if ((waitingConfirm || (!content && !imageData && !error && !loading)) && !collectionAsset) {
+      return (
+        <div className="p-6 sm:p-10 flex items-center justify-center bg-black/20 min-h-[300px]">
+          <div className="text-center space-y-2 text-gold-200/80">
+            <div className="text-lg font-semibold">Transaction not yet confirmed</div>
+            <div className="text-sm text-gold-200/60">Indexing can take up to 5 minutes. We’ll refresh automatically.</div>
+            <button
+              onClick={() => setRefreshKey((k) => k + 1)}
+              className="text-xs px-4 py-2 border border-gold-500/40 rounded text-gold-200 hover:text-gold-100 hover:border-gold-300 transition-colors"
+            >
+              Retry now
+            </button>
+          </div>
+        </div>
+      );
+    }
 
     if (collectionAsset && collectionAsset.imageUrls.length) {
       return (
@@ -550,19 +589,28 @@ export default function InscriptionPage() {
           <div className="mb-6 p-4 sm:p-5 border border-gold-500/20 bg-black/40 rounded animate-pulse">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-gold-100">Waiting to confirm...</div>
+                <div className="text-sm font-semibold text-gold-100">Transaction not yet confirmed</div>
                 <div className="text-xs text-gold-200/70">
-                  We&apos;ll refresh automatically. Attempt {Math.max(1, retryCount || 1)} / 12
+                  {waitingMessage || 'Indexing can take up to 5 minutes. We’ll refresh automatically.'}
                 </div>
+                <div className="text-xs text-gold-200/60 mt-1">Attempt {Math.max(1, retryCount || 1)} / 12</div>
               </div>
-              <a
-                href={`https://dev.zatoshi.market/inscription/${inscriptionId}`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-gold-300 underline"
-              >
-                Open in new tab
-              </a>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setRefreshKey((k) => k + 1)}
+                  className="text-xs px-3 py-1 border border-gold-500/40 rounded text-gold-200 hover:text-gold-100 hover:border-gold-300 transition-colors"
+                >
+                  Retry now
+                </button>
+                <a
+                  href={`https://dev.zatoshi.market/inscription/${inscriptionId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-gold-300 underline"
+                >
+                  Open in new tab
+                </a>
+              </div>
             </div>
           </div>
         )}
