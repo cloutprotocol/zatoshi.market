@@ -1,3 +1,10 @@
+import { setupDevPlatform } from '@cloudflare/next-on-pages/next-dev';
+
+// Configure dev platform for Cloudflare
+if (process.env.NODE_ENV === 'development') {
+  await setupDevPlatform();
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -5,6 +12,9 @@ const nextConfig = {
   typescript: {
     // Skip type checking during build - rely on separate tsc check
     ignoreBuildErrors: true,
+  },
+  images: {
+    unoptimized: true, // Required for Cloudflare Pages
   },
   webpack: (config, { webpack, isServer }) => {
     config.resolve = config.resolve || {};
