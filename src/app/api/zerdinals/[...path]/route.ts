@@ -19,9 +19,6 @@ export async function GET(request: Request, { params }: { params: { path: string
 
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
     });
 
     if (!response.ok) {
@@ -31,6 +28,21 @@ export async function GET(request: Request, { params }: { params: { path: string
       );
     }
 
+    const contentType = response.headers.get('content-type') || 'application/json';
+
+    // For binary content (images, etc.), pass through as-is
+    if (contentType.startsWith('image/') || contentType.startsWith('application/octet-stream') || path.startsWith('content/')) {
+      const arrayBuffer = await response.arrayBuffer();
+      return new NextResponse(arrayBuffer, {
+        status: 200,
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      });
+    }
+
+    // For JSON responses
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {

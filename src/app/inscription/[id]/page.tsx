@@ -78,7 +78,7 @@ export default function InscriptionPage() {
         setShowRawPayload(false);
         setWaitingMessage(null);
 
-        const metaResponse = await fetch(`https://indexer.zerdinals.com/inscription/${inscriptionId}`);
+        const metaResponse = await fetch(`/api/zerdinals/inscription/${inscriptionId}`);
         if (!metaResponse.ok) {
           if (attempt < MAX_RETRIES) {
             setWaitingConfirm(true);
@@ -107,7 +107,7 @@ export default function InscriptionPage() {
           txid: data.txid
         });
 
-        const contentResponse = await fetch(`https://indexer.zerdinals.com/content/${inscriptionId}`);
+        const contentResponse = await fetch(`/api/zerdinals/content/${inscriptionId}`);
 
         if (contentType.startsWith('image/')) {
           if (contentResponse.ok) {
