@@ -20,9 +20,10 @@ async function getClaimCountsForAddress(
   const byAddress = allClaims.filter(
     (c: any) => (c.address || "").toLowerCase() === address
   );
+
   return {
     minted: byAddress.filter((c: any) => c.status === "minted").length,
-    reserved: byAddress.filter((c: any) => c.status === "reserved").length,
+    reserved: 0, // Reserved tokens don't block allocation - enforcement happens in finalizeToken
   };
 }
 
@@ -37,16 +38,9 @@ export const getClaimStats = query({
       .query("collectionClaims")
       .withIndex("by_collection_status", (q) => q.eq("collectionSlug", slug).eq("status", "minted"))
       .collect();
-    const reserved = await ctx.db
-      .query("collectionClaims")
-      .withIndex("by_collection_status", (q) => q.eq("collectionSlug", slug).eq("status", "reserved"))
-      .collect();
 
     const byAddress = args.address
       ? minted.filter((m) => m.address.toLowerCase() === args.address!.toLowerCase())
-      : [];
-    const reservedByAddress = args.address
-      ? reserved.filter((m) => m.address.toLowerCase() === args.address!.toLowerCase())
       : [];
 
     return {
@@ -56,10 +50,10 @@ export const getClaimStats = query({
         count: byAddress.length,
         ids: byAddress.map((m) => m.tokenId),
       },
-      reservedCount: reserved.length,
+      reservedCount: 0,
       reservedForAddress: {
-        count: reservedByAddress.length,
-        ids: reservedByAddress.map((m) => m.tokenId),
+        count: 0,
+        ids: [],
       },
     };
   },
@@ -106,8 +100,8 @@ export const reserveTokens = mutation({
       throw new Error("Wallet is not whitelisted for this collection");
     }
 
-    const { minted, reserved: alreadyReserved } = await getClaimCountsForAddress(ctx, slug, address);
-    const remaining = allowlist.max - minted - alreadyReserved;
+    const { minted } = await getClaimCountsForAddress(ctx, slug, address);
+    const remaining = allowlist.max - minted;
     if (remaining <= 0) {
       throw new Error("Allocation exhausted for this wallet");
     }

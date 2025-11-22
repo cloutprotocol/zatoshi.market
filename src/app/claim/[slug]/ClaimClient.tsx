@@ -169,8 +169,8 @@ export function ClaimClient({ collection }: Props) {
   const remainingAllowlist = useMemo(() => {
     if (!allocation) return 0;
     const minted = claimStats?.mintedForAddress?.count ?? 0;
-    const reserved = claimStats?.reservedForAddress?.count ?? 0;
-    return Math.max(0, allocation.max - minted - reserved);
+    // Don't count reserved - allocation is enforced at finalization, not reservation
+    return Math.max(0, allocation.max - minted);
   }, [allocation, claimStats]);
 
   const handleClaim = async () => {
