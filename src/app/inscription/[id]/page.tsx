@@ -78,9 +78,9 @@ export default function InscriptionPage() {
         setShowRawPayload(false);
         setWaitingMessage(null);
 
-        // Use CORS proxy to bypass domain blocking
-        const corsProxy = 'https://corsproxy.io/?';
-        const metaResponse = await fetch(`${corsProxy}${encodeURIComponent(`https://indexer.zerdinals.com/inscription/${inscriptionId}`)}`);
+        // Use AllOrigins CORS proxy to bypass domain blocking
+        const metaUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://indexer.zerdinals.com/inscription/${inscriptionId}`)}`;
+        const metaResponse = await fetch(metaUrl);
 
 
         if (!metaResponse.ok) {
@@ -111,7 +111,8 @@ export default function InscriptionPage() {
           txid: data.txid
         });
 
-        const contentResponse = await fetch(`${corsProxy}${encodeURIComponent(`https://indexer.zerdinals.com/content/${inscriptionId}`)}`);
+        const contentUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://indexer.zerdinals.com/content/${inscriptionId}`)}`;
+        const contentResponse = await fetch(contentUrl);
 
         if (contentType.startsWith('image/')) {
           if (contentResponse.ok) {
