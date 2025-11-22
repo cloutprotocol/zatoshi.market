@@ -157,7 +157,24 @@ export const finalizeToken = mutation({
     }
 
     if (existing.address.toLowerCase() !== args.address.toLowerCase()) {
-      throw new Error("Address mismatch for reserved token");
+      // If somehow a different address tries to finalize, log and ignore to avoid client-visible errors
+      await ctx.db.insert("collectionClaimEvents", {
+        collectionSlug: slug,
+        tokenId: args.tokenId,
+        address: args.address,
+        batchId: args.batchId ?? existing.batchId,
+        status: "failed",
+        message: "Address mismatch for reserved token",
+        txid: args.txid,
+        inscriptionId: args.inscriptionId,
+        createdAt: Date.now(),
+      });
+      return;
+    }
+
+    // If already minted, skip double-finalization
+    if (existing.status === "minted" && args.success) {
+      return;
     }
 
     await ctx.db.patch(existing._id, {
