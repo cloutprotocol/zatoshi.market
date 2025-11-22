@@ -72,14 +72,8 @@ export default function Home() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Link
-                href="/inscribe"
-                className="px-8 py-4 bg-gold-500 text-black text-lg font-bold text-center"
-              >
-                INSCRIBE
-              </Link>
-              <Link
                 href="/claim/zgods"
-                className="px-8 py-4 bg-gold-500/20 text-gold-400 border border-gold-500/40 text-lg font-bold text-center"
+                className="px-8 py-4 bg-gold-500 text-black text-lg font-bold text-center"
               >
                 CLAIM ZGODS
               </Link>
@@ -154,12 +148,6 @@ export default function Home() {
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="text-2xl text-gold-400">zatoshi.market</div>
             <div className="flex gap-4 md:gap-6 text-sm md:text-base text-gold-300/80">
-              <Link href="/inscribe" className="hover:text-gold-400 transition-all">
-                INSCRIBE
-              </Link>
-              <Link href="/tokens" className="hover:text-gold-400 transition-all">
-                ZRC20
-              </Link>
               <a href="https://mempool.zatoshi.market" target="_blank" rel="noopener noreferrer" className="hover:text-gold-400 transition-all">
                 MEMPOOL
               </a>

@@ -28,9 +28,6 @@ export default function Header() {
 
         {/* Desktop Navigation */}
         <div className="hidden lg:flex gap-6 items-center">
-          <Link href="/inscribe" className="px-4 py-2 text-gold-400 hover:text-gold-300">
-            INSCRIBE
-          </Link>
           {!mounted ? (
             <button
               className="px-6 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 font-bold hover:bg-gold-500/30 transition-all"
@@ -80,13 +77,6 @@ export default function Header() {
           <div className="fixed top-20 -mt-5 left-0 right-0 bottom-0 z-40 lg:hidden backdrop-blur-xl bg-black/90">
             <div className="h-full flex flex-col">
               <div className="flex-1 px-6 py-4 space-y-2 pt-20">
-                <Link
-                  href="/inscribe"
-                  className="block px-4 py-3 text-gold-400 hover:bg-gold-500/10 rounded"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  INSCRIBE
-                </Link>
               </div>
 
               {/* Wallet Button - Bottom of screen on mobile */}
