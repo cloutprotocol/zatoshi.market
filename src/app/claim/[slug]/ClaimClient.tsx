@@ -52,11 +52,11 @@ export function ClaimClient({ collection }: Props) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [pendingTokens, setPendingTokens] = useState<number[]>([]);
   const [pendingPayloads, setPendingPayloads] = useState<string[]>([]);
-  // Fee tiers (zatoshis per tx). Increased minimum for production reliability.
+  // Fee tiers (zatoshis per tx)
   const feeTiers = [
-    { key: 'low', label: 'Low', perTx: 300000 },
-    { key: 'normal', label: 'Normal', perTx: 400000 },
-    { key: 'high', label: 'High', perTx: 500000 },
+    { key: 'low', label: 'Low', perTx: 30000 },
+    { key: 'normal', label: 'Normal', perTx: 50000 },
+    { key: 'high', label: 'High', perTx: 100000 },
   ] as const;
   const [selectedFeeTier, setSelectedFeeTier] = useState<typeof feeTiers[number]>(feeTiers[1]);
   const [minting, setMinting] = useState(false);
