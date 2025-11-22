@@ -474,7 +474,7 @@ export function ClaimClient({ collection }: Props) {
           </div>
 
           {loadingClaims ? (
-            <div className="grid grid-cols-5 lg:grid-cols-10 gap-4">
+            <div className="grid grid-cols-5 gap-4">
               {Array.from({ length: 10 }).map((_, idx) => (
                 <div
                   key={`skeleton-${idx}`}
@@ -491,7 +491,7 @@ export function ClaimClient({ collection }: Props) {
           ) : claimedTokens.length === 0 ? (
             <div className="text-sm text-gold-200/70">No claims yet. Mint to reveal your artwork.</div>
           ) : (
-            <div className="grid grid-cols-5 lg:grid-cols-10 gap-4">
+            <div className="grid grid-cols-5 gap-4">
               {claimedTokens.map((token) => {
                 const showingCode = showCodeForToken[token.tokenId];
                 const payload = JSON.stringify({
