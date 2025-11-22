@@ -37,3 +37,6 @@ yarn-error.log*
 next-env.d.ts
 
 .gemini-clipboard
+
+# temp docs
+temp_marketplace_docs
