@@ -30,6 +30,7 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="author" content="zcashlabs@gmail.com" />
         <link href="https://fonts.cdnfonts.com/css/vcr-osd-mono" rel="stylesheet" />
       </head>
       <body style={{ fontFamily: "'VCR OSD Mono', monospace" }}>
