@@ -152,7 +152,20 @@ export const runNextMint = action({
           inscriptionData
         });
 
-        const revealTxid = await broadcastTransaction(revealHex);
+        let revealTxid: string;
+        try {
+          revealTxid = await broadcastTransaction(revealHex);
+        } catch (revealErr: any) {
+          const msg = String(revealErr?.message || revealErr);
+          // If reveal fails with mempool conflict, the commit might not be propagated yet or there's a UTXO conflict
+          if (msg.includes('txn-mempool-conflict') || msg.includes('bad-txns-inputs-spent')) {
+            console.warn(`[runNextMint] Reveal broadcast conflict for UTXO ${utxoCandidate.txid}:${utxoCandidate.vout}, retrying next...`);
+            await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxoCandidate.txid, vout: utxoCandidate.vout });
+            lastError = revealErr;
+            continue; // Try next candidate
+          }
+          throw revealErr; // Other errors are fatal
+        }
         const inscriptionId = `${revealTxid}i0`;
         const preview = contentStr.slice(0, 200);
         let zrc20Tick: string | undefined;
