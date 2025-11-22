@@ -122,9 +122,12 @@ export function RecentClaims({ collectionSlug, limit = 12 }: RecentClaimsProps) 
   return (
     <div className="space-y-6">
       {/* Count Badge */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h2 className="text-2xl md:text-3xl font-bold text-gold-300">Recent Claims</h2>
-        <div className="px-4 py-2 bg-gold-500/15 border border-gold-400/40 rounded-full">
+      <div className="flex items-center justify-end gap-4 flex-wrap">
+        <div className="px-4 py-2 bg-gold-500/15 border border-gold-400/40 rounded-full flex items-center gap-2">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+          </span>
           <span className="text-sm sm:text-base font-semibold text-gold-100">
             {totalCount.toLocaleString()} minted
           </span>
@@ -157,9 +160,8 @@ export function RecentClaims({ collectionSlug, limit = 12 }: RecentClaimsProps) 
                     loading="lazy"
                     onLoad={() => setImageLoaded((prev) => ({ ...prev, [claim.tokenId]: true }))}
                     onError={(e) => handleImageError(e.currentTarget, claim.imageUrls, claim.tokenId)}
-                    className={`w-full h-full object-cover transition-opacity duration-300 ${
-                      imageLoaded[claim.tokenId] ? 'opacity-100' : 'opacity-0'
-                    }`}
+                    className={`w-full h-full object-cover transition-opacity duration-300 ${imageLoaded[claim.tokenId] ? 'opacity-100' : 'opacity-0'
+                      }`}
                   />
                 )}
               </div>
@@ -172,16 +174,6 @@ export function RecentClaims({ collectionSlug, limit = 12 }: RecentClaimsProps) 
             </Link>
           ))}
         </div>
-      </div>
-
-      {/* See All Link */}
-      <div className="text-center">
-        <Link
-          href="/claim/zgods"
-          className="inline-flex items-center gap-2 text-sm text-gold-300 hover:text-gold-100 transition-colors"
-        >
-          View all claims →
-        </Link>
       </div>
     </div>
   );
