@@ -161,6 +161,21 @@ export default function InscriptionPage() {
           if (contentResponse.ok) {
             const contentText = await contentResponse.text();
             if (cancelled) return;
+
+            // If the indexer returns a 404 payload body, treat as pending and retry
+            try {
+              const parsedMaybeError = JSON.parse(contentText);
+              if (parsedMaybeError?.code === 404 && attempt < MAX_RETRIES) {
+                setWaitingConfirm(true);
+                setLoading(false);
+                setRetryCount(attempt + 1);
+                setTimeout(() => fetchInscription(attempt + 1), 5000);
+                return;
+              }
+            } catch {
+              // Not an error JSON
+            }
+
             setContent(contentText);
             try {
               const parsedContent = JSON.parse(contentText);
