@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { getConvexClient } from '@/lib/convexClient';
 import { api } from '../../convex/_generated/api';
 import { getCollectionConfig } from '@/config/collections';
@@ -138,9 +137,8 @@ export function RecentClaims({ collectionSlug, limit = 12 }: RecentClaimsProps) 
       <div className="relative overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
         <div className="flex gap-4 min-w-min">
           {claims.map((claim) => (
-            <Link
+            <div
               key={claim.inscriptionId}
-              href={`/inscription/${claim.inscriptionId}`}
               className="flex-shrink-0 w-40 sm:w-48 group"
             >
               <div className="relative aspect-square overflow-hidden rounded border border-gold-500/20 bg-black/40 group-hover:border-gold-400/60 transition-all">
@@ -171,7 +169,7 @@ export function RecentClaims({ collectionSlug, limit = 12 }: RecentClaimsProps) 
                 </div>
                 <div className="text-xs text-gold-200/60">#{claim.tokenId.toLocaleString()}</div>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       </div>

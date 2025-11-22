@@ -443,14 +443,9 @@ export function ClaimClient({ collection }: Props) {
                         <>
                           Minted{' '}
                           {r.inscriptionId ? (
-                            <a
-                              href={`/inscription/${r.inscriptionId}`}
-                              className="underline text-gold-300"
-                              target="_blank"
-                              rel="noreferrer"
-                            >
+                            <span className="text-gold-300 font-mono text-[10px]">
                               {r.inscriptionId}
-                            </a>
+                            </span>
                           ) : null}
                         </>
                       ) : (
@@ -520,14 +515,9 @@ export function ClaimClient({ collection }: Props) {
                     <div className="font-semibold text-gold-100">{token.name}</div>
                     <div className="text-xs text-gold-200/70">#{token.tokenId.toLocaleString()}</div>
                     {token.inscriptionId && (
-                      <a
-                        href={`/inscription/${token.inscriptionId}`}
-                        className="text-xs text-gold-300 underline"
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        View inscription
-                      </a>
+                      <div className="text-xs text-gold-300/60 font-mono break-all">
+                        {token.inscriptionId}
+                      </div>
                     )}
                   </div>
                 </div>
