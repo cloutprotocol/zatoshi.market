@@ -78,7 +78,13 @@ export default function InscriptionPage() {
         setShowRawPayload(false);
         setWaitingMessage(null);
 
-        const metaResponse = await fetch(`/api/zerdinals/inscription/${inscriptionId}`);
+        // Try proxy first, fallback to direct if proxy is blocked
+        let metaResponse = await fetch(`/api/zerdinals/inscription/${inscriptionId}`);
+        if (!metaResponse.ok && metaResponse.status === 403) {
+          console.log('Proxy blocked, trying direct fetch...');
+          metaResponse = await fetch(`https://indexer.zerdinals.com/inscription/${inscriptionId}`);
+        }
+
         if (!metaResponse.ok) {
           if (attempt < MAX_RETRIES) {
             setWaitingConfirm(true);
@@ -107,7 +113,12 @@ export default function InscriptionPage() {
           txid: data.txid
         });
 
-        const contentResponse = await fetch(`/api/zerdinals/content/${inscriptionId}`);
+        // Try proxy first, fallback to direct if proxy is blocked
+        let contentResponse = await fetch(`/api/zerdinals/content/${inscriptionId}`);
+        if (!contentResponse.ok && contentResponse.status === 403) {
+          console.log('Content proxy blocked, trying direct fetch...');
+          contentResponse = await fetch(`https://indexer.zerdinals.com/content/${inscriptionId}`);
+        }
 
         if (contentType.startsWith('image/')) {
           if (contentResponse.ok) {
