@@ -498,16 +498,11 @@ export function ClaimClient({ collection }: Props) {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {claimedTokens.map((token) => (
                 <div key={token.tokenId} className="p-3 rounded border border-gold-500/20 bg-black/40 flex flex-col gap-3">
-                  <div className="aspect-square overflow-hidden rounded border border-gold-500/10 bg-black/60 flex items-center justify-center">
+                  <div className="relative aspect-square overflow-hidden rounded border border-gold-500/10 bg-black/60 flex items-center justify-center">
                     {token.imageUrls.length ? (
                       <>
                         {!claimedImageLoaded[String(token.tokenId)] && !claimedImageError[String(token.tokenId)] && (
                           <div className="absolute inset-0 bg-black/30 skeleton" />
-                        )}
-                        {claimedImageError[String(token.tokenId)] && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-xs text-gold-200/70">
-                            Artwork unavailable
-                          </div>
                         )}
                         <img
                           src={token.imageUrls[0]}
