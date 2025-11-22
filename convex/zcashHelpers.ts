@@ -45,13 +45,13 @@ export function concatBytes(parts: Uint8Array[]): Uint8Array {
   let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
   return out;
 }
-export function reverseBytes(b: Uint8Array): Uint8Array { const c = new Uint8Array(b.length); for (let i=0;i<b.length;i++) c[i] = b[b.length-1-i]; return c; }
+export function reverseBytes(b: Uint8Array): Uint8Array { const c = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) c[i] = b[b.length - 1 - i]; return c; }
 export function u32le(n: number): Uint8Array { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n, true); return b; }
 export function u64le(n: number): Uint8Array { const b = new Uint8Array(8); new DataView(b.buffer).setBigUint64(0, BigInt(n), true); return b; }
 export function varint(n: number): Uint8Array {
   if (n < 0xfd) return new Uint8Array([n]);
-  if (n <= 0xffff) { const b = new Uint8Array(3); b[0]=0xfd; new DataView(b.buffer).setUint16(1, n, true); return b; }
-  const b = new Uint8Array(5); b[0]=0xfe; new DataView(b.buffer).setUint32(1, n, true); return b;
+  if (n <= 0xffff) { const b = new Uint8Array(3); b[0] = 0xfd; new DataView(b.buffer).setUint16(1, n, true); return b; }
+  const b = new Uint8Array(5); b[0] = 0xfe; new DataView(b.buffer).setUint32(1, n, true); return b;
 }
 
 export function hash160(buf: Uint8Array): Uint8Array { return ripemd160(sha256(buf)); }
@@ -60,9 +60,9 @@ export function buildP2PKHScript(pkh: Uint8Array): Uint8Array {
   return concatBytes([new Uint8Array([0x76, 0xa9, 0x14]), pkh, new Uint8Array([0x88, 0xac])]);
 }
 
-export function buildInscriptionChunks(contentType: string, data: string | Uint8Array): (Uint8Array|number)[] {
+export function buildInscriptionChunks(contentType: string, data: string | Uint8Array): (Uint8Array | number)[] {
   const body = (typeof data === 'string' ? utf8(data) : data);
-  const chunks: (Uint8Array|number)[] = [utf8("ord"), 0x51, utf8(contentType), 0x00];
+  const chunks: (Uint8Array | number)[] = [utf8("ord"), 0x51, utf8(contentType), 0x00];
 
   // Split data into 520-byte chunks (MAX_SCRIPT_ELEMENT_SIZE)
   const MAX_CHUNK = 520;
@@ -128,14 +128,14 @@ function timeoutSignal(ms: number): AbortSignal | undefined {
     if (anyAbort && typeof anyAbort.timeout === 'function') {
       return anyAbort.timeout(ms);
     }
-  } catch {}
+  } catch { }
   try {
     const ac = new AbortController();
     const id = setTimeout(() => ac.abort(), ms);
     // Clear timeout on abort to avoid leaks
     ac.signal.addEventListener('abort', () => clearTimeout(id), { once: true });
     return ac.signal;
-  } catch {}
+  } catch { }
   // If we cannot construct a signal, return undefined (no timeout)
   return undefined;
 }
@@ -160,7 +160,7 @@ function findTxidDeep(o: any): string | null {
   }
   return null;
 }
-async function extractTxidFromResponse(provider: string, r: Response): Promise<{ txid: string | null; snippet: string; ct: string; status: number }>{
+async function extractTxidFromResponse(provider: string, r: Response): Promise<{ txid: string | null; snippet: string; ct: string; status: number }> {
   const ct = r.headers.get('content-type') || '';
   const text = await r.text();
   const snippet = text.slice(0, 240).replace(/[\n\r\t]+/g, ' ');
@@ -171,7 +171,7 @@ async function extractTxidFromResponse(provider: string, r: Response): Promise<{
       console.log(`[broadcast][${provider}] parsed txid from JSON`, { status: r.status, ct, txid: deep.slice(0, 16) + '…' });
       return { txid: deep, snippet, ct, status: r.status };
     }
-  } catch {}
+  } catch { }
   const m = text.match(/[0-9a-fA-F]{64}/);
   if (m) {
     console.log(`[broadcast][${provider}] extracted txid via regex`, { status: r.status, ct, txid: m[0].slice(0, 16) + '…' });
@@ -181,11 +181,11 @@ async function extractTxidFromResponse(provider: string, r: Response): Promise<{
   return { txid: null, snippet, ct, status: r.status };
 }
 
-export function createRevealScript(pubKey: Uint8Array, inscriptionChunks: (Uint8Array|number)[]): Uint8Array {
+export function createRevealScript(pubKey: Uint8Array, inscriptionChunks: (Uint8Array | number)[]): Uint8Array {
   const parts: Uint8Array[] = [];
   parts.push(new Uint8Array([pubKey.length]), pubKey);
   parts.push(new Uint8Array([0xad])); // OP_CHECKSIGVERIFY
-  for (let i=0;i<inscriptionChunks.length;i++) parts.push(new Uint8Array([0x75]));
+  for (let i = 0; i < inscriptionChunks.length; i++) parts.push(new Uint8Array([0x75]));
   parts.push(new Uint8Array([0x51])); // OP_TRUE
   return concatBytes(parts);
 }
@@ -208,18 +208,18 @@ export function addressToPkh(addr: string): Uint8Array {
 function blake(data: Uint8Array, p: string): Uint8Array {
   return blake2b(data, { dkLen: 32, personalization: utf8(p) });
 }
-function prevoutsHash(inputs: {txid:string; vout:number; sequence:number}[]): Uint8Array {
+function prevoutsHash(inputs: { txid: string; vout: number; sequence: number }[]): Uint8Array {
   const parts: Uint8Array[] = [];
-  for(const i of inputs){ parts.push(reverseBytes(hexToBytes(i.txid)), u32le(i.vout)); }
+  for (const i of inputs) { parts.push(reverseBytes(hexToBytes(i.txid)), u32le(i.vout)); }
   return blake(concatBytes(parts), 'ZcashPrevoutHash');
 }
-function sequenceHash(inputs: {txid:string; vout:number; sequence:number}[]): Uint8Array {
-  const parts: Uint8Array[] = inputs.map(i=>u32le(i.sequence));
+function sequenceHash(inputs: { txid: string; vout: number; sequence: number }[]): Uint8Array {
+  const parts: Uint8Array[] = inputs.map(i => u32le(i.sequence));
   return blake(concatBytes(parts), 'ZcashSequencHash');
 }
-function outputsHash(outputs: {value:number; scriptPubKey:Uint8Array}[]): Uint8Array {
+function outputsHash(outputs: { value: number; scriptPubKey: Uint8Array }[]): Uint8Array {
   const parts: Uint8Array[] = [];
-  for(const o of outputs){ parts.push(u64le(o.value), varint(o.scriptPubKey.length), o.scriptPubKey); }
+  for (const o of outputs) { parts.push(u64le(o.value), varint(o.scriptPubKey.length), o.scriptPubKey); }
   return blake(concatBytes(parts), 'ZcashOutputsHash');
 }
 
@@ -331,7 +331,7 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
             return val;
           }
         }
-      } catch {}
+      } catch { }
     }
 
     // Fallback to env override if provided
@@ -350,7 +350,14 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
   }
 }
 
+export function calculateTxid(hex: string): string {
+  const bytes = hexToBytes(hex);
+  const hash = sha256(sha256(bytes));
+  return bytesToHex(reverseBytes(hash));
+}
+
 export async function broadcastTransaction(hex: string, tatumKey?: string): Promise<string> {
+  const computedTxid = calculateTxid(hex);
   const SIGNAL = timeoutSignal(8000);
   const errors: string[] = [];
 
@@ -373,6 +380,26 @@ export async function broadcastTransaction(hex: string, tatumKey?: string): Prom
     errors.push(`zerdinals: ${e?.message || 'network error'}`);
   }
 
+  // 2) Zatoshi RPC (new fallback)
+  try {
+    const r = await fetch('https://rpc.zatoshi.market/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'sendrawtransaction', params: [hex], id: 1 }),
+      signal: SIGNAL,
+    });
+    if (r.ok) {
+      const { txid, snippet } = await extractTxidFromResponse('zatoshi', r);
+      if (txid) return txid;
+      errors.push(`zatoshi: ${snippet}`);
+    } else {
+      const text = await r.text().catch(() => 'unknown error');
+      errors.push(`zatoshi(${r.status}): ${text.slice(0, 200)}`);
+    }
+  } catch (e: any) {
+    errors.push(`zatoshi: ${e?.message || 'network error'}`);
+  }
+
   // 3) Tatum JSON-RPC fallback
   try {
     const r = await fetch('https://api.tatum.io/v3/blockchain/node/zcash-mainnet', {
@@ -384,9 +411,19 @@ export async function broadcastTransaction(hex: string, tatumKey?: string): Prom
     if (r.ok) {
       const { txid, snippet } = await extractTxidFromResponse('tatum', r);
       if (txid) return txid;
+      // Handle "transaction already in block chain" (code -27) as success
+      if (snippet.includes('transaction already in block chain') || snippet.includes('"code":-27')) {
+        console.log(`[broadcast][tatum] transaction already in chain, returning computed txid: ${computedTxid}`);
+        return computedTxid;
+      }
       errors.push(`tatum: ${snippet}`);
     } else {
       const text = await r.text().catch(() => 'unknown error');
+      // Handle "transaction already in block chain" in error response too
+      if (text.includes('transaction already in block chain') || text.includes('"code":-27')) {
+        console.log(`[broadcast][tatum] transaction already in chain (error resp), returning computed txid: ${computedTxid}`);
+        return computedTxid;
+      }
       errors.push(`tatum(${r.status}): ${text.slice(0, 200)}`);
     }
   } catch (e: any) {
@@ -407,6 +444,11 @@ export async function broadcastTransaction(hex: string, tatumKey?: string): Prom
       errors.push(`blockchair: ${snippet}`);
     } else {
       const text = await r.text().catch(() => 'unknown error');
+      // Blockchair might also return similar errors
+      if (text.includes('transaction already in block chain') || text.includes('Transaction already in block chain')) {
+        console.log(`[broadcast][blockchair] transaction already in chain, returning computed txid: ${computedTxid}`);
+        return computedTxid;
+      }
       errors.push(`blockchair(${r.status}): ${text.slice(0, 200)}`);
     }
   } catch (e: any) {
@@ -442,7 +484,7 @@ export async function buildCommitTxHex(params: {
   p2shScript: Uint8Array;
   platformFeeZats?: number;
   platformTreasuryAddress?: string;
-}): Promise<{ hex: string; pubKey: Uint8Array }>{
+}): Promise<{ hex: string; pubKey: Uint8Array }> {
   const priv = wifToPriv(params.wif);
   const pub = await secp256k1.getPublicKey(priv, true);
   const pkh = addressToPkh(params.address);
@@ -459,19 +501,19 @@ export async function buildCommitTxHex(params: {
   }
   const change = params.utxo.value - params.inscriptionAmount - params.fee - platformFee;
   if (change > 546) outputs.push({ value: change, scriptPubKey: buildP2PKHScript(pkh) });
-  const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId: params.consensusBranchId, lockTime:0, expiryHeight:0, inputs, outputs };
+  const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId: params.consensusBranchId, lockTime: 0, expiryHeight: 0, inputs, outputs };
   const sigHash = zip243Sighash(txData, 0);
   const sig = await secp256k1.sign(sigHash, priv);
-  const der = signatureToDER(sig.toCompactRawBytes?sig.toCompactRawBytes():sig);
+  const der = signatureToDER((sig as any).toCompactRawBytes ? (sig as any).toCompactRawBytes() : sig);
   const sigWithType = concatBytes([der, new Uint8Array([0x01])]);
   const version = u32le(0x80000004), vgid = u32le(0x892f2085), inCount = varint(1);
   const prev = reverseBytes(hexToBytes(params.utxo.txid)), vout = u32le(params.utxo.vout), seq = u32le(0xfffffffd);
-  const scriptSig = concatBytes([ new Uint8Array([sigWithType.length]), sigWithType, new Uint8Array([pub.length]), pub ]);
+  const scriptSig = concatBytes([new Uint8Array([sigWithType.length]), sigWithType, new Uint8Array([pub.length]), pub]);
   const scriptLen = varint(scriptSig.length);
   const outCount = varint(outputs.length);
-  const outsBuf = concatBytes(outputs.map(o=>concatBytes([u64le(o.value), varint(o.scriptPubKey.length), o.scriptPubKey])));
-  const lock = u32le(0), exp = u32le(0), valBal = new Uint8Array(8), nSS=new Uint8Array([0x00]), nSO=new Uint8Array([0x00]), nJS=new Uint8Array([0x00]);
-  const raw = concatBytes([ version, vgid, inCount, prev, vout, scriptLen, scriptSig, seq, outCount, outsBuf, lock, exp, valBal, nSS, nSO, nJS ]);
+  const outsBuf = concatBytes(outputs.map(o => concatBytes([u64le(o.value), varint(o.scriptPubKey.length), o.scriptPubKey])));
+  const lock = u32le(0), exp = u32le(0), valBal = new Uint8Array(8), nSS = new Uint8Array([0x00]), nSO = new Uint8Array([0x00]), nJS = new Uint8Array([0x00]);
+  const raw = concatBytes([version, vgid, inCount, prev, vout, scriptLen, scriptSig, seq, outCount, outsBuf, lock, exp, valBal, nSS, nSO, nJS]);
   return { hex: bytesToHex(raw), pubKey: pub };
 }
 
@@ -490,19 +532,19 @@ export async function buildRevealTxHex(params: {
   const outputScript = buildP2PKHScript(pkh);
   const inputs = [{ txid: params.commitTxid, vout: 0, sequence: 0xffffffff, value: params.inscriptionAmount, scriptPubKey: params.redeemScript }];
   const outputs = [{ value: params.inscriptionAmount - params.fee, scriptPubKey: outputScript }];
-  const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId: params.consensusBranchId, lockTime:0, expiryHeight:0, inputs, outputs };
+  const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId: params.consensusBranchId, lockTime: 0, expiryHeight: 0, inputs, outputs };
   const sigHash = zip243Sighash(txData, 0);
   const sig = await secp256k1.sign(sigHash, priv);
-  const der = signatureToDER(sig.toCompactRawBytes?sig.toCompactRawBytes():sig);
+  const der = signatureToDER((sig as any).toCompactRawBytes ? (sig as any).toCompactRawBytes() : sig);
   const sigWithType = concatBytes([der, new Uint8Array([0x01])]);
   const version = u32le(0x80000004), vgid = u32le(0x892f2085), inCount = varint(1);
   const prev = reverseBytes(hexToBytes(params.commitTxid)), vout = u32le(0), seq = u32le(0xffffffff);
-  const scriptSig = concatBytes([ params.inscriptionData, new Uint8Array([sigWithType.length]), sigWithType, new Uint8Array([params.redeemScript.length]), params.redeemScript ]);
+  const scriptSig = concatBytes([params.inscriptionData, new Uint8Array([sigWithType.length]), sigWithType, new Uint8Array([params.redeemScript.length]), params.redeemScript]);
   const scriptLen = varint(scriptSig.length);
   const outCount = varint(1);
   const outBuf = concatBytes([u64le(params.inscriptionAmount - params.fee), varint(outputScript.length), outputScript]);
-  const lock = u32le(0), exp = u32le(0), valBal = new Uint8Array(8), nSS=new Uint8Array([0x00]), nSO=new Uint8Array([0x00]), nJS=new Uint8Array([0x00]);
-  const raw = concatBytes([ version, vgid, inCount, prev, vout, scriptLen, scriptSig, seq, outCount, outBuf, lock, exp, valBal, nSS, nSO, nJS ]);
+  const lock = u32le(0), exp = u32le(0), valBal = new Uint8Array(8), nSS = new Uint8Array([0x00]), nSO = new Uint8Array([0x00]), nJS = new Uint8Array([0x00]);
+  const raw = concatBytes([version, vgid, inCount, prev, vout, scriptLen, scriptSig, seq, outCount, outBuf, lock, exp, valBal, nSS, nSO, nJS]);
   return bytesToHex(raw);
 }
 
@@ -542,7 +584,7 @@ export async function fetchUtxos(address: string): Promise<Utxo[]> {
         if (mapped.length > 0) return mapped;
       }
     }
-  } catch (_) {}
+  } catch (_) { }
   // Fallback to Zerdinals helper service
   const r2 = await fetch(`https://utxos.zerdinals.com/api/utxos/${address}`);
   if (!r2.ok) throw new Error('UTXO fetch failed');
@@ -551,7 +593,7 @@ export async function fetchUtxos(address: string): Promise<Utxo[]> {
 // Check if a given outpoint is inscribed.
 // Primary: Zerdinals indexer. Fallback: Heuristic check via raw transaction
 // by scanning input script for the ASCII marker "ord" and treating vout 0 as inscribed.
-export async function checkInscriptionAt(location: string){
+export async function checkInscriptionAt(location: string) {
   try {
     const r = await fetch(`https://indexer.zerdinals.com/location/${location}`);
     if (r.status === 404) return false;
@@ -575,12 +617,12 @@ export async function checkInscriptionAt(location: string){
       const vout = parseInt(voutStr || "0", 10) || 0;
       const tatumKey = process.env.TATUM_API_KEY || "";
       const url = 'https://api.tatum.io/v3/blockchain/node/zcash-mainnet';
-      const body = { jsonrpc:'2.0', method:'getrawtransaction', params:[txid, 1], id:1 };
-      const r2 = await fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json', 'x-api-key': tatumKey }, body: JSON.stringify(body) });
+      const body = { jsonrpc: '2.0', method: 'getrawtransaction', params: [txid, 1], id: 1 };
+      const r2 = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': tatumKey }, body: JSON.stringify(body) });
       const j2 = await r2.json();
       const vins = j2?.result?.vin || [];
       // Reveal-style tx includes redeemScript in scriptSig (hex) containing 'ord'
-      const hasOrd = vins.some((vin:any)=>{
+      const hasOrd = vins.some((vin: any) => {
         const hex: string = vin?.scriptSig?.hex || '';
         return typeof hex === 'string' && hex.toLowerCase().includes('6f7264'); // 'ord'
       });
@@ -625,7 +667,7 @@ export function buildCommitSighash(params: {
 }): Uint8Array {
   const pkh = addressToPkh(params.address);
   const inputs = [{ txid: params.utxo.txid, vout: params.utxo.vout, sequence: 0xfffffffd, value: params.utxo.value, scriptPubKey: buildP2PKHScript(pkh) }];
-  const outputs: { value: number; scriptPubKey: Uint8Array }[] = [ { value: params.inscriptionAmount, scriptPubKey: params.p2shScript } ];
+  const outputs: { value: number; scriptPubKey: Uint8Array }[] = [{ value: params.inscriptionAmount, scriptPubKey: params.p2shScript }];
   const platformFee = Math.max(0, params.platformFeeZats || 0);
   if (platformFee > 0) {
     const treasuryAddr = params.platformTreasuryAddress || '';
@@ -635,7 +677,7 @@ export function buildCommitSighash(params: {
   }
   const change = params.utxo.value - params.inscriptionAmount - params.fee - platformFee;
   if (change > 546) outputs.push({ value: change, scriptPubKey: buildP2PKHScript(pkh) });
-  const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId: params.consensusBranchId, lockTime:0, expiryHeight:0, inputs, outputs };
+  const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId: params.consensusBranchId, lockTime: 0, expiryHeight: 0, inputs, outputs };
   return zip243Sighash(txData, 0);
 }
 
@@ -701,7 +743,7 @@ export function assembleCommitTxHex(params: {
   platformTreasuryAddress?: string;
 }): string {
   const pkh = addressToPkh(params.address);
-  const outputs: { value: number; scriptPubKey: Uint8Array }[] = [ { value: params.inscriptionAmount, scriptPubKey: params.p2shScript } ];
+  const outputs: { value: number; scriptPubKey: Uint8Array }[] = [{ value: params.inscriptionAmount, scriptPubKey: params.p2shScript }];
   const platformFee = Math.max(0, params.platformFeeZats || 0);
   if (platformFee > 0) {
     const treasuryAddr = params.platformTreasuryAddress || '';
@@ -721,9 +763,9 @@ export function assembleCommitTxHex(params: {
   const scriptSig = concatBytes([pushData(sigWithType), pushData(params.pubKey)]);
   const scriptLen = varint(scriptSig.length);
   const outCount = varint(outputs.length);
-  const outsBuf = concatBytes(outputs.map(o=>concatBytes([u64le(o.value), varint(o.scriptPubKey.length), o.scriptPubKey])));
-  const lock = u32le(0), exp = u32le(0), valBal = new Uint8Array(8), nSS=new Uint8Array([0x00]), nSO=new Uint8Array([0x00]), nJS=new Uint8Array([0x00]);
-  const raw = concatBytes([ version, vgid, inCount, prev, vout, scriptLen, scriptSig, seq, outCount, outsBuf, lock, exp, valBal, nSS, nSO, nJS ]);
+  const outsBuf = concatBytes(outputs.map(o => concatBytes([u64le(o.value), varint(o.scriptPubKey.length), o.scriptPubKey])));
+  const lock = u32le(0), exp = u32le(0), valBal = new Uint8Array(8), nSS = new Uint8Array([0x00]), nSO = new Uint8Array([0x00]), nJS = new Uint8Array([0x00]);
+  const raw = concatBytes([version, vgid, inCount, prev, vout, scriptLen, scriptSig, seq, outCount, outsBuf, lock, exp, valBal, nSS, nSO, nJS]);
   return bytesToHex(raw);
 }
 
@@ -829,7 +871,7 @@ export function buildRevealSighash(params: {
   const outputScript = buildP2PKHScript(pkh);
   const inputs = [{ txid: params.commitTxid, vout: 0, sequence: 0xfffffffd, value: params.inscriptionAmount, scriptPubKey: params.redeemScript }];
   const outputs = [{ value: params.inscriptionAmount - params.fee, scriptPubKey: outputScript }];
-  const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId: params.consensusBranchId, lockTime:0, expiryHeight:0, inputs, outputs };
+  const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId: params.consensusBranchId, lockTime: 0, expiryHeight: 0, inputs, outputs };
   return zip243Sighash(txData, 0);
 }
 
@@ -862,8 +904,8 @@ export function assembleRevealTxHex(params: {
   const sigPushed = pushData(sigWithType);
   const rsPushed = pushData(params.redeemScript);
 
-  console.log(`[asm] pushData(sig): ${sigPushed.length} bytes (first 2: ${bytesToHex(sigPushed.slice(0,2))})`);
-  console.log(`[asm] pushData(rs): ${rsPushed.length} bytes (first 2: ${bytesToHex(rsPushed.slice(0,2))})`);
+  console.log(`[asm] pushData(sig): ${sigPushed.length} bytes (first 2: ${bytesToHex(sigPushed.slice(0, 2))})`);
+  console.log(`[asm] pushData(rs): ${rsPushed.length} bytes (first 2: ${bytesToHex(rsPushed.slice(0, 2))})`);
 
   const scriptSig = concatBytes([
     params.inscriptionData,       // Already formatted script bytes (pushData ops inside)
@@ -881,12 +923,12 @@ export function assembleRevealTxHex(params: {
   console.log(`[asm] output value: ${outValue} zats (${bytesToHex(u64le(outValue))})`);
   console.log(`[asm] output script: ${outputScript.length} bytes`);
 
-  const lock = u32le(0), exp = u32le(0), valBal = new Uint8Array(8), nSS=new Uint8Array([0x00]), nSO=new Uint8Array([0x00]), nJS=new Uint8Array([0x00]);
-  const raw = concatBytes([ version, vgid, inCount, prev, vout, scriptLen, scriptSig, seq, outCount, outBuf, lock, exp, valBal, nSS, nSO, nJS ]);
+  const lock = u32le(0), exp = u32le(0), valBal = new Uint8Array(8), nSS = new Uint8Array([0x00]), nSO = new Uint8Array([0x00]), nJS = new Uint8Array([0x00]);
+  const raw = concatBytes([version, vgid, inCount, prev, vout, scriptLen, scriptSig, seq, outCount, outBuf, lock, exp, valBal, nSS, nSO, nJS]);
 
   console.log(`[asm] raw tx: ${raw.length} bytes`);
   console.log(`[asm] components: ver=4 vgid=4 in=1 prev=32 vout=4 scLen=${scriptLen.length} sc=${scriptSig.length} seq=4 outCnt=1 out=${outBuf.length} lock=4 exp=4 valBal=8 shields=3`);
-  const expectedTotal = 4+4+1+32+4+scriptLen.length+scriptSig.length+4+1+outBuf.length+4+4+8+3;
+  const expectedTotal = 4 + 4 + 1 + 32 + 4 + scriptLen.length + scriptSig.length + 4 + 1 + outBuf.length + 4 + 4 + 8 + 3;
   console.log(`[asm] expected total: ${expectedTotal}, actual: ${raw.length}`);
 
   return bytesToHex(raw);
@@ -902,7 +944,7 @@ export function buildSplitSighash(params: {
   const pkh = addressToPkh(params.address);
   const inputs = [{ txid: params.utxo.txid, vout: params.utxo.vout, sequence: 0xfffffffd, value: params.utxo.value, scriptPubKey: buildP2PKHScript(pkh) }];
   const outputs = params.outputs;
-  const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId: params.consensusBranchId, lockTime:0, expiryHeight:0, inputs, outputs };
+  const txData = { version: 0x80000004, versionGroupId: 0x892f2085, consensusBranchId: params.consensusBranchId, lockTime: 0, expiryHeight: 0, inputs, outputs };
   return zip243Sighash(txData, 0);
 }
 
@@ -946,12 +988,12 @@ export function assembleSplitTxHex(params: {
   const sigWithType = concatBytes([der, new Uint8Array([0x01])]);
   const version = u32le(0x80000004), vgid = u32le(0x892f2085), inCount = varint(1);
   const prev = reverseBytes(hexToBytes(params.utxo.txid)), vout = u32le(params.utxo.vout), seq = u32le(0xfffffffd);
-  const scriptSig = concatBytes([ new Uint8Array([sigWithType.length]), sigWithType, new Uint8Array([params.pubKey.length]), params.pubKey ]);
+  const scriptSig = concatBytes([new Uint8Array([sigWithType.length]), sigWithType, new Uint8Array([params.pubKey.length]), params.pubKey]);
   const scriptLen = varint(scriptSig.length);
   const outCount = varint(params.outputs.length);
-  const outsBuf = concatBytes(params.outputs.map(o=>concatBytes([u64le(o.value), varint(o.scriptPubKey.length), o.scriptPubKey])));
-  const lock = u32le(0), exp = u32le(0), valBal = new Uint8Array(8), nSS=new Uint8Array([0x00]), nSO=new Uint8Array([0x00]), nJS=new Uint8Array([0x00]);
-  const raw = concatBytes([ version, vgid, inCount, prev, vout, scriptLen, scriptSig, seq, outCount, outsBuf, lock, exp, valBal, nSS, nSO, nJS ]);
+  const outsBuf = concatBytes(params.outputs.map(o => concatBytes([u64le(o.value), varint(o.scriptPubKey.length), o.scriptPubKey])));
+  const lock = u32le(0), exp = u32le(0), valBal = new Uint8Array(8), nSS = new Uint8Array([0x00]), nSO = new Uint8Array([0x00]), nJS = new Uint8Array([0x00]);
+  const raw = concatBytes([version, vgid, inCount, prev, vout, scriptLen, scriptSig, seq, outCount, outsBuf, lock, exp, valBal, nSS, nSO, nJS]);
   return bytesToHex(raw);
 }
 
@@ -990,8 +1032,8 @@ export function assembleSplitTxHexMulti(params: {
 
   const outCount = varint(params.outputs.length);
   const outsBuf = concatBytes(params.outputs.map(o => concatBytes([u64le(o.value), varint(o.scriptPubKey.length), o.scriptPubKey])));
-  const lock = u32le(0), exp = u32le(0), valBal = new Uint8Array(8), nSS=new Uint8Array([0x00]), nSO=new Uint8Array([0x00]), nJS=new Uint8Array([0x00]);
+  const lock = u32le(0), exp = u32le(0), valBal = new Uint8Array(8), nSS = new Uint8Array([0x00]), nSO = new Uint8Array([0x00]), nJS = new Uint8Array([0x00]);
 
-  const raw = concatBytes([ version, vgid, inCount, inputsBuf, outCount, outsBuf, lock, exp, valBal, nSS, nSO, nJS ]);
+  const raw = concatBytes([version, vgid, inCount, inputsBuf, outCount, outsBuf, lock, exp, valBal, nSS, nSO, nJS]);
   return bytesToHex(raw);
 }

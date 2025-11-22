@@ -265,7 +265,12 @@ export const createMintJobAndRun = action({
       params: { ...params, type: inscriptionType },
       totalCount: 1,
     });
-    await ctx.runAction(api.jobsActions.runNextMint, { jobId });
+    try {
+      await ctx.runAction(api.jobsActions.runNextMint, { jobId });
+    } catch (e) {
+      // Ignore error here, job status will be 'failed' and client can read it
+      console.error(`[createMintJobAndRun] runNextMint failed for ${jobId}:`, e);
+    }
     return { jobId };
   },
 });
