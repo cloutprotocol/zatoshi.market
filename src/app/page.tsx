@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { zcashRPC } from '@/services/zcash';
+import { RecentClaims } from '@/components/RecentClaims';
 
 // Load Dither only on the client to avoid SSR/hydration issues
 const Dither = dynamic(() => import('@/components/Dither'), { ssr: false, loading: () => null });
@@ -115,6 +116,11 @@ export default function Home() {
               </div>
             </div>
           </Link>
+        </section>
+
+        {/* Recent Claims Carousel */}
+        <section className="py-16">
+          <RecentClaims collectionSlug="zgods" limit={12} />
         </section>
 
         {/* Features Grid */}
