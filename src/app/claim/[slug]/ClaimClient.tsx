@@ -9,6 +9,7 @@ import { api } from '../../../../convex/_generated/api';
 import { ConfirmTransaction } from '@/components/ConfirmTransaction';
 import { PLATFORM_FEES, calculateTotalCost } from '@/config/fees';
 import { buildImageUrls, buildTokenName, fetchCollectionMetadata } from '@/lib/collectionAssets';
+import type { Id } from '../../../../convex/_generated/dataModel';
 
 type Props = {
   collection: CollectionConfig;
@@ -41,6 +42,42 @@ type ClaimStats = {
   reservedForAddress?: { count: number };
 };
 
+type ReservationRef = {
+  tokenId: number;
+  claimId: Id<'collectionClaims'>;
+};
+
+type ReservationIssue = {
+  tokenId: number;
+  reason: string;
+  owner?: string | null;
+  status?: string;
+};
+
+function describeReservationIssue(issue?: ReservationIssue) {
+  if (!issue) {
+    return 'Your reservation is no longer valid. Please reserve new tokens and try again.';
+  }
+  const prefix = `Token ${issue.tokenId}`;
+  switch (issue.reason) {
+    case 'expired':
+      return `${prefix} reservation expired. Reserve new tokens.`;
+    case 'already_minted':
+      return `${prefix} was already minted on-chain. Please reserve a different token.`;
+    case 'address_mismatch':
+      return `${prefix} is now assigned to another address${issue.owner ? ` (${issue.owner})` : ''}. Reserve a new token.`;
+    case 'not_reserved':
+      return `${prefix} is no longer reserved. Reserve new tokens and mint within 15 minutes.`;
+    case 'token_mismatch':
+    case 'collection_mismatch':
+      return `${prefix} reservation is invalid. Reserve again.`;
+    case 'not_found':
+      return `${prefix} reservation was not found. Reserve again.`;
+    default:
+      return `${prefix} reservation is invalid (${issue.reason}). Reserve again.`;
+  }
+}
+
 export function ClaimClient({ collection }: Props) {
   const { wallet, badges, mounted } = useWallet();
   const [allocation, setAllocation] = useState<Allocation | null>(null);
@@ -50,7 +87,7 @@ export function ClaimClient({ collection }: Props) {
   const [claimCount, setClaimCount] = useState(1);
   const [claimStats, setClaimStats] = useState<ClaimStats | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [pendingTokens, setPendingTokens] = useState<number[]>([]);
+  const [pendingReservations, setPendingReservations] = useState<ReservationRef[]>([]);
   const [pendingPayloads, setPendingPayloads] = useState<string[]>([]);
   // Fee tiers (zatoshis per tx)
   const feeTiers = [
@@ -72,6 +109,7 @@ export function ClaimClient({ collection }: Props) {
   const [selectedTokenMetadata, setSelectedTokenMetadata] = useState<any>(null);
   const mintedCount = claimStats?.mintedForAddress?.count ?? 0;
   const reservedPending = claimStats?.reservedForAddress?.count ?? 0;
+  const pendingTokens = useMemo(() => pendingReservations.map((r) => r.tokenId), [pendingReservations]);
 
   const vipBadgePresent = useMemo(
     () => badges.some((b) => b.badgeSlug === 'vip'),
@@ -184,6 +222,11 @@ export function ClaimClient({ collection }: Props) {
     if (mintedCount >= allocation.max) return remainingAllowlist;
     return Math.max(remainingAllowlist, reservedPending);
   }, [allocation, mintedCount, remainingAllowlist, reservedPending]);
+  const maxBatchSize = useMemo(() => Math.max(1, Math.min(5, availableToRequest || 1)), [availableToRequest]);
+
+  useEffect(() => {
+    setClaimCount((current) => Math.min(Math.max(1, current), maxBatchSize));
+  }, [maxBatchSize]);
 
   const handleClaim = async () => {
     if (!wallet?.address || !wallet?.privateKey) {
@@ -198,7 +241,7 @@ export function ClaimClient({ collection }: Props) {
       setError('Allocation exhausted');
       return;
     }
-    const qty = Math.max(1, Math.min(5, claimCount, availableToRequest));
+    const qty = Math.max(1, Math.min(maxBatchSize, claimCount));
 
     const convex = getConvexClient();
     if (!convex) {
@@ -210,13 +253,17 @@ export function ClaimClient({ collection }: Props) {
     setMintResults([]);
     setClaiming(true);
     try {
-      const reserve = await convex.mutation(api.collectionClaims.reserveTokens, {
+      const reserve = (await convex.mutation(api.collectionClaims.reserveTokens, {
         collectionSlug: collection.slug,
         address: wallet.address,
         count: qty,
         supply: collection.supply || 10000,
-      } as any);
-      const payloads = (reserve.tokenIds as number[]).map((tokenId: number) =>
+      } as any)) as { tokenIds: number[]; reservations?: ReservationRef[] };
+      const reservations = reserve?.reservations ?? [];
+      if (!reservations.length) {
+        throw new Error('Reservation could not be confirmed. Please refresh and try again.');
+      }
+      const payloads = reservations.map(({ tokenId }) =>
         JSON.stringify({
           p: 'zrc-721',
           op: 'mint',
@@ -224,7 +271,7 @@ export function ClaimClient({ collection }: Props) {
           id: String(tokenId),
         })
       );
-      setPendingTokens(reserve.tokenIds as number[]);
+      setPendingReservations(reservations);
       setPendingPayloads(payloads);
       setShowConfirm(true);
       setClaiming(false);
@@ -237,13 +284,14 @@ export function ClaimClient({ collection }: Props) {
 
   const releasePending = async () => {
     const convex = getConvexClient();
-    if (!convex || !pendingTokens.length || !wallet?.address) return;
+    if (!convex || !pendingReservations.length || !wallet?.address) return;
     const currentBatch = batchId ?? `batch-${Date.now()}`;
     await Promise.all(
-      pendingTokens.map((tokenId) =>
+      pendingReservations.map(({ tokenId, claimId }) =>
         convex.mutation(api.collectionClaims.finalizeToken, {
           collectionSlug: collection.slug,
           tokenId,
+          claimId,
           address: wallet.address,
           inscriptionId: '',
           txid: '',
@@ -253,7 +301,7 @@ export function ClaimClient({ collection }: Props) {
         } as any)
       )
     );
-    setPendingTokens([]);
+    setPendingReservations([]);
     setPendingPayloads([]);
     setBatchId(null);
   };
@@ -263,7 +311,7 @@ export function ClaimClient({ collection }: Props) {
       setError('Please connect your wallet');
       return;
     }
-    if (!pendingTokens.length || !pendingPayloads.length) {
+    if (!pendingReservations.length || !pendingPayloads.length) {
       setShowConfirm(false);
       return;
     }
@@ -282,10 +330,26 @@ export function ClaimClient({ collection }: Props) {
     setClaiming(true);
     setMinting(true);
     try {
+      const verification = (await convex.query(api.collectionClaims.verifyReservations, {
+        collectionSlug: collection.slug,
+        address: wallet.address,
+        reservations: pendingReservations,
+      } as any)) as { ok?: boolean; invalid?: ReservationIssue[] };
+
+      if (!verification?.ok) {
+        const issueMessage = describeReservationIssue(verification?.invalid?.[0]);
+        setError(issueMessage);
+        setPendingReservations([]);
+        setPendingPayloads([]);
+        setBatchId(null);
+        return;
+      }
+
       const wif = wallet.privateKey;
 
-      for (let idx = 0; idx < pendingTokens.length; idx++) {
-        const tokenId = pendingTokens[idx];
+      for (let idx = 0; idx < pendingReservations.length; idx++) {
+        const reservation = pendingReservations[idx];
+        const tokenId = reservation.tokenId;
         const contentJson = pendingPayloads[idx];
         try {
           const bytes = new TextEncoder().encode(contentJson).length;
@@ -310,6 +374,7 @@ export function ClaimClient({ collection }: Props) {
           await convex.mutation(api.collectionClaims.finalizeToken, {
             collectionSlug: collection.slug,
             tokenId,
+            claimId: reservation.claimId,
             address: wallet.address,
             inscriptionId,
             txid: undefined,
@@ -322,6 +387,7 @@ export function ClaimClient({ collection }: Props) {
           await convex.mutation(api.collectionClaims.finalizeToken, {
             collectionSlug: collection.slug,
             tokenId,
+            claimId: reservation.claimId,
             address: wallet.address,
             inscriptionId: undefined,
             txid: undefined,
@@ -333,7 +399,7 @@ export function ClaimClient({ collection }: Props) {
         }
       }
       await refreshClaimedTokens();
-      setPendingTokens([]);
+      setPendingReservations([]);
       setPendingPayloads([]);
       setBatchId(null);
     } catch (e: any) {
@@ -457,9 +523,9 @@ export function ClaimClient({ collection }: Props) {
               <input
                 type="number"
                 min={1}
-                max={Math.min(5, availableToRequest || 1)}
+                max={maxBatchSize}
                 value={claimCount}
-                onChange={(e) => setClaimCount(Math.max(1, Math.min(5, Number(e.target.value) || 1)))}
+                onChange={(e) => setClaimCount(Math.max(1, Math.min(maxBatchSize, Number(e.target.value) || 1)))}
                 className="bg-black/30 border border-gold-500/30 rounded px-3 py-2 w-24 text-gold-100 text-base sm:text-sm"
                 disabled={claiming || availableToRequest <= 0}
               />
@@ -469,7 +535,7 @@ export function ClaimClient({ collection }: Props) {
               disabled={claiming || availableToRequest <= 0}
               onClick={handleClaim}
             >
-              {claiming ? 'Minting...' : `Claim ${claimCount} ZGODS`}
+              {claiming ? 'Minting...' : `Claim ${Math.min(claimCount, maxBatchSize)} ZGODS`}
             </button>
             {error && <div className="text-sm text-red-300">{error}</div>}
           </div>

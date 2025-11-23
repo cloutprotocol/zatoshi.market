@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { getAllowlistEntry } from "./claimAllowlists";
+import { Id } from "./_generated/dataModel";
 
 const MAX_RESERVE_ATTEMPTS = 200;
 export const RESERVATION_TTL_MS = 15 * 60 * 1000; // 15 minutes
@@ -169,6 +170,7 @@ export const reserveTokens = mutation({
     const maxCount = Math.min(5, requestedCount);
     const reserved: number[] = [];
     const reusedDocs: any[] = [];
+    const reservations: { tokenId: number; claimId: Id<"collectionClaims"> }[] = [];
     const newAllocations: number[] = [];
 
     // Periodically sweep stale reservations for the entire collection so supply frees up
@@ -261,6 +263,7 @@ export const reserveTokens = mutation({
       if (reserved.length >= targetCount) break;
       reserved.push(doc.tokenId);
       reusedDocs.push(doc);
+      reservations.push({ tokenId: doc.tokenId, claimId: doc._id });
     }
 
     if (reusedDocs.length) {
@@ -297,7 +300,7 @@ export const reserveTokens = mutation({
     }
 
     for (const id of newAllocations) {
-      await ctx.db.insert("collectionClaims", {
+      const claimId = await ctx.db.insert("collectionClaims", {
         collectionSlug: slug,
         tokenId: id,
         status: "reserved",
@@ -307,6 +310,7 @@ export const reserveTokens = mutation({
         updatedAt: now,
         attempts: 0,
       });
+      reservations.push({ tokenId: id, claimId });
       await ctx.db.insert("collectionClaimEvents", {
         collectionSlug: slug,
         tokenId: id,
@@ -317,7 +321,7 @@ export const reserveTokens = mutation({
       });
     }
 
-    return { tokenIds: reserved };
+    return { tokenIds: reserved, reservations };
   },
 });
 
@@ -326,6 +330,7 @@ export const finalizeToken = mutation({
     collectionSlug: v.string(),
     tokenId: v.number(),
     address: v.string(),
+    claimId: v.optional(v.id("collectionClaims")),
     inscriptionId: v.optional(v.string()),
     txid: v.optional(v.string()),
     success: v.boolean(),
@@ -336,10 +341,21 @@ export const finalizeToken = mutation({
     const slug = args.collectionSlug.toLowerCase();
     const address = normalizeAddress(args.address);
     const allowlist = getAllowlistEntry(slug, address);
-    const existing = await ctx.db
-      .query("collectionClaims")
-      .withIndex("by_collection_token", (q) => q.eq("collectionSlug", slug).eq("tokenId", args.tokenId))
-      .first();
+    let existing = null;
+
+    if (args.claimId) {
+      const doc = await ctx.db.get(args.claimId);
+      if (doc && doc.collectionSlug === slug && doc.tokenId === args.tokenId) {
+        existing = doc;
+      }
+    }
+
+    if (!existing) {
+      existing = await ctx.db
+        .query("collectionClaims")
+        .withIndex("by_collection_token", (q) => q.eq("collectionSlug", slug).eq("tokenId", args.tokenId))
+        .first();
+    }
 
     if (!existing) {
       // If something somehow minted without reservation, create record
@@ -482,5 +498,62 @@ export const getByInscriptionId = query({
       .query("collectionClaims")
       .withIndex("by_inscription", (q) => q.eq("inscriptionId", args.inscriptionId))
       .first();
+  },
+});
+
+export const verifyReservations = query({
+  args: {
+    collectionSlug: v.string(),
+    address: v.string(),
+    reservations: v.array(
+      v.object({
+        tokenId: v.number(),
+        claimId: v.id("collectionClaims"),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const slug = args.collectionSlug.toLowerCase();
+    const address = normalizeAddress(args.address);
+    const cutoff = Date.now() - RESERVATION_TTL_MS;
+    const invalid: Array<{ tokenId: number; reason: string; status?: string; owner?: string | null }> = [];
+
+    for (const entry of args.reservations) {
+      const doc = await ctx.db.get(entry.claimId);
+      if (!doc) {
+        invalid.push({ tokenId: entry.tokenId, reason: "not_found" });
+        continue;
+      }
+      if (doc.collectionSlug !== slug) {
+        invalid.push({ tokenId: entry.tokenId, reason: "collection_mismatch" });
+        continue;
+      }
+      if (doc.tokenId !== entry.tokenId) {
+        invalid.push({ tokenId: entry.tokenId, reason: "token_mismatch", owner: doc.address });
+        continue;
+      }
+      if (normalizeAddress(doc.address) !== address) {
+        invalid.push({ tokenId: entry.tokenId, reason: "address_mismatch", owner: doc.address });
+        continue;
+      }
+      const updatedAt = doc.updatedAt ?? doc.createdAt ?? 0;
+      if (doc.status !== "reserved") {
+        invalid.push({
+          tokenId: entry.tokenId,
+          reason: doc.status === "minted" ? "already_minted" : "not_reserved",
+          status: doc.status,
+          owner: doc.address,
+        });
+        continue;
+      }
+      if (updatedAt < cutoff) {
+        invalid.push({ tokenId: entry.tokenId, reason: "expired" });
+      }
+    }
+
+    return {
+      ok: invalid.length === 0,
+      invalid,
+    };
   },
 });
