@@ -185,7 +185,7 @@ export const getAllocationStatus = query({
     const allowlist = getAllowlistEntries(slug);
     const total = allowlist.length;
     const start = Math.max(args.start ?? 0, 0);
-    const limit = Math.min(Math.max(args.limit ?? 25, 1), 25);
+    const limit = Math.min(Math.max(args.limit ?? 25, 1), 100);
     const slice = allowlist.slice(start, start + limit);
     const cutoff = Date.now() - RESERVATION_TTL_MS;
 
@@ -241,10 +241,12 @@ export const getAllocationStatus = query({
 
       const mintedCount = minted.length;
       const reservedCount = reservedActive.length;
-      const remaining = Math.max(entry.max - mintedCount, 0);
+      const remaining = Math.max(entry.max - mintedCount - reservedCount, 0);
       const issues: string[] = [];
       if (mintedCount > entry.max) issues.push("over_minted");
       if (mintedCount + reservedCount > entry.max) issues.push("over_reserved");
+      if (reservedExpired.length) issues.push("expired_reservations");
+      if (failedCount > 0) issues.push("failed_claims");
       if (duplicateTokenIds.length) issues.push("duplicate_tokens");
 
       entries.push({
@@ -263,11 +265,15 @@ export const getAllocationStatus = query({
       });
     }
 
+    const allowlistTotal = allowlist.reduce((sum, entry) => sum + entry.max, 0);
+
     return {
       total,
       start,
-      limit: entries.length,
+      limit,
+      pageSize: entries.length,
       nextStart: start + slice.length < total ? start + slice.length : null,
+      allowlistTotal,
       entries,
     };
   },
