@@ -41,6 +41,33 @@ const DEFAULT_TAB: TabKey = 'text';
 // Constants for fee and dust limit, mirroring backend
 const DUST_LIMIT = 546;
 
+type RpcStatus = 'unknown' | 'online' | 'degraded' | 'offline';
+
+interface NodeStatusResponse {
+  status: RpcStatus;
+  healthy: boolean;
+  blockchainInfo?: {
+    blocks?: number;
+  } | null;
+  mempoolInfo?: {
+    size?: number;
+    bytes?: number;
+    usage?: number;
+    maxmempool?: number;
+    mempoolminfee?: number;
+    minrelaytxfee?: number;
+  } | null;
+}
+
+interface MempoolSnapshot {
+  size: number | null;
+  bytes: number | null;
+  usage: number | null;
+  maxmempool: number | null;
+  mempoolminfee: number | null;
+  minrelaytxfee: number | null;
+}
+
 function InscribePageContent() {
 
   // Ensure noble-secp has HMAC in browser (for deterministic signing)
@@ -439,13 +466,37 @@ function InscribePageContent() {
   const batchLogRef = useRef<HTMLDivElement | null>(null);
   const lastCompletedRef = useRef<number>(0);
   const [batchCost, setBatchCost] = useState<{ per: number; total: number } | null>(null);
-  const [safety, setSafety] = useState<'unknown' | 'on' | 'off'>('unknown');
+  const [rpcStatus, setRpcStatus] = useState<RpcStatus>('unknown');
+  const [mempoolInfo, setMempoolInfo] = useState<MempoolSnapshot | null>(null);
   const [demoOpen, setDemoOpen] = useState(false);
   const [demoContent, setDemoContent] = useState('hello from client-signing demo');
   const [demoRunning, setDemoRunning] = useState(false);
   const [demoLog, setDemoLog] = useState<string[]>([]);
   const [blockHeight, setBlockHeight] = useState<number | null>(null);
   const [zecPrice, setZecPrice] = useState<number | null>(null);
+  const formatBytes = (bytes?: number | null) => {
+    if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return '...';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let value = bytes;
+    let unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex++;
+    }
+    const decimals = value >= 10 || unitIndex === 0 ? 0 : 2;
+    return `${value.toFixed(decimals)} ${units[unitIndex]}`;
+  };
+  const formatFeeRate = (fee?: number | null) => {
+    if (typeof fee !== 'number' || !Number.isFinite(fee)) return '...';
+    return `${Math.round(fee * 1e8).toLocaleString()} zats/kB`;
+  };
+  const mempoolUsagePercent =
+    mempoolInfo &&
+    typeof mempoolInfo.usage === 'number' &&
+    typeof mempoolInfo.maxmempool === 'number' &&
+    mempoolInfo.maxmempool > 0
+      ? Math.min(100, Math.max(0, Math.round((mempoolInfo.usage / mempoolInfo.maxmempool) * 100)))
+      : null;
 
   // Manual reload for Advanced UTXO view
   const reloadUtxos = async () => {
@@ -474,20 +525,6 @@ function InscribePageContent() {
       setLoadingUtxos(false);
     }
   };
-
-  // Ping indexer to display safety status (mark ON on any reachable response)
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await fetch('https://indexer.zerdinals.com/location/0:0', { signal: AbortSignal.timeout(5000) });
-        if (!cancelled) setSafety(r.ok || r.status === 404 ? 'on' : 'off');
-      } catch (e) {
-        if (!cancelled) setSafety('off');
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
 
   // Clear split TXID when leaving UTXO tab
   useEffect(() => {
@@ -551,13 +588,38 @@ function InscribePageContent() {
     let cancelled = false;
 
     async function fetchData() {
-      // Fetch block height
+      // Fetch node status + block height/mempool info via rpc.zatoshi.market
       try {
-        const blockResponse = await fetch('https://api.blockchair.com/zcash/stats');
-        const blockData = await blockResponse.json();
-        if (!cancelled) setBlockHeight(blockData.data.best_block_height);
+        const statusResponse = await fetch('/api/zcash/node-status', { cache: 'no-store' });
+        if (!statusResponse.ok) {
+          throw new Error(`Status HTTP ${statusResponse.status}`);
+        }
+        const statusData: NodeStatusResponse = await statusResponse.json();
+        if (!cancelled) {
+          setRpcStatus(statusData.status || 'offline');
+          const height = statusData.blockchainInfo?.blocks;
+          setBlockHeight(typeof height === 'number' ? height : null);
+          if (statusData.mempoolInfo) {
+            const info = statusData.mempoolInfo;
+            setMempoolInfo({
+              size: typeof info.size === 'number' ? info.size : null,
+              bytes: typeof info.bytes === 'number' ? info.bytes : null,
+              usage: typeof info.usage === 'number' ? info.usage : null,
+              maxmempool: typeof info.maxmempool === 'number' ? info.maxmempool : null,
+              mempoolminfee: typeof info.mempoolminfee === 'number' ? info.mempoolminfee : null,
+              minrelaytxfee: typeof info.minrelaytxfee === 'number' ? info.minrelaytxfee : null,
+            });
+          } else {
+            setMempoolInfo(null);
+          }
+        }
       } catch (error) {
-        console.error('Failed to fetch block height:', error);
+        console.error('Failed to fetch node status:', error);
+        if (!cancelled) {
+          setRpcStatus('offline');
+          setBlockHeight(null);
+          setMempoolInfo(null);
+        }
       }
 
       // Fetch ZEC price
@@ -1183,42 +1245,64 @@ function InscribePageContent() {
               </div>
 
               {/* Platform Fee */}
-              <div className="px-3 py-2 border-b border-gold-500/5">
+              <div className="px-3 py-2 border-b border-gold-500/5 relative group">
                 <div className="text-xs text-gold-400/60 mb-0.5">Platform Fee</div>
                 <div className="text-xs font-mono text-gold-300">{formatZEC(PLATFORM_FEES.INSCRIPTION)}</div>
+                <div className="absolute left-full ml-2 top-0 w-52 px-3 py-2 bg-black/90 border border-gold-500/30 rounded text-xs text-gold-300 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
+                  Covers server + RPC costs per mint. Pulled from <span className="font-mono">PLATFORM_FEES.INSCRIPTION</span>.
+                </div>
               </div>
 
               {/* ZCash Block */}
-              <div className="px-3 py-2 border-b border-gold-500/5">
+              <div className="px-3 py-2 border-b border-gold-500/5 relative group">
                 <div className="text-xs text-gold-400/60 mb-0.5">ZCash Block</div>
                 <div className="text-xs font-mono text-gold-300">
                   {blockHeight !== null ? blockHeight.toLocaleString() : '...'}
                 </div>
+                <div className="absolute left-full ml-2 top-0 w-52 px-3 py-2 bg-black/90 border border-gold-500/30 rounded text-xs text-gold-300 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
+                  Latest height from rpc.zatoshi.market (refreshes every 30s along with node health).
+                </div>
               </div>
 
               {/* Current Price */}
-              <div className="px-3 py-2 border-b border-gold-500/5">
+              <div className="px-3 py-2 border-b border-gold-500/5 relative group">
                 <div className="text-xs text-gold-400/60 mb-0.5">ZEC Price</div>
                 <div className="text-xs font-mono text-gold-300">
                   {zecPrice !== null ? `$${zecPrice.toFixed(2)}` : '...'}
                 </div>
+                <div className="absolute left-full ml-2 top-0 w-52 px-3 py-2 bg-black/90 border border-gold-500/30 rounded text-xs text-gold-300 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
+                  Spot price from CoinGecko (USD). Use for quick estimates; on-chain amounts are exact.
+                </div>
               </div>
 
-              {/* Safety Status */}
-              <div className="px-3 py-2 relative group">
-                <div className="text-xs text-gold-400/60 mb-0.5">Safety</div>
+              {/* RPC Status */}
+              <div className="px-3 py-2 border-b border-gold-500/5 relative group">
+                <div className="text-xs text-gold-400/60 mb-0.5">RPC Status</div>
                 <div className="text-xs font-mono">
-                  {safety === 'on' ? (
-                    <span className="text-green-400">ON</span>
-                  ) : safety === 'off' ? (
-                    <span className="text-red-400">OFF</span>
-                  ) : (
+                  {rpcStatus === 'unknown' ? (
                     <span className="text-gold-400/60">...</span>
+                  ) : rpcStatus === 'online' ? (
+                    <span className="text-green-400">ONLINE</span>
+                  ) : rpcStatus === 'degraded' ? (
+                    <span className="text-amber-300">DEGRADED</span>
+                  ) : (
+                    <span className="text-red-400">OFFLINE</span>
                   )}
                 </div>
-                {/* Hover tooltip */}
-                <div className="absolute left-full ml-2 top-0 w-48 px-3 py-2 bg-black/90 border border-gold-500/30 rounded text-xs text-gold-300 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
-                  UTXO protection prevents accidental inscription burning by tracking on-chain states
+                <div className="absolute left-full ml-2 top-0 w-56 px-3 py-2 bg-black/90 border border-gold-500/30 rounded text-xs text-gold-300 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
+                  <div className="font-semibold text-gold-100 mb-1">rpc.zatoshi.market</div>
+                  <div className="mb-1">Blockchain + mempool health (updates every 30s).</div>
+                  {mempoolInfo ? (
+                    <div className="space-y-0.5 text-gold-200/80">
+                      <div>Mempool: {mempoolInfo.size !== null ? mempoolInfo.size.toLocaleString() : '...'} tx · {formatBytes(mempoolInfo.bytes)}</div>
+                      <div>
+                        Usage: {formatBytes(mempoolInfo.usage)} / {formatBytes(mempoolInfo.maxmempool)}{mempoolUsagePercent !== null ? ` (${mempoolUsagePercent}% full)` : ''}
+                      </div>
+                      <div>Floor {formatFeeRate(mempoolInfo.mempoolminfee)} · Relay {formatFeeRate(mempoolInfo.minrelaytxfee)}</div>
+                    </div>
+                  ) : (
+                    <div className="text-gold-200/80">Mempool metrics unavailable</div>
+                  )}
                 </div>
               </div>
             </div>

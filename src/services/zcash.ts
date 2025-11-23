@@ -85,6 +85,16 @@ export interface ZcashBlock {
   tx?: string[];
 }
 
+interface ZcashNodeStatus {
+  status: 'online' | 'degraded' | 'offline';
+  healthy: boolean;
+  blockchainInfo?: Partial<ZcashBlockchainInfo & { bestblockhash?: string; chainwork?: string }> | null;
+  mempoolInfo?: Record<string, any> | null;
+  networkInfo?: Record<string, any> | null;
+  timestamp: number;
+  errors?: Record<string, string>;
+}
+
 class ZcashRPCService {
   private apiUrl: string;
 
@@ -122,25 +132,38 @@ class ZcashRPCService {
    * Uses proxy API: /api/zcash/stats
    */
   async getBlockCount(): Promise<number> {
-    const data: any = await this.apiCall('/stats');
-    return data.blocks;
+    const data: ZcashNodeStatus = await this.apiCall('/node-status');
+    return data.blockchainInfo?.blocks ?? 0;
   }
 
   /**
    * Get comprehensive blockchain information
    */
   async getBlockchainInfo(): Promise<ZcashBlockchainInfo> {
-    const data: any = await this.apiCall('/stats');
+    const status: ZcashNodeStatus = await this.apiCall('/node-status');
+    const data: Record<string, any> = status.blockchainInfo || {};
     return {
-      chain: 'main',
-      blocks: data.blocks,
-      headers: data.blocks,
-      bestblockhash: data.best_block_hash,
-      difficulty: data.difficulty,
-      verificationprogress: 1,
-      chainwork: '',
-      pruned: false,
+      chain: data.chain || 'main',
+      blocks: data.blocks || 0,
+      headers: data.headers || data.blocks || 0,
+      bestblockhash: data.bestblockhash || '',
+      difficulty: data.difficulty || 0,
+      verificationprogress: data.verificationprogress ?? 1,
+      chainwork: data.chainwork || '',
+      pruned: Boolean(data.pruned),
+      commitments: data.commitments,
+      valuePools: data.valuePools,
+      softforks: data.softforks,
+      upgrades: data.upgrades,
+      consensus: data.consensus,
     };
+  }
+
+  /**
+   * Fetch combined node status snapshot (blockchain + mempool + network)
+   */
+  async getNodeStatus(): Promise<ZcashNodeStatus> {
+    return this.apiCall('/node-status');
   }
 
   /**

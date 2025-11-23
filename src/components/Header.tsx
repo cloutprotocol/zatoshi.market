@@ -25,9 +25,17 @@ export default function Header() {
         <Link href="/" className="h-10 w-10 border-2 border-gold-500 text-gold-400 flex items-center justify-center text-2xl font-bold hover:border-gold-400 transition-colors">
           Z
         </Link>
-
         {/* Desktop Navigation */}
         <div className="hidden lg:flex gap-6 items-center">
+          <div className="flex items-center gap-4 text-xs tracking-[0.2em] text-gold-400">
+            <Link
+              href="/inscribe"
+              className="px-3 py-1 hover:text-gold-200 transition-colors"
+            >
+              INSCRIBE
+            </Link>
+          </div>
+
           {!mounted ? (
             <button
               className="px-6 py-2 bg-gold-500/20 text-gold-400 border border-gold-500/30 font-bold hover:bg-gold-500/30 transition-all"
@@ -76,7 +84,14 @@ export default function Header() {
           />
           <div className="fixed top-20 -mt-5 left-0 right-0 bottom-0 z-40 lg:hidden backdrop-blur-xl bg-black/90">
             <div className="h-full flex flex-col">
-              <div className="flex-1 px-6 py-4 space-y-2 pt-20">
+              <div className="flex-1 px-6 py-4 space-y-2 pt-20 text-center">
+                <Link
+                  href="/inscribe"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="block py-3 text-gold-300 uppercase tracking-[0.3em] text-xs hover:text-gold-100"
+                >
+                  Inscribe
+                </Link>
               </div>
 
               {/* Wallet Button - Bottom of screen on mobile */}
