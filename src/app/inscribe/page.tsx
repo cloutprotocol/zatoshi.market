@@ -35,7 +35,7 @@ import { zcashRPC } from '@/services/zcash';
 
 type TabKey = 'names' | 'text' | 'images' | 'zrc20' | 'utxo' | 'history';
 const SHOW_NAMES = false;
-const SHOW_IMAGES = false;
+const SHOW_IMAGES = true;
 const DEFAULT_TAB: TabKey = 'text';
 
 // Constants for fee and dust limit, mirroring backend
@@ -1171,16 +1171,18 @@ function InscribePageContent() {
           {/* Left Sidebar - Tabs (Desktop only) */}
           <div className="hidden lg:flex lg:w-56 flex-shrink-0 flex-col lg:overflow-y-auto lg:pl-0">
             <div className="flex flex-col gap-2">
-              {/* <button
-                onClick={() => setActiveTab('names')}
-                className={`w-full text-left px-5 py-2.5 rounded font-bold transition-all ${activeTab === 'names'
-                  ? 'bg-gold-500 text-black'
-                  : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
-                  }`}
-              >
-                <div className="text-base">Names</div>
-                <div className="text-xs opacity-75">.zec • .zcash</div>
-              </button> */}
+              {SHOW_NAMES && (
+                <button
+                  onClick={() => setActiveTab('names')}
+                  className={`w-full text-left px-5 py-2.5 rounded font-bold transition-all ${activeTab === 'names'
+                    ? 'bg-gold-500 text-black'
+                    : 'bg-black/40 border border-gold-500/30 text-gold-400 hover-border-gold-500/50'
+                    }`}
+                >
+                  <div className="text-base">Names</div>
+                  <div className="text-xs opacity-75">.zec • .zcash</div>
+                </button>
+              )}
 
               <button
                 onClick={() => setActiveTab('text')}
@@ -1193,16 +1195,18 @@ function InscribePageContent() {
                 <div className="text-xs opacity-75">Inscriptions</div>
               </button>
 
-              {/* <button
-                onClick={() => setActiveTab('images')}
-                className={`w-full text-left px-5 py-2.5 rounded font-bold transition-all ${activeTab === 'images'
-                  ? 'bg-gold-500 text-black'
-                  : 'bg-black/40 border border-gold-500/30 text-gold-400 hover:border-gold-500/50'
-                  }`}
-              >
-                <div className="text-base">Images</div>
-                <div className="text-xs opacity-75">PNG • SVG</div>
-              </button> */}
+              {SHOW_IMAGES && (
+                <button
+                  onClick={() => setActiveTab('images')}
+                  className={`w-full text-left px-5 py-2.5 rounded font-bold transition-all ${activeTab === 'images'
+                    ? 'bg-gold-500 text-black'
+                    : 'bg-black/40 border border-gold-500/30 text-gold-400 hover-border-gold-500/50'
+                    }`}
+                >
+                  <div className="text-base">Images</div>
+                  <div className="text-xs opacity-75">PNG • SVG</div>
+                </button>
+              )}
 
               <button
                 onClick={() => setActiveTab('zrc20')}
@@ -1681,13 +1685,13 @@ function InscribePageContent() {
                         <span className="bg-red-500/20 border border-red-500/50 text-red-300 text-xs font-bold px-2 py-0.5 rounded-full">
                           EXPERIMENTAL
                         </span>
-                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 px-3 py-2 bg-black/90 border border-gold-500/30 rounded text-xs text-gold-300 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
-                          Image inscriptions are experimental. Please limit file sizes to 1KB.
+                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 px-3 py-2 bg-black/90 border border-gold-500/30 rounded text-xs text-gold-300 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
+                          Non-standard relay via rpc.zatoshi.market. Files up to 20KB are allowed but may take longer to propagate.
                         </div>
                       </div>
                     </div>
                     <p className="text-gold-400/60 text-xs sm:text-sm">
-                      Inscribe PNG, GIF, or SVG images (max 1KB)
+                      Inscribe PNG, GIF, or SVG images (max {MAX_IMAGE_SIZE_KB}KB)
                     </p>
                   </div>
 

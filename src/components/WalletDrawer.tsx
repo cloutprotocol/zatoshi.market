@@ -10,6 +10,8 @@ import { buildImageUrls, buildTokenName, fetchCollectionMetadata } from '@/lib/c
 import QRCode from 'qrcode';
 import { calculateZRC20Balances, formatZRC20Amount, type ZRC20Token } from '@/utils/zrc20';
 
+const zrc721MetadataCache = new Map<string, { name: string; imageUrls: string[]; collectionName: string }>();
+
 interface WalletDrawerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -77,32 +79,35 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
       console.log(`🎨 Found ${inscriptionList.length} inscriptions`);
       setInscriptions(inscriptionList);
 
-      const contentsToFetch = inscriptionList.slice(0, 30);
       const contents: Record<string, string> = {};
       const images: Record<string, string> = {};
       const types: Record<string, string> = {};
 
-      await Promise.all(
-        contentsToFetch.map(async (insc) => {
-          try {
-            // Always fetch content to determine type
-            const response = await fetch(`/api/zcash/inscription-content/${insc.id}`);
-            if (!response.ok) return;
+      const BATCH_SIZE = 8;
+      for (let i = 0; i < inscriptionList.length; i += BATCH_SIZE) {
+        const batch = inscriptionList.slice(i, i + BATCH_SIZE);
+        await Promise.all(
+          batch.map(async (insc) => {
+            if (!insc?.id) return;
+            try {
+              const response = await fetch(`/api/zcash/inscription-content/${insc.id}`);
+              if (!response.ok) return;
 
-            const type = response.headers.get('Content-Type') || 'application/octet-stream';
-            types[insc.id] = type;
+              const type = response.headers.get('Content-Type') || 'application/octet-stream';
+              types[insc.id] = type;
 
-            if (type.startsWith('image/')) {
-              const blob = await response.blob();
-              images[insc.id] = URL.createObjectURL(blob);
-            } else {
-              contents[insc.id] = await response.text();
+              if (type.startsWith('image/')) {
+                const blob = await response.blob();
+                images[insc.id] = URL.createObjectURL(blob);
+              } else {
+                contents[insc.id] = await response.text();
+              }
+            } catch (err) {
+              console.error(`Failed to fetch content for ${insc.id}:`, err);
             }
-          } catch (err) {
-            console.error(`Failed to fetch content for ${insc.id}:`, err);
-          }
-        })
-      );
+          })
+        );
+      }
 
       setInscriptionContents(contents);
       setInscriptionImages(images);
@@ -129,26 +134,45 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
       for (const [id, content] of Object.entries(contents)) {
         try {
           const parsed = JSON.parse(content);
-          if (parsed?.p === 'zrc-721' && parsed?.id) {
+          const protocol = String(parsed?.p || '').toLowerCase();
+          if (protocol === 'zrc-721' && parsed?.id) {
             const tokenIdNum = Number(parsed.id);
-            const slugFromPayload = String(parsed.collection || parsed.slug || parsed.tick || '').toLowerCase();
-            if (!Number.isNaN(tokenIdNum) && slugFromPayload) {
-              const config = getCollectionConfig(slugFromPayload);
-              if (!config) continue;
+            if (Number.isNaN(tokenIdNum)) continue;
+
+            const rawCollection = String(parsed.collection || parsed.slug || parsed.tick || 'ZRC-721');
+            const slugFromPayload = rawCollection.toLowerCase();
+            const normalizedSlug = slugFromPayload || rawCollection.toLowerCase().replace(/\s+/g, '-');
+            const config = slugFromPayload ? getCollectionConfig(slugFromPayload) : null;
+
+            const cacheKey = config ? `${config.slug}:${tokenIdNum}` : `${normalizedSlug}:${tokenIdNum}`;
+            let cachedMeta = zrc721MetadataCache.get(cacheKey);
+
+            if (!cachedMeta && config) {
               try {
                 const metadata = await fetchCollectionMetadata(config, tokenIdNum);
                 const imageUrls = buildImageUrls(config, tokenIdNum, metadata);
-                zrcAssets[id] = {
-                  collection: slugFromPayload,
-                  tokenId: tokenIdNum,
+                cachedMeta = {
                   name: buildTokenName(config, tokenIdNum, metadata),
-                  collectionName: config.name,
                   imageUrls,
+                  collectionName: config.name,
                 };
+                zrc721MetadataCache.set(cacheKey, cachedMeta);
               } catch (assetErr) {
                 console.error('Failed to load zrc721 asset', assetErr);
               }
             }
+
+            const fallbackName = `${rawCollection} #${tokenIdNum}`;
+            const fallbackImages = images[id] ? [images[id]] : [];
+            const collectionName = cachedMeta?.collectionName || config?.name || rawCollection;
+
+            zrcAssets[id] = {
+              collection: config?.slug || normalizedSlug,
+              tokenId: tokenIdNum,
+              name: cachedMeta?.name || fallbackName,
+              collectionName,
+              imageUrls: cachedMeta?.imageUrls?.length ? cachedMeta.imageUrls : fallbackImages,
+            };
           }
         } catch {
           // not json
@@ -598,44 +622,52 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
                             const rawContent = inscriptionContents[insc.id];
                             // ZRC-721: show artwork card styling
                             if (asset) {
+                              const hasAssetImage = Array.isArray(asset.imageUrls) && asset.imageUrls.length > 0;
+                              const primaryImage = hasAssetImage ? asset.imageUrls[0] : null;
                               return (
                                 <div
                                   key={insc.id}
                                   className="bg-black/40 border border-gold-500/20 rounded p-2 hover:border-gold-500/40 transition-all cursor-pointer"
                                   onClick={() => { window.location.href = `/inscription/${insc.id}`; }}
                                 >
-                                  <div className="relative bg-black/60 rounded mb-1.5 aspect-square overflow-hidden border border-gold-500/10">
-                                    <img
-                                      src={asset.imageUrls[0]}
-                                      data-index={0}
-                                      loading="lazy"
-                                      onLoad={() => setZrcImageLoaded((prev) => ({ ...prev, [insc.id]: true }))}
-                                      onError={(e) => {
-                                        const nextIndex = Number(e.currentTarget.dataset.index || '0') + 1;
-                                        const fallback = asset.imageUrls[nextIndex];
-                                        if (fallback) {
-                                          setZrcImageLoaded((prev) => ({ ...prev, [insc.id]: false }));
-                                          setZrcImageError((prev) => ({ ...prev, [insc.id]: false }));
-                                          e.currentTarget.dataset.index = String(nextIndex);
-                                          e.currentTarget.src = fallback;
-                                        } else {
-                                          setZrcImageError((prev) => ({ ...prev, [insc.id]: true }));
-                                          e.currentTarget.onerror = null;
-                                        }
-                                      }}
-                                      alt=""
-                                      className={`w-full h-full object-contain transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'} ${(!imageLoaded && !imageErrored) ? 'skeleton' : ''}`}
-                                    />
-                                    {imageErrored && (
-                                      <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-gold-200/70 text-[11px]">
-                                        Artwork unavailable
-                                      </div>
-                                    )}
-                                  </div>
+                                  {hasAssetImage ? (
+                                    <div className="relative bg-black/60 rounded mb-1.5 aspect-square overflow-hidden border border-gold-500/10">
+                                      <img
+                                        src={primaryImage as string}
+                                        data-index={0}
+                                        loading="lazy"
+                                        onLoad={() => setZrcImageLoaded((prev) => ({ ...prev, [insc.id]: true }))}
+                                        onError={(e) => {
+                                          const nextIndex = Number(e.currentTarget.dataset.index || '0') + 1;
+                                          const fallback = asset.imageUrls[nextIndex];
+                                          if (fallback) {
+                                            setZrcImageLoaded((prev) => ({ ...prev, [insc.id]: false }));
+                                            setZrcImageError((prev) => ({ ...prev, [insc.id]: false }));
+                                            e.currentTarget.dataset.index = String(nextIndex);
+                                            e.currentTarget.src = fallback;
+                                          } else {
+                                            setZrcImageError((prev) => ({ ...prev, [insc.id]: true }));
+                                            e.currentTarget.onerror = null;
+                                          }
+                                        }}
+                                        alt=""
+                                        className={`w-full h-full object-contain transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'} ${(!imageLoaded && !imageErrored) ? 'skeleton' : ''}`}
+                                      />
+                                      {imageErrored && (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-gold-200/70 text-[11px]">
+                                          Artwork unavailable
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="bg-black/60 rounded mb-1.5 aspect-square border border-gold-500/10 flex items-center justify-center text-[11px] text-gold-200/70">
+                                      Metadata syncing...
+                                    </div>
+                                  )}
 
                                   <div className="space-y-1">
-                                    <div className="text-[11px] font-semibold text-gold-100/90 truncate">{`${asset.collectionName} #${asset.tokenId}`}</div>
-                                    <div className="text-[10px] uppercase tracking-[0.2em] text-gold-200/60">ZRC-721</div>
+                                    <div className="text-[11px] font-semibold text-gold-100/90 truncate">{asset.name || `${asset.collectionName} #${asset.tokenId}`}</div>
+                                    <div className="text-[10px] uppercase tracking-[0.2em] text-gold-200/60">{asset.collectionName}</div>
                                     <div className="text-[10px] text-gold-200/50 font-mono break-all line-clamp-2">{insc.id}</div>
                                   </div>
                                 </div>

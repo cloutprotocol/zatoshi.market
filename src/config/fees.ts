@@ -93,17 +93,17 @@ export const calculateTotalCost = (
 /**
  * Maximum file size for image inscriptions (in bytes)
  * Content is automatically chunked into 520-byte pieces (MAX_SCRIPT_ELEMENT_SIZE)
- * Limited by total scriptSig size (~10KB) and practical mempool relay limits
- * Set to 1.25KB actual limit with 1KB displayed to users for safety buffer
+ * With our own RPC we can now relay larger (non-standard) scripts for testing
+ * Allow up to ~20KB while keeping a tiny buffer to avoid rounding issues
  */
-export const MAX_IMAGE_SIZE_BYTES = 1.25 * 1024; // 1.25KB actual limit
-export const MAX_IMAGE_SIZE_KB = 1; // 1KB displayed to users
+export const MAX_IMAGE_SIZE_BYTES = 20 * 1024; // 20KB actual limit
+export const MAX_IMAGE_SIZE_KB = 20; // Displayed to users
 
 /**
  * File size threshold for showing "large file" warning (in KB)
  * Warning shown when file exceeds this size
  */
-export const LARGE_FILE_WARNING_KB = 30;
+export const LARGE_FILE_WARNING_KB = 12;
 
 /**
  * Calculate fees for image inscriptions based on file size

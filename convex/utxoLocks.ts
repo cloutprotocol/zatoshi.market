@@ -6,36 +6,25 @@ export const lockUtxo = internalMutation({
     txid: v.string(),
     vout: v.number(),
     address: v.string(),
-    lockedBy: v.optional(v.string()),
+    lockedBy: v.string(),
   },
   handler: async (ctx, args) => {
-    // Check for any existing locks on this outpoint
     const existingAll = await ctx.db
       .query("utxoLocks")
       .withIndex("by_txid_vout", (q) => q.eq("txid", args.txid).eq("vout", args.vout))
       .collect();
 
-    // If any lock exists owned by another address, we cannot acquire
-    const conflict = existingAll.find((l) => l.address !== args.address);
-    if (conflict) return { locked: false, _id: conflict._id };
-
-    // If a lock already exists and it's ours, treat as success (idempotent)
-    const owned = existingAll.find((l) => l.address === args.address);
-    if (owned) {
-      // Optionally update lockedBy for bookkeeping if provided
-      if (args.lockedBy && owned.lockedBy !== args.lockedBy) {
-        await ctx.db.patch(owned._id, { lockedBy: args.lockedBy });
-      }
-      // Clean up accidental duplicates (keep the first one)
-      for (const dup of existingAll) {
-        if (dup._id !== owned._id && dup.address === args.address) {
-          await ctx.db.delete(dup._id);
-        }
-      }
-      return { locked: true, _id: owned._id };
+    // If this exact lock already exists (same tx/vout + same lockedBy), treat as idempotent success
+    const sameLock = existingAll.find((l) => l.lockedBy === args.lockedBy && l.address === args.address);
+    if (sameLock) {
+      return { locked: true, _id: sameLock._id };
     }
 
-    // No existing lock -> create one
+    // Any other existing lock (different job/address or previous spend) blocks this attempt
+    if (existingAll.length > 0) {
+      return { locked: false, _id: existingAll[0]._id };
+    }
+
     const _id = await ctx.db.insert("utxoLocks", {
       txid: args.txid,
       vout: args.vout,
@@ -121,41 +110,26 @@ export const lockUtxos = internalMutation({
   args: {
     items: v.array(v.object({ txid: v.string(), vout: v.number() })),
     address: v.string(),
-    lockedBy: v.optional(v.string()),
+    lockedBy: v.string(),
   },
   handler: async (ctx, args) => {
-    // First, detect conflicts: any lock by another address means we cannot proceed
-    for (const it of args.items) {
-      const existingAll = await ctx.db
-        .query("utxoLocks")
-        .withIndex("by_txid_vout", (q) => q.eq("txid", it.txid).eq("vout", it.vout))
-        .collect();
-      const conflict = existingAll.find((l) => l.address !== args.address);
-      if (conflict) return { success: false, lockedCount: 0 };
-    }
-
-    // No conflicts: ensure we hold a single lock for each item (idempotent)
     let lockedCount = 0;
     for (const it of args.items) {
       const existingAll = await ctx.db
         .query("utxoLocks")
         .withIndex("by_txid_vout", (q) => q.eq("txid", it.txid).eq("vout", it.vout))
         .collect();
-      // If one exists owned by us, update lockedBy if provided; delete any dupes owned by us
-      const owned = existingAll.find((l) => l.address === args.address);
-      if (owned) {
-        if (args.lockedBy && owned.lockedBy !== args.lockedBy) {
-          await ctx.db.patch(owned._id, { lockedBy: args.lockedBy });
-        }
-        for (const dup of existingAll) {
-          if (dup._id !== owned._id && dup.address === args.address) {
-            await ctx.db.delete(dup._id);
-          }
-        }
+
+      const sameLock = existingAll.find((l) => l.lockedBy === args.lockedBy && l.address === args.address);
+      if (sameLock) {
         lockedCount++;
         continue;
       }
-      // Otherwise create a new lock owned by us
+
+      if (existingAll.length > 0) {
+        return { success: false, lockedCount: 0 };
+      }
+
       await ctx.db.insert("utxoLocks", {
         txid: it.txid,
         vout: it.vout,

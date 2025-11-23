@@ -125,12 +125,13 @@ export const mintInscriptionAction = action({
       currentStep = "locking UTXO";
       let utxo = safe[0];
       let locked = false;
+      const lockToken = `single-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
       while (utxo) {
         const res = await ctx.runMutation(internal.utxoLocks.lockUtxo, {
           txid: utxo.txid,
           vout: utxo.vout,
           address: args.address,
-          lockedBy: undefined,
+          lockedBy: lockToken,
         });
         if (res.locked) { locked = true; break; }
         // pick next candidate if lock failed
@@ -241,10 +242,6 @@ export const mintInscriptionAction = action({
         throw e;
       }
       const inscriptionId = `${revealTxid}i0`;
-
-      // Optionally release lock now, or leave to confirmation watchdog
-      currentStep = "unlocking UTXO";
-      await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxo.txid, vout: utxo.vout });
 
       // Log final inscription (optional: adapt to schema expectations)
       currentStep = "parsing inscription data";
@@ -790,6 +787,9 @@ export const finalizeCommitAndGetRevealPreimageAction = action({
       const msg = e?.message ? String(e.message) : String(e);
 
       // Provide user-friendly error messages
+      if (msg.toLowerCase().includes('txn-mempool-conflict')) {
+        throw new Error('Previous mint is still pending. Please wait for the earlier transaction to confirm or free up a new UTXO before retrying.');
+      }
       if (msg.toLowerCase().includes('unpaid action') || msg.toLowerCase().includes('fee too low')) {
         throw new Error('Network rejected transaction: Fee too low. Please increase the fee and try again.');
       }
@@ -895,6 +895,9 @@ export const broadcastSignedRevealAction = action({
       const msg = e?.message ? String(e.message) : String(e);
 
       // Provide user-friendly error messages
+      if (msg.toLowerCase().includes('txn-mempool-conflict')) {
+        throw new Error('Previous mint is still pending. Please wait for the earlier transaction to confirm or free up a new UTXO before retrying.');
+      }
       if (msg.toLowerCase().includes('unpaid action') || msg.toLowerCase().includes('fee too low')) {
         throw new Error('Network rejected transaction: Fee too low. Please increase the fee and try again.');
       }
@@ -938,8 +941,6 @@ export const broadcastSignedRevealAction = action({
       throw new Error(`Unable to broadcast transaction. ${sanitized || 'Please try again or contact support.'}`);
     }
     const inscriptionId = `${revealTxid}i0`;
-    // Unlock after success, too
-    try { await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: rec.utxos.map(u => ({ txid: u.txid, vout: u.vout })) }); } catch { }
 
     // Parse preview + zrc20 details
     const preview = rec.contentStr.slice(0, 200);

@@ -43,8 +43,8 @@ type ClaimStats = {
 
 export function ClaimClient({ collection }: Props) {
   const { wallet, badges, mounted } = useWallet();
-  const [loadingAlloc, setLoadingAlloc] = useState(false);
   const [allocation, setAllocation] = useState<Allocation | null>(null);
+  const [statusLoading, setStatusLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [claiming, setClaiming] = useState(false);
   const [claimCount, setClaimCount] = useState(1);
@@ -70,62 +70,70 @@ export function ClaimClient({ collection }: Props) {
   const [copiedInscription, setCopiedInscription] = useState<string | null>(null);
   const [selectedToken, setSelectedToken] = useState<ClaimedToken | null>(null);
   const [selectedTokenMetadata, setSelectedTokenMetadata] = useState<any>(null);
+  const mintedCount = claimStats?.mintedForAddress?.count ?? 0;
+  const reservedPending = claimStats?.reservedForAddress?.count ?? 0;
 
   const vipBadgePresent = useMemo(
     () => badges.some((b) => b.badgeSlug === 'vip'),
     [badges]
   );
 
-  useEffect(() => {
-    const load = async () => {
-      if (!wallet?.address || !collection.claimWhitelistPath) {
-        setAllocation(null);
-        return;
-      }
-      setLoadingAlloc(true);
-      setError(null);
-      try {
+  const loadStatus = useCallback(async () => {
+    if (!wallet?.address || !collection.claimWhitelistPath) {
+      setAllocation(null);
+      setClaimStats(null);
+      setStatusLoading(false);
+      return;
+    }
+    setStatusLoading(true);
+    setError(null);
+    try {
+      const whitelistPromise = (async () => {
         const res = await fetch(collection.claimWhitelistPath);
         if (!res.ok) throw new Error(`Failed to load whitelist (${res.status})`);
         const text = await res.text();
         const lines = text.trim().split('\n');
-        let found: Allocation | null = null;
         for (let i = 1; i < lines.length; i++) {
           const cols = lines[i]?.split(',');
           if (cols.length < 2) continue;
           const [address, count, , vipFlag] = cols.map((c) => c.trim());
-          if (address.toLowerCase() === wallet.address.toLowerCase()) {
-            found = {
+          if (address.toLowerCase() === wallet.address!.toLowerCase()) {
+            return {
               address,
               max: Number(count) || 0,
               isVip: vipFlag?.toLowerCase() === 'true',
-            };
-            break;
+            } as Allocation;
           }
         }
-        setAllocation(found);
-      } catch (e) {
-        console.error('Whitelist load failed:', e);
-        setError(e instanceof Error ? e.message : 'Failed to load whitelist');
-      } finally {
-        setLoadingAlloc(false);
+        return null;
+      })();
+
+      const convex = getConvexClient();
+      const statsPromise = convex
+        ? convex.query(api.collectionClaims.getClaimStats, {
+            collectionSlug: collection.slug,
+            address: wallet.address,
+          })
+        : Promise.resolve(null);
+
+      const [allocRes, statsRes] = await Promise.all([whitelistPromise, statsPromise]);
+      setAllocation(allocRes);
+      if (statsRes) {
+        setClaimStats(statsRes as any);
+      } else {
+        setClaimStats(null);
       }
-    };
-    load();
-  }, [wallet?.address, collection.claimWhitelistPath]);
+    } catch (e) {
+      console.error('Status load failed:', e);
+      setError(e instanceof Error ? e.message : 'Failed to load claim status');
+    } finally {
+      setStatusLoading(false);
+    }
+  }, [wallet?.address, collection.claimWhitelistPath, collection.slug]);
 
   useEffect(() => {
-    const loadStats = async () => {
-      const convex = getConvexClient();
-      if (!convex) return;
-      const res = await convex.query(api.collectionClaims.getClaimStats, {
-        collectionSlug: collection.slug,
-        address: wallet?.address || undefined,
-      });
-      setClaimStats(res as any);
-    };
-    loadStats();
-  }, [collection.slug, wallet?.address, mintResults.length, claiming]);
+    loadStatus();
+  }, [loadStatus, mintResults.length, claiming]);
 
   const refreshClaimedTokens = useCallback(async () => {
     const convex = getConvexClient();
@@ -168,10 +176,14 @@ export function ClaimClient({ collection }: Props) {
 
   const remainingAllowlist = useMemo(() => {
     if (!allocation) return 0;
-    const minted = claimStats?.mintedForAddress?.count ?? 0;
-    // Don't count reserved - allocation is enforced at finalization, not reservation
-    return Math.max(0, allocation.max - minted);
-  }, [allocation, claimStats]);
+    return Math.max(0, allocation.max - mintedCount - reservedPending);
+  }, [allocation, mintedCount, reservedPending]);
+
+  const availableToRequest = useMemo(() => {
+    if (!allocation) return 0;
+    if (mintedCount >= allocation.max) return remainingAllowlist;
+    return Math.max(remainingAllowlist, reservedPending);
+  }, [allocation, mintedCount, remainingAllowlist, reservedPending]);
 
   const handleClaim = async () => {
     if (!wallet?.address || !wallet?.privateKey) {
@@ -182,11 +194,11 @@ export function ClaimClient({ collection }: Props) {
       setError('Wallet not whitelisted for this collection');
       return;
     }
-    if (remainingAllowlist <= 0) {
+    if (availableToRequest <= 0) {
       setError('Allocation exhausted');
       return;
     }
-    const qty = Math.min(5, claimCount, remainingAllowlist);
+    const qty = Math.max(1, Math.min(5, claimCount, availableToRequest));
 
     const convex = getConvexClient();
     if (!convex) {
@@ -412,19 +424,20 @@ export function ClaimClient({ collection }: Props) {
               </div>
             </div>
           )}
-          {!allocation && wallet?.address && !loadingAlloc && !error && (
+          {!allocation && wallet?.address && !statusLoading && !error && (
             <div className="mt-4 text-sm text-red-300">
               This wallet is not in the whitelist for this collection.
             </div>
           )}
-          {loadingAlloc && (
-            <div className="mt-4 text-sm text-gold-200/70">Checking whitelist...</div>
+          {statusLoading && (
+            <div className="mt-4 text-sm text-gold-200/70">Checking allocation...</div>
           )}
           {error && (
             <div className="mt-4 text-sm text-red-300">Error: {error}</div>
           )}
         </div>
 
+        {wallet?.address && !statusLoading && allocation && availableToRequest > 0 && (
         <div className="glass-card p-6 border border-gold-500/20 rounded-lg">
           <div className="flex items-center justify-between gap-3 mb-4">
             <h2 className="text-lg sm:text-xl font-semibold">Claim</h2>
@@ -434,21 +447,26 @@ export function ClaimClient({ collection }: Props) {
             <div className="text-sm text-gold-200/70 leading-tight">
               Remaining allocation: <span className="font-semibold text-gold-100">{remainingAllowlist}</span>
             </div>
+            {reservedPending > 0 && (
+              <div className="text-xs text-gold-200/60 leading-tight">
+                Pending reservations: <span className="font-semibold text-gold-100">{reservedPending}</span>
+              </div>
+            )}
             <label className="flex items-center gap-3 text-sm">
               <span>Batch Inscribe (max 5)</span>
               <input
                 type="number"
                 min={1}
-                max={Math.min(5, remainingAllowlist || 1)}
+                max={Math.min(5, availableToRequest || 1)}
                 value={claimCount}
                 onChange={(e) => setClaimCount(Math.max(1, Math.min(5, Number(e.target.value) || 1)))}
                 className="bg-black/30 border border-gold-500/30 rounded px-3 py-2 w-24 text-gold-100 text-base sm:text-sm"
-                disabled={claiming || remainingAllowlist <= 0}
+                disabled={claiming || availableToRequest <= 0}
               />
             </label>
             <button
               className="px-5 sm:px-6 py-3 rounded-lg bg-gold-500 text-black font-bold hover:bg-gold-400 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
-              disabled={claiming || remainingAllowlist <= 0}
+              disabled={claiming || availableToRequest <= 0}
               onClick={handleClaim}
             >
               {claiming ? 'Minting...' : `Claim ${claimCount} ZGODS`}
@@ -483,6 +501,13 @@ export function ClaimClient({ collection }: Props) {
             </div>
           )}
         </div>
+        )}
+        {wallet?.address && !statusLoading && allocation && availableToRequest <= 0 && (
+          <div className="glass-card p-6 border border-gold-500/20 rounded-lg">
+            <h2 className="text-lg sm:text-xl font-semibold mb-2">Allocation complete</h2>
+            <p className="text-sm text-gold-200/70">You have already claimed your full allocation for this collection. Thank you!</p>
+          </div>
+        )}
 
         <div className="glass-card p-6 border border-gold-500/20 rounded-lg mt-6">
           <div className="flex items-center justify-between gap-3 mb-4">

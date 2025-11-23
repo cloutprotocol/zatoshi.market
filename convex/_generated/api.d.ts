@@ -11,6 +11,7 @@
 import type * as badges from "../badges.js";
 import type * as badgesActions from "../badgesActions.js";
 import type * as claimAllowlists from "../claimAllowlists.js";
+import type * as claimStats from "../claimStats.js";
 import type * as collectionClaims from "../collectionClaims.js";
 import type * as debugClaims from "../debugClaims.js";
 import type * as inscriptionParser from "../inscriptionParser.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   badges: typeof badges;
   badgesActions: typeof badgesActions;
   claimAllowlists: typeof claimAllowlists;
+  claimStats: typeof claimStats;
   collectionClaims: typeof collectionClaims;
   debugClaims: typeof debugClaims;
   inscriptionParser: typeof inscriptionParser;

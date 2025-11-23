@@ -39,7 +39,6 @@ export const runNextMint = action({
     const contentType: string = p.contentType ?? (p.contentJson ? "application/json" : "text/plain");
 
     // Mint once
-    const utxos = await fetchUtxos(p.address);
     const platformFeeZats = PLATFORM_FEE_ZATS; // Always apply
 
     // ZIP-317: Calculate minimum fee for 3 outputs (P2SH + Treasury + Change)
@@ -59,67 +58,77 @@ export const runNextMint = action({
     }
 
     const required = finalInscriptionAmount + fee + platformFeeZats;
-    // Filter safe only
-    // Filter safe only
-    const candidates = utxos.filter(u => u.value >= required);
+    const attemptedUtxos = new Set<string>();
+    const MAX_UTXO_REFRESHES = 5;
 
-    // Retry loop: Try up to 3 candidates (or all if fewer) to handle race conditions/stale UTXOs
+    // Retry loop: Try up to N fresh fetches to handle race conditions/stale UTXOs
     let lastError: any = null;
     let success = false;
+    let refreshCount = 0;
+    let totalUtxoCount = 0;
+    let suitableUtxoCount = 0;
 
-    // Sort candidates by value (ascending) to use smallest sufficient UTXOs first, 
-    // or shuffle/randomize if we want to reduce collision probability further.
-    // For now, just taking the first few valid ones.
-    for (const utxoCandidate of candidates) {
-      // Check inscription status
-      const hasInsc = await checkInscriptionAt(`${utxoCandidate.txid}:${utxoCandidate.vout}`);
-      if (hasInsc) continue;
+    UTXO_REFRESH:
+    while (!success && refreshCount < MAX_UTXO_REFRESHES) {
+      refreshCount += 1;
+      const utxos = await fetchUtxos(p.address);
+      totalUtxoCount = utxos.length;
+      const candidates = utxos
+        .filter(u => u.value >= required)
+        .filter(u => {
+          const key = `${u.txid}:${u.vout}`;
+          return !attemptedUtxos.has(key);
+        });
+      suitableUtxoCount = utxos.filter(u => u.value >= required).length;
 
-      // Try lock
-      const lockRes = await ctx.runMutation(internal.utxoLocks.lockUtxo, {
-        txid: utxoCandidate.txid,
-        vout: utxoCandidate.vout,
-        address: p.address,
-        lockedBy: String(args.jobId)
-      });
-
-      if (!lockRes.locked) {
-        // If locked by someone else, just skip to next candidate
-        continue;
+      if (candidates.length === 0) {
+        console.log(`[runNextMint] No candidates found. Total UTXOs: ${totalUtxoCount}, Suitable value: ${suitableUtxoCount}, Already tried: ${attemptedUtxos.size}`);
+        break;
       }
 
-      // We have the lock, try to mint
-      try {
-        const branchId = await getConsensusBranchId();
-        const chunks = buildInscriptionChunks(contentType, contentStr);
-        // Provisional to get p2sh
-        const redeemProvisional = createRevealScript(new Uint8Array(0), chunks);
-        const p2sh = p2shFromRedeem(redeemProvisional);
-        // Build commit (get pubkey)
-        const commitBuilt = await buildCommitTxHex({
-          utxo: utxoCandidate,
-          address: p.address,
-          wif: p.wif,
-          inscriptionAmount: finalInscriptionAmount,
-          fee,
-          consensusBranchId: branchId,
-          redeemScript: new Uint8Array(0),
-          p2shScript: p2sh.script,
-        });
-        const redeemScript = createRevealScript(commitBuilt.pubKey, chunks);
-        const p2shFixed = p2shFromRedeem(redeemScript);
-        const commit = await buildCommitTxHex({
-          utxo: utxoCandidate,
-          address: p.address,
-          wif: p.wif,
-          inscriptionAmount: finalInscriptionAmount,
-          fee,
-          consensusBranchId: branchId,
-          redeemScript,
-          p2shScript: p2shFixed.script,
-          platformFeeZats,
-          platformTreasuryAddress: PLATFORM_TREASURY,
-        });
+      for (const utxoCandidate of candidates) {
+        const candidateKey = `${utxoCandidate.txid}:${utxoCandidate.vout}`;
+        attemptedUtxos.add(candidateKey);
+        // Check inscription status
+        const hasInsc = await checkInscriptionAt(`${utxoCandidate.txid}:${utxoCandidate.vout}`);
+        if (hasInsc) {
+          console.log(`[runNextMint] Skipping inscribed UTXO ${candidateKey}`);
+          continue;
+        }
+
+        // No database locking - let blockchain handle concurrency
+        // If UTXO is spent/conflicted, broadcast will fail and we'll try next one
+        try {
+          const branchId = await getConsensusBranchId();
+          const chunks = buildInscriptionChunks(contentType, contentStr);
+          // Provisional to get p2sh
+          const redeemProvisional = createRevealScript(new Uint8Array(0), chunks);
+          const p2sh = p2shFromRedeem(redeemProvisional);
+          // Build commit (get pubkey)
+          const commitBuilt = await buildCommitTxHex({
+            utxo: utxoCandidate,
+            address: p.address,
+            wif: p.wif,
+            inscriptionAmount: finalInscriptionAmount,
+            fee,
+            consensusBranchId: branchId,
+            redeemScript: new Uint8Array(0),
+            p2shScript: p2sh.script,
+          });
+          const redeemScript = createRevealScript(commitBuilt.pubKey, chunks);
+          const p2shFixed = p2shFromRedeem(redeemScript);
+          const commit = await buildCommitTxHex({
+            utxo: utxoCandidate,
+            address: p.address,
+            wif: p.wif,
+            inscriptionAmount: finalInscriptionAmount,
+            fee,
+            consensusBranchId: branchId,
+            redeemScript,
+            p2shScript: p2shFixed.script,
+            platformFeeZats,
+            platformTreasuryAddress: PLATFORM_TREASURY,
+          });
 
         // Broadcast Commit
         let commitTxid: string;
@@ -127,12 +136,11 @@ export const runNextMint = action({
           commitTxid = await broadcastTransaction(commit.hex);
         } catch (broadcastErr: any) {
           const msg = String(broadcastErr?.message || broadcastErr);
-          // If inputs are spent, this UTXO is bad. Unlock and try next.
+          // If inputs are spent/conflicted, this UTXO is bad - try next one
           if (msg.includes('bad-txns-inputs-spent') || msg.includes('missing inputs') || msg.includes('txn-mempool-conflict')) {
             console.warn(`[runNextMint] UTXO ${utxoCandidate.txid}:${utxoCandidate.vout} spent/conflict, retrying next...`);
-            await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxoCandidate.txid, vout: utxoCandidate.vout });
             lastError = broadcastErr;
-            continue; // Try next candidate
+            continue UTXO_REFRESH; // Refetch to avoid stale set
           }
           throw broadcastErr; // Other errors are fatal for this attempt
         }
@@ -160,9 +168,8 @@ export const runNextMint = action({
           // If reveal fails with mempool conflict, the commit might not be propagated yet or there's a UTXO conflict
           if (msg.includes('txn-mempool-conflict') || msg.includes('bad-txns-inputs-spent')) {
             console.warn(`[runNextMint] Reveal broadcast conflict for UTXO ${utxoCandidate.txid}:${utxoCandidate.vout}, retrying next...`);
-            await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxoCandidate.txid, vout: utxoCandidate.vout });
             lastError = revealErr;
-            continue; // Try next candidate
+            continue UTXO_REFRESH; // Refetch and try again with live UTXOs
           }
           throw revealErr; // Other errors are fatal
         }
@@ -216,46 +223,39 @@ export const runNextMint = action({
         const updated = await ctx.runQuery(api.jobs.getJob, { jobId: args.jobId });
         if (updated && updated.completedCount >= updated.totalCount) {
           await ctx.runMutation(api.jobs.setJobStatus, { jobId: args.jobId, status: "completed" });
-          await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxoCandidate.txid, vout: utxoCandidate.vout });
           return { status: "completed" };
         }
 
-        await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxoCandidate.txid, vout: utxoCandidate.vout });
         // Tail-chain next mint
         await ctx.runAction(api.jobsActions.runNextMint, { jobId: args.jobId });
         success = true;
         return { status: "running" };
 
       } catch (e: any) {
-        // If we failed AFTER locking but BEFORE broadcasting commit (or during non-retryable broadcast error),
-        // we must unlock and handle error.
-        // If we are here, it means we either didn't 'continue' (fatal error) or something else broke.
-        // We should try to unlock the current UTXO.
-        await ctx.runMutation(internal.utxoLocks.unlockUtxo, { txid: utxoCandidate.txid, vout: utxoCandidate.vout });
-
-        // If it was a "spent" error that bubbled up (unlikely given the catch above, but possible if logic changes),
-        // we might want to continue. But for now, treat other errors as fatal for this UTXO.
-        // Actually, if we are here, it's likely a fatal error for this UTXO or a general error.
-        // Let's capture it and try the next UTXO if it looks transient, otherwise throw.
-
+        // If we failed during broadcast or transaction building, capture error and try next UTXO
         const msg = String(e?.message || e);
-        if (msg.includes('bad-txns-inputs-spent') || msg.includes('missing inputs')) {
+        if (msg.includes('bad-txns-inputs-spent') || msg.includes('missing inputs') || msg.includes('txn-mempool-conflict')) {
           lastError = e;
-          continue;
+          continue UTXO_REFRESH;
         }
 
-        // For other errors, we might want to abort the whole job or just this attempt?
-        // Current logic: throw immediately for non-spent errors.
+        // For other errors (construction, signing, etc), throw immediately
         throw e;
       }
     }
+  }
 
     // If we exit the loop without success, throw the last error or a generic one
     if (!success) {
-      const e = lastError || new Error(
-        `Not enough spendable funds. Need at least ${required} zats to proceed. ` +
-        `Add funds and try again.`
-      );
+      // Provide better diagnostics if no candidates were found
+      let defaultMsg = `Not enough spendable funds. Need at least ${required} zats to proceed. Add funds and try again.`;
+      if (totalUtxoCount > 0 && suitableUtxoCount > 0 && attemptedUtxos.size > 0) {
+        defaultMsg = `All available UTXOs (${suitableUtxoCount}) are locked, inscribed, or causing conflicts. Wait for pending transactions to confirm, or split a fresh UTXO.`;
+      } else if (totalUtxoCount > 0 && suitableUtxoCount === 0) {
+        defaultMsg = `Wallet has ${totalUtxoCount} UTXOs but none are large enough. Need at least ${required} zats in a single UTXO.`;
+      }
+
+      const e = lastError || new Error(defaultMsg);
 
       // Sanitize error message before storing/throwing
       let errorMsg = e?.message ? String(e.message) : String(e);
@@ -274,7 +274,11 @@ export const runNextMint = action({
         .trim();
 
       // Provide user-friendly messages
-      if (errorMsg.toLowerCase().includes('decode failed')) {
+      if (errorMsg.toLowerCase().includes('txn-mempool-conflict')) {
+        errorMsg = 'Previous mint is still pending. Please wait for the earlier transaction to confirm or free up a new UTXO before retrying.';
+      } else if (errorMsg.toLowerCase().includes('bad-txns-inputs-spent') || errorMsg.toLowerCase().includes('missing inputs')) {
+        errorMsg = 'Inputs already spent or pending confirmation. Refresh your wallet UTXOs (or split a fresh coin) before retrying.';
+      } else if (errorMsg.toLowerCase().includes('decode failed')) {
         errorMsg = 'Transaction rejected: Invalid transaction format. This may be due to insufficient inscription amount.';
       } else if (errorMsg.toLowerCase().includes('unpaid action') || errorMsg.toLowerCase().includes('fee too low')) {
         errorMsg = 'Network rejected transaction: Fee too low. Please try again with a higher fee tier.';

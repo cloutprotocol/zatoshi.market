@@ -397,6 +397,13 @@ export function calculateTxid(hex: string): string {
 export async function broadcastTransaction(hex: string, tatumKey?: string): Promise<string> {
   const computedTxid = calculateTxid(hex);
   const errors: string[] = [];
+  const isMempoolConflict = (msg: string | undefined) =>
+    typeof msg === 'string' && msg.toLowerCase().includes('txn-mempool-conflict');
+  const throwIfConflict = (msg: string | undefined) => {
+    if (isMempoolConflict(msg)) {
+      throw new Error('txn-mempool-conflict');
+    }
+  };
 
   // 1) Zatoshi RPC (Primary)
   try {
@@ -417,6 +424,7 @@ export async function broadcastTransaction(hex: string, tatumKey?: string): Prom
       console.log(`[broadcast][rpc] transaction already in chain, returning computed txid: ${computedTxid}`);
       return computedTxid;
     }
+    throwIfConflict(msg);
     errors.push(`rpc: ${msg}`);
   }
 
@@ -435,16 +443,20 @@ export async function broadcastTransaction(hex: string, tatumKey?: string): Prom
       if (snippet.includes('transaction already in block chain') || snippet.includes('"code":-27')) {
         return computedTxid;
       }
+      throwIfConflict(snippet);
       errors.push(`tatum: ${snippet}`);
     } else {
       const text = await r.text().catch(() => 'unknown error');
       if (text.includes('transaction already in block chain') || text.includes('"code":-27')) {
         return computedTxid;
       }
+      throwIfConflict(text);
       errors.push(`tatum(${r.status}): ${text.slice(0, 200)}`);
     }
   } catch (e: any) {
-    errors.push(`tatum: ${e?.message || 'network error'}`);
+    const msg = e?.message || 'network error';
+    throwIfConflict(msg);
+    errors.push(`tatum: ${msg}`);
   }
 
   // 3) Blockchair push (Tertiary)
@@ -459,20 +471,25 @@ export async function broadcastTransaction(hex: string, tatumKey?: string): Prom
     if (r.ok) {
       const { txid, snippet } = await extractTxidFromResponse('blockchair', r);
       if (txid) return txid;
+      throwIfConflict(snippet);
       errors.push(`blockchair: ${snippet}`);
     } else {
       const text = await r.text().catch(() => 'unknown error');
       if (text.includes('transaction already in block chain')) {
         return computedTxid;
       }
+      throwIfConflict(text);
       errors.push(`blockchair(${r.status}): ${text.slice(0, 200)}`);
     }
   } catch (e: any) {
-    errors.push(`blockchair: ${e?.message || 'network error'}`);
+    const msg = e?.message || 'network error';
+    throwIfConflict(msg);
+    errors.push(`blockchair: ${msg}`);
   }
 
   console.error('[broadcast] All providers failed:', errors);
   const errorMsg = errors.join(' | ');
+  throwIfConflict(errorMsg);
   if (errorMsg.includes('scriptsig-not-pushonly')) throw new Error('Transaction rejected: Invalid script format.');
   if (errorMsg.includes('unpaid action') || errorMsg.includes('insufficient fee')) throw new Error('Transaction fee too low.');
   if (errorMsg.includes('missing inputs') || errorMsg.includes('bad-txns-inputs-missingorspent')) throw new Error('Transaction inputs unavailable.');

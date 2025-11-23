@@ -9,6 +9,25 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 /** @type {import('next').NextConfig} */
+const SECURITY_HEADERS = [
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'Referrer-Policy', value: 'same-origin' },
+  { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=()' },
+  {
+    key: 'Content-Security-Policy',
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.cdnfonts.com",
+      "font-src 'self' https://fonts.cdnfonts.com",
+      "img-src 'self' data: blob: https:",
+      "connect-src 'self' https: wss:",
+      "frame-ancestors 'none'",
+    ].join('; '),
+  },
+];
+
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@noble/secp256k1'],
@@ -18,6 +37,14 @@ const nextConfig = {
   },
   images: {
     unoptimized: true, // Required for Cloudflare Pages
+  },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: SECURITY_HEADERS,
+      },
+    ];
   },
   webpack: (config, { webpack, isServer }) => {
     config.resolve = config.resolve || {};
