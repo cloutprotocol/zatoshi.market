@@ -5,10 +5,10 @@ const BATCH_SIZE = 24;
 let visibleCount = BATCH_SIZE;
 const ORIGIN = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
 const IPFS_GATEWAYS = [
-  ORIGIN ? `${ORIGIN}/ipfs` : '/ipfs',
   "https://dweb.link/ipfs",
   "https://ipfs.io/ipfs",
   "https://cloudflare-ipfs.com/ipfs",
+  ORIGIN ? `${ORIGIN}/ipfs` : '/ipfs',
 ];
 const IPFS_TIMEOUT = 7000;
 const TRANSPARENT_PIXEL = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";

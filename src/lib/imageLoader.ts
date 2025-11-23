@@ -1,6 +1,6 @@
 /**
- * Race-based image loading utility
- * Tries loading from multiple URLs simultaneously and returns the first successful load
+ * Sequential image loading utility
+ * Tries loading from multiple URLs and returns once one successfully loads
  */
 
 export interface ImageLoadOptions {
@@ -40,8 +40,8 @@ function loadImageWithTimeout(url: string, timeout: number): Promise<string> {
 }
 
 /**
- * Race-loads an image from multiple URLs simultaneously
- * Returns the first URL that successfully loads
+ * Attempts to load an image from the provided URLs sequentially
+ * Stops at the first successful response
  */
 export async function loadImageWithRace(
     options: ImageLoadOptions
@@ -52,19 +52,17 @@ export async function loadImageWithRace(
         throw new Error('No URLs provided');
     }
 
-    try {
-        // Race all URLs against each other
-        const url = await Promise.race(
-            urls.map((url) => loadImageWithTimeout(url, timeout))
-        );
-
-        const index = urls.indexOf(url);
-        return { url, success: true, index };
-    } catch (error) {
-        // All URLs failed - try one more time with first URL
-        // console.warn('All image URLs failed to load', { urls, error });
-        return { url: urls[0], success: false, index: 0 };
+    for (let index = 0; index < urls.length; index++) {
+        const url = urls[index];
+        try {
+            await loadImageWithTimeout(url, timeout);
+            return { url, success: true, index };
+        } catch (err) {
+            // Continue to next URL
+        }
     }
+
+    return { url: urls[0], success: false, index: 0 };
 }
 
 /**

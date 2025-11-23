@@ -4,10 +4,10 @@ const IPFS_IMAGE_HASH = "bafybeiaqmceddfi4y3dyqwepjs6go477x35ypaojwgegcsee2vgy63
 const COLLECTION_SIZE = 10000;
 const CLAIM_ORIGIN = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
 const IPFS_GATEWAYS = [
-  CLAIM_ORIGIN ? `${CLAIM_ORIGIN}/ipfs` : '/ipfs',
   "https://dweb.link/ipfs",
   "https://ipfs.io/ipfs",
   "https://cloudflare-ipfs.com/ipfs",
+  CLAIM_ORIGIN ? `${CLAIM_ORIGIN}/ipfs` : '/ipfs',
 ];
 const IPFS_TIMEOUT = 7000;
 const TRANSPARENT_PIXEL = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
