@@ -341,7 +341,7 @@ export default function FinalizeTrade({ listing, onCancel }: FinalizeTradeProps)
                 };
 
                 // Set correct scriptPubKey for the current input being signed
-                txData.inputs[inputIndex].scriptPubKey = buildP2PKHScript(addressToPkh(wallet.address));
+                txData.inputs[inputIndex].scriptPubKey = buildP2PKHScript(addressToPkh(wallet.address)) as Uint8Array<ArrayBuffer>;
 
                 const sighash = zip243Sighash(txData as any, inputIndex);
                 const sig: any = await secp.sign(sighash, buyerPrivKey);

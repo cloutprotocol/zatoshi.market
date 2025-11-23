@@ -127,7 +127,7 @@ export function ClaimClient({ collection }: Props) {
     setError(null);
     try {
       const whitelistPromise = (async () => {
-        const res = await fetch(collection.claimWhitelistPath);
+        const res = await fetch(collection.claimWhitelistPath!);
         if (!res.ok) throw new Error(`Failed to load whitelist (${res.status})`);
         const text = await res.text();
         const lines = text.trim().split('\n');
@@ -149,9 +149,9 @@ export function ClaimClient({ collection }: Props) {
       const convex = getConvexClient();
       const statsPromise = convex
         ? convex.query(api.collectionClaims.getClaimStats, {
-            collectionSlug: collection.slug,
-            address: wallet.address,
-          })
+          collectionSlug: collection.slug,
+          address: wallet.address,
+        })
         : Promise.resolve(null);
 
       const [allocRes, statsRes] = await Promise.all([whitelistPromise, statsPromise]);
@@ -504,69 +504,69 @@ export function ClaimClient({ collection }: Props) {
         </div>
 
         {wallet?.address && !statusLoading && allocation && availableToRequest > 0 && (
-        <div className="glass-card p-6 border border-gold-500/20 rounded-lg">
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <h2 className="text-lg sm:text-xl font-semibold">Claim</h2>
-          </div>
-
-          <div className="flex flex-col gap-3 mb-4">
-            <div className="text-sm text-gold-200/70 leading-tight">
-              Remaining allocation: <span className="font-semibold text-gold-100">{remainingAllowlist}</span>
+          <div className="glass-card p-6 border border-gold-500/20 rounded-lg">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h2 className="text-lg sm:text-xl font-semibold">Claim</h2>
             </div>
-            {reservedPending > 0 && (
-              <div className="text-xs text-gold-200/60 leading-tight">
-                Pending reservations: <span className="font-semibold text-gold-100">{reservedPending}</span>
+
+            <div className="flex flex-col gap-3 mb-4">
+              <div className="text-sm text-gold-200/70 leading-tight">
+                Remaining allocation: <span className="font-semibold text-gold-100">{remainingAllowlist}</span>
+              </div>
+              {reservedPending > 0 && (
+                <div className="text-xs text-gold-200/60 leading-tight">
+                  Pending reservations: <span className="font-semibold text-gold-100">{reservedPending}</span>
+                </div>
+              )}
+              <label className="flex items-center gap-3 text-sm">
+                <span>Batch Inscribe (max 5)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={maxBatchSize}
+                  value={claimCount}
+                  onChange={(e) => setClaimCount(Math.max(1, Math.min(maxBatchSize, Number(e.target.value) || 1)))}
+                  className="bg-black/30 border border-gold-500/30 rounded px-3 py-2 w-24 text-gold-100 text-base sm:text-sm"
+                  disabled={claiming || availableToRequest <= 0}
+                />
+              </label>
+              <button
+                className="px-5 sm:px-6 py-3 rounded-lg bg-gold-500 text-black font-bold hover:bg-gold-400 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+                disabled={claiming || availableToRequest <= 0}
+                onClick={handleClaim}
+              >
+                {claiming ? 'Minting...' : `Claim ${Math.min(claimCount, maxBatchSize)} ZGODS`}
+              </button>
+              {error && <div className="text-sm text-red-300">{error}</div>}
+            </div>
+
+            {mintResults.length > 0 && (
+              <div className="mt-6">
+                <div className="text-sm text-gold-200/70 mb-2">Mint results</div>
+                <div className="grid gap-2">
+                  {mintResults.map((r, idx) => (
+                    <div key={`mint-${r.tokenId}-${idx}`} className="p-3 rounded border border-gold-500/20 bg-black/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div className="text-gold-100 font-semibold">Mint ID #{r.tokenId}</div>
+                      <div className="text-xs text-gold-200/70">
+                        {r.status === 'minted' ? (
+                          <>
+                            Minted{' '}
+                            {r.inscriptionId ? (
+                              <span className="text-gold-300 font-mono text-[10px]">
+                                {r.inscriptionId}
+                              </span>
+                            ) : null}
+                          </>
+                        ) : (
+                          <span className="text-red-300">Failed{r.error ? `: ${r.error}` : ''}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
-            <label className="flex items-center gap-3 text-sm">
-              <span>Batch Inscribe (max 5)</span>
-              <input
-                type="number"
-                min={1}
-                max={maxBatchSize}
-                value={claimCount}
-                onChange={(e) => setClaimCount(Math.max(1, Math.min(maxBatchSize, Number(e.target.value) || 1)))}
-                className="bg-black/30 border border-gold-500/30 rounded px-3 py-2 w-24 text-gold-100 text-base sm:text-sm"
-                disabled={claiming || availableToRequest <= 0}
-              />
-            </label>
-            <button
-              className="px-5 sm:px-6 py-3 rounded-lg bg-gold-500 text-black font-bold hover:bg-gold-400 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
-              disabled={claiming || availableToRequest <= 0}
-              onClick={handleClaim}
-            >
-              {claiming ? 'Minting...' : `Claim ${Math.min(claimCount, maxBatchSize)} ZGODS`}
-            </button>
-            {error && <div className="text-sm text-red-300">{error}</div>}
           </div>
-
-          {mintResults.length > 0 && (
-            <div className="mt-6">
-              <div className="text-sm text-gold-200/70 mb-2">Mint results</div>
-              <div className="grid gap-2">
-                {mintResults.map((r, idx) => (
-                  <div key={`mint-${r.tokenId}-${idx}`} className="p-3 rounded border border-gold-500/20 bg-black/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div className="text-gold-100 font-semibold">Mint ID #{r.tokenId}</div>
-                    <div className="text-xs text-gold-200/70">
-                      {r.status === 'minted' ? (
-                        <>
-                          Minted{' '}
-                          {r.inscriptionId ? (
-                            <span className="text-gold-300 font-mono text-[10px]">
-                              {r.inscriptionId}
-                            </span>
-                          ) : null}
-                        </>
-                      ) : (
-                        <span className="text-red-300">Failed{r.error ? `: ${r.error}` : ''}</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
         )}
         {wallet?.address && !statusLoading && allocation && availableToRequest <= 0 && (
           <div className="glass-card p-6 border border-gold-500/20 rounded-lg">
@@ -784,8 +784,8 @@ export function ClaimClient({ collection }: Props) {
                       <div className="text-xs text-gold-200/60 uppercase tracking-wider mb-2">Inscription ID</div>
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText(selectedToken.inscriptionId);
-                          setCopiedInscription(selectedToken.inscriptionId);
+                          navigator.clipboard.writeText(selectedToken.inscriptionId!);
+                          setCopiedInscription(selectedToken.inscriptionId ?? null);
                           setTimeout(() => setCopiedInscription(null), 2000);
                         }}
                         className="w-full text-left bg-black/40 p-3 rounded border border-gold-500/20 hover:border-gold-500/40 transition-all"
