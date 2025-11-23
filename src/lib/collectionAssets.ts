@@ -1,10 +1,11 @@
 import type { CollectionConfig } from '@/config/collections';
 
 export const IPFS_GATEWAYS = [
-  'https://ipfs.io/ipfs',
-  'https://cloudflare-ipfs.com/ipfs',
-  'https://dweb.link/ipfs',
-  'https://zatoshi.market/ipfs',
+  'https://cf-ipfs.com/ipfs',           // Cloudflare CDN - fastest and most reliable
+  'https://cloudflare-ipfs.com/ipfs',   // Cloudflare alternative
+  'https://zatoshi.market/ipfs',        // Local proxy (if available)
+  'https://dweb.link/ipfs',             // Protocol Labs gateway
+  'https://ipfs.io/ipfs',               // Official gateway (often slower)
 ] as const;
 
 export type CollectionTokenMetadata = {

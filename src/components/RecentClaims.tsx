@@ -5,6 +5,7 @@ import { getConvexClient } from '@/lib/convexClient';
 import { api } from '../../convex/_generated/api';
 import { getCollectionConfig } from '@/config/collections';
 import { buildImageUrls, buildTokenName, fetchCollectionMetadata } from '@/lib/collectionAssets';
+import { loadImageWithRace } from '@/lib/imageLoader';
 
 type ClaimedToken = {
   tokenId: number;
@@ -24,6 +25,7 @@ export function RecentClaims({ collectionSlug, limit = 12 }: RecentClaimsProps) 
   const [loading, setLoading] = useState(true);
   const [imageLoaded, setImageLoaded] = useState<Record<number, boolean>>({});
   const [imageError, setImageError] = useState<Record<number, boolean>>({});
+  const [optimalImageUrls, setOptimalImageUrls] = useState<Record<number, string>>({});
 
   useEffect(() => {
     const fetchClaims = async () => {
@@ -72,7 +74,23 @@ export function RecentClaims({ collectionSlug, limit = 12 }: RecentClaimsProps) 
           })
         );
 
-        setClaims(enriched.filter((c): c is ClaimedToken => c !== null));
+        const validClaims = enriched.filter((c): c is ClaimedToken => c !== null);
+        setClaims(validClaims);
+
+        // Preload images using race loading for first 6 items (above the fold)
+        validClaims.slice(0, 6).forEach(async (claim) => {
+          if (claim.imageUrls.length > 0) {
+            try {
+              const result = await loadImageWithRace({ urls: claim.imageUrls, timeout: 3000 });
+              if (result.success) {
+                setOptimalImageUrls((prev) => ({ ...prev, [claim.tokenId]: result.url }));
+                setImageLoaded((prev) => ({ ...prev, [claim.tokenId]: true }));
+              }
+            } catch (err) {
+              console.warn(`Failed to preload image for token ${claim.tokenId}`, err);
+            }
+          }
+        });
       } catch (err) {
         console.error('Failed to fetch recent claims', err);
       } finally {
@@ -86,16 +104,22 @@ export function RecentClaims({ collectionSlug, limit = 12 }: RecentClaimsProps) 
     return () => clearInterval(interval);
   }, [collectionSlug, limit]);
 
-  const handleImageError = (img: HTMLImageElement, urls: string[], tokenId: number) => {
-    const currentIndex = Number(img.dataset.index || '0');
-    const nextIndex = currentIndex + 1;
-    if (nextIndex < urls.length) {
-      img.dataset.index = String(nextIndex);
-      img.src = urls[nextIndex];
-      setImageLoaded((prev) => ({ ...prev, [tokenId]: false }));
-      setImageError((prev) => ({ ...prev, [tokenId]: false }));
-    } else {
-      img.onerror = null;
+  const handleImageLoad = async (tokenId: number, urls: string[]) => {
+    // If we already have an optimal URL from race loading, skip
+    if (optimalImageUrls[tokenId]) {
+      return;
+    }
+
+    // Otherwise, try race loading now
+    try {
+      const result = await loadImageWithRace({ urls, timeout: 5000 });
+      if (result.success) {
+        setOptimalImageUrls((prev) => ({ ...prev, [tokenId]: result.url }));
+        setImageLoaded((prev) => ({ ...prev, [tokenId]: true }));
+      } else {
+        setImageError((prev) => ({ ...prev, [tokenId]: true }));
+      }
+    } catch (err) {
       setImageError((prev) => ({ ...prev, [tokenId]: true }));
     }
   };
@@ -136,41 +160,58 @@ export function RecentClaims({ collectionSlug, limit = 12 }: RecentClaimsProps) 
       {/* Carousel */}
       <div className="relative overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
         <div className="flex gap-4 min-w-min">
-          {claims.map((claim) => (
-            <div
-              key={claim.inscriptionId}
-              className="flex-shrink-0 w-40 sm:w-48 group"
-            >
-              <div className="relative aspect-square overflow-hidden rounded border border-gold-500/20 bg-black/40 group-hover:border-gold-400/60 transition-all">
-                {!imageLoaded[claim.tokenId] && !imageError[claim.tokenId] && (
-                  <div className="absolute inset-0 bg-black/30 skeleton" />
-                )}
-                {imageError[claim.tokenId] && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-xs text-gold-200/60">
-                    Image unavailable
-                  </div>
-                )}
-                {claim.imageUrls.length > 0 && (
-                  <img
-                    src={claim.imageUrls[0]}
-                    data-index={0}
-                    alt={claim.name}
-                    loading="lazy"
-                    onLoad={() => setImageLoaded((prev) => ({ ...prev, [claim.tokenId]: true }))}
-                    onError={(e) => handleImageError(e.currentTarget, claim.imageUrls, claim.tokenId)}
-                    className={`w-full h-full object-cover transition-opacity duration-300 ${imageLoaded[claim.tokenId] ? 'opacity-100' : 'opacity-0'
-                      }`}
-                  />
-                )}
-              </div>
-              <div className="mt-2 space-y-1">
-                <div className="text-sm font-semibold text-gold-100 truncate group-hover:text-gold-300 transition-colors">
-                  {claim.name}
+          {claims.map((claim, idx) => {
+            const isAboveFold = idx < 6;
+            const imageUrl = optimalImageUrls[claim.tokenId] || claim.imageUrls[0];
+
+            return (
+              <div
+                key={claim.inscriptionId}
+                className="flex-shrink-0 w-40 sm:w-48 group"
+              >
+                <div className="relative aspect-square overflow-hidden rounded border border-gold-500/20 bg-black/40 group-hover:border-gold-400/60 transition-all">
+                  {!imageLoaded[claim.tokenId] && !imageError[claim.tokenId] && (
+                    <div className="absolute inset-0 bg-black/30 skeleton" />
+                  )}
+                  {imageError[claim.tokenId] && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-xs text-gold-200/60">
+                      Image unavailable
+                    </div>
+                  )}
+                  {claim.imageUrls.length > 0 && (
+                    <img
+                      src={imageUrl}
+                      alt={claim.name}
+                      loading={isAboveFold ? undefined : 'lazy'}
+                      fetchPriority={isAboveFold ? 'high' : undefined}
+                      onLoad={() => {
+                        setImageLoaded((prev) => ({ ...prev, [claim.tokenId]: true }));
+                        // Trigger race loading for lazy-loaded images
+                        if (!isAboveFold && !optimalImageUrls[claim.tokenId]) {
+                          handleImageLoad(claim.tokenId, claim.imageUrls);
+                        }
+                      }}
+                      onError={() => {
+                        if (!optimalImageUrls[claim.tokenId]) {
+                          handleImageLoad(claim.tokenId, claim.imageUrls);
+                        } else {
+                          setImageError((prev) => ({ ...prev, [claim.tokenId]: true }));
+                        }
+                      }}
+                      className={`w-full h-full object-cover transition-opacity duration-300 ${imageLoaded[claim.tokenId] ? 'opacity-100' : 'opacity-0'
+                        }`}
+                    />
+                  )}
                 </div>
-                <div className="text-xs text-gold-200/60">#{claim.tokenId.toLocaleString()}</div>
+                <div className="mt-2 space-y-1">
+                  <div className="text-sm font-semibold text-gold-100 truncate group-hover:text-gold-300 transition-colors">
+                    {claim.name}
+                  </div>
+                  <div className="text-xs text-gold-200/60">#{claim.tokenId.toLocaleString()}</div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

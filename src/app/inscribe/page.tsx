@@ -35,7 +35,7 @@ import { zcashRPC } from '@/services/zcash';
 
 type TabKey = 'names' | 'text' | 'images' | 'zrc20' | 'utxo' | 'history';
 const SHOW_NAMES = false;
-const SHOW_IMAGES = true;
+const SHOW_IMAGES = false;
 const DEFAULT_TAB: TabKey = 'text';
 
 // Constants for fee and dust limit, mirroring backend
@@ -492,9 +492,9 @@ function InscribePageContent() {
   };
   const mempoolUsagePercent =
     mempoolInfo &&
-    typeof mempoolInfo.usage === 'number' &&
-    typeof mempoolInfo.maxmempool === 'number' &&
-    mempoolInfo.maxmempool > 0
+      typeof mempoolInfo.usage === 'number' &&
+      typeof mempoolInfo.maxmempool === 'number' &&
+      mempoolInfo.maxmempool > 0
       ? Math.min(100, Math.max(0, Math.round((mempoolInfo.usage / mempoolInfo.maxmempool) * 100)))
       : null;
 
