@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as adminReconcile from "../adminReconcile.js";
 import type * as badges from "../badges.js";
 import type * as badgesActions from "../badgesActions.js";
 import type * as claimAllowlists from "../claimAllowlists.js";
@@ -36,6 +37,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  adminReconcile: typeof adminReconcile;
   badges: typeof badges;
   badgesActions: typeof badgesActions;
   claimAllowlists: typeof claimAllowlists;

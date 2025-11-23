@@ -1,0 +1,16 @@
+{"name":"activityFeed","id":10001}
+{"name":"inscriptions","id":10002}
+{"name":"jobs","id":10003}
+{"name":"mintTransactions","id":10004}
+{"name":"sales","id":10005}
+{"name":"txContexts","id":10006}
+{"name":"users","id":10007}
+{"name":"utxoLocks","id":10008}
+{"name":"zmapParcels","id":10009}
+{"name":"platformFees","id":10010}
+{"name":"psbtListings","id":10011}
+{"name":"badgeDefinitions","id":10012}
+{"name":"userBadges","id":10013}
+{"name":"collectionClaims","id":10014}
+{"name":"collectionClaimEvents","id":10015}
+{"name":"collectionClaimStats","id":10016}

@@ -1,0 +1,1 @@
+"{\"_creationTime\": normalfloat64, \"_id\": id<10001>, \"address\": field_name, \"message\": field_name, \"timestamp\": normalfloat64, \"txid\": field_name, \"type\": \"inscription\" | \"mint\"}"

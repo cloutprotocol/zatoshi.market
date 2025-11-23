@@ -42,4 +42,5 @@ Live activity feed for real-time updates across the site.
 
 ## Deployment
 
-Your deployment URL: https://whimsical-peccary-215.convex.cloud
+- **Production**: Use `--prod` flag for all production commands (e.g., `npx convex run <function> --prod`)
+- **Development**: https://whimsical-peccary-215.convex.cloud (`dev:whimsical-peccary-215`)

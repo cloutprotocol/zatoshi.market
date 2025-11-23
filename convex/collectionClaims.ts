@@ -347,8 +347,10 @@ export const finalizeToken = mutation({
         if (!allowlist || allowlist.max <= 0) {
           throw new Error("Wallet is not whitelisted for this collection");
         }
-        const { minted } = await getClaimCountsForAddress(ctx, slug, address);
-        if (minted >= allowlist.max) {
+        // FIX: Count both minted AND reserved tokens to prevent race conditions
+        const { minted, reserved } = await getClaimCountsForAddress(ctx, slug, address);
+        const totalClaimed = minted + reserved;
+        if (totalClaimed >= allowlist.max) {
           throw new Error("Allocation exhausted for this wallet");
         }
         await ctx.db.insert("collectionClaims", {
@@ -369,7 +371,14 @@ export const finalizeToken = mutation({
     }
 
     if ((existing.address || "").toLowerCase() !== address) {
-      // If somehow a different address tries to finalize, log and ignore to avoid client-visible errors
+      // Address mismatch - mark as failed in collectionClaims
+      await ctx.db.patch(existing._id, {
+        status: "failed",
+        lastError: "Address mismatch for reserved token",
+        updatedAt: Date.now(),
+      });
+
+      // Log event
       await ctx.db.insert("collectionClaimEvents", {
         collectionSlug: slug,
         tokenId: args.tokenId,
@@ -412,8 +421,12 @@ export const finalizeToken = mutation({
         return;
       }
 
-      const { minted } = await getClaimCountsForAddress(ctx, slug, address);
-      if (minted >= allowlist.max) {
+      // FIX: Count both minted AND reserved tokens to prevent race conditions
+      // Reserved tokens are already allocated to this user and must count toward limit
+      const { minted, reserved } = await getClaimCountsForAddress(ctx, slug, address);
+      const totalClaimed = minted + reserved;
+
+      if (totalClaimed > allowlist.max) {
         await ctx.db.patch(existing._id, {
           status: "failed",
           batchId: args.batchId ?? existing.batchId,

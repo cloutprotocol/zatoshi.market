@@ -74,6 +74,7 @@
     window.initDefaults = () => {
       const stored = localStorage.getItem('convexUrl');
       if (stored) qs('#convexUrl').value = stored;
+      // Use the NEXT_PUBLIC_CONVEX_URL from your production .env.local
       const envDefault = "https://cool-panda-546.convex.cloud";
       if (!qs('#convexUrl').value) qs('#convexUrl').value = envDefault;
       setText('#connState', qs('#convexUrl').value ? `Connected: ${qs('#convexUrl').value}` : 'Not connected');
