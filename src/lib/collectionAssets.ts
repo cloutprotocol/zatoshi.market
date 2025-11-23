@@ -1,12 +1,5 @@
 import type { CollectionConfig } from '@/config/collections';
-
-export const IPFS_GATEWAYS = [
-  'https://cf-ipfs.com/ipfs',           // Cloudflare CDN - fastest and most reliable
-  'https://cloudflare-ipfs.com/ipfs',   // Cloudflare alternative
-  'https://zatoshi.market/ipfs',        // Local proxy (if available)
-  'https://dweb.link/ipfs',             // Protocol Labs gateway
-  'https://ipfs.io/ipfs',               // Official gateway (often slower)
-] as const;
+import { IPFS_GATEWAYS } from '@/config/ipfs';
 
 export type CollectionTokenMetadata = {
   name?: string;
@@ -61,10 +54,10 @@ export function buildImageUrls(
 ) {
   const fromMeta = metadata?.img || (typeof metadata?.image === 'string' ? (metadata.image as string) : undefined);
   const urls = uniqueList([
-    fromMeta || undefined,
     ...(collection.imageCid
       ? IPFS_GATEWAYS.map((_, idx) => buildGatewayUrl(collection.imageCid!, `${tokenId}.png`, idx))
       : []),
+    fromMeta || undefined,
   ]);
   return urls;
 }

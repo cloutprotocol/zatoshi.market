@@ -55,36 +55,42 @@ function createZcashAddress(publicKey: Buffer): string {
 /**
  * Generate a new Zcash wallet with mnemonic seed phrase
  */
+
+
+// @ts-ignore
+const bitcore = require('bitcore-lib-zcash');
+
+
+/**
+ * Generate a new Zcash wallet with mnemonic seed phrase
+ * Uses BIP-44 standard derivation path for Zcash: m/44'/133'/0'/0/0
+ */
 export async function generateWallet(): Promise<Wallet> {
-  // Generate 12-word mnemonic (128 bits entropy) using pure-JS libs
+  // Generate 12-word mnemonic (128 bits entropy)
   const mnemonic = generateMnemonic(wordlist, 128);
 
-  // Convert mnemonic to seed (Uint8Array)
+  // Convert mnemonic to seed
   const seed = mnemonicToSeedSync(mnemonic);
 
-  // Derive a private key from seed
-  let priv = seed.subarray(0, 32);
-  if (!secp.utils.isValidPrivateKey(priv)) {
-    // fallback: hash the seed until valid
-    let counter = 0;
-    let bytes = seed;
-    while (true) {
-      bytes = sha256(Buffer.concat([Buffer.from(bytes), Buffer.from([counter++])]));
-      priv = bytes.subarray(0, 32);
-      if (secp.utils.isValidPrivateKey(priv)) break;
-      if (counter > 5) throw new Error('Failed to derive a valid private key');
-    }
-  }
+  // Use bitcore-lib-zcash for HD derivation
+  // Ensure seed is a Buffer
+  const seedBuffer = Buffer.from(seed);
+  const root = bitcore.HDPrivateKey.fromSeed(seedBuffer, bitcore.Networks.livenet);
 
-  // Get WIF private key (Zcash mainnet uses 0x80 prefix like Bitcoin)
-  const privateKey = encodeWIF(priv, true);
+  // Derive Zcash path: m/44'/133'/0'/0/0
+  const child = root.derive("m/44'/133'/0'/0/0");
+
+  // Get private key from the derived child
+  const privKey = child.privateKey;
+
+  // Get WIF (Wallet Import Format)
+  const privateKey = privKey.toWIF();
 
   // Get public key
-  const pub = secp.getPublicKey(priv, true);
-  const publicKey = Buffer.from(pub).toString('hex');
+  const publicKey = privKey.publicKey.toString();
 
-  // Generate Zcash transparent address (t-address)
-  const address = createZcashAddress(Buffer.from(pub));
+  // Generate Zcash transparent address
+  const address = privKey.toAddress().toString();
 
   return {
     address,
@@ -98,34 +104,45 @@ export async function generateWallet(): Promise<Wallet> {
  * Import wallet from mnemonic
  */
 export async function importFromMnemonic(mnemonic: string): Promise<Wallet> {
-  if (!validateMnemonic(mnemonic, wordlist)) {
-    throw new Error('Invalid mnemonic phrase');
-  }
-
-  const seed = mnemonicToSeedSync(mnemonic);
-  let priv = seed.subarray(0, 32);
-  if (!secp.utils.isValidPrivateKey(priv)) {
-    let counter = 0;
-    let bytes = seed;
-    while (true) {
-      bytes = sha256(Buffer.concat([Buffer.from(bytes), Buffer.from([counter++])])) as any;
-      priv = (bytes as Uint8Array).subarray(0, 32);
-      if (secp.utils.isValidPrivateKey(priv)) break;
-      if (counter > 5) throw new Error('Failed to derive a valid private key');
+  try {
+    if (!validateMnemonic(mnemonic, wordlist)) {
+      throw new Error('Invalid mnemonic phrase');
     }
+
+    const seed = mnemonicToSeedSync(mnemonic);
+
+    // Use bitcore-lib-zcash for HD derivation
+    // Ensure seed is a Buffer
+    const seedBuffer = Buffer.from(seed);
+    const root = bitcore.HDPrivateKey.fromSeed(seedBuffer, bitcore.Networks.livenet);
+
+    // Derive Zcash path: m/44'/133'/0'/0/0
+    const child = root.derive("m/44'/133'/0'/0/0");
+
+    // Get private key from the derived child
+    const privKey = child.privateKey;
+
+    // Get WIF (Wallet Import Format)
+    const privateKey = privKey.toWIF();
+
+    // Get public key
+    const publicKey = privKey.publicKey.toString();
+
+    // Generate Zcash transparent address
+    const address = privKey.toAddress().toString();
+
+    return {
+      address,
+      privateKey,
+      publicKey,
+      mnemonic,
+    };
+  } catch (error) {
+    // Log only the message to avoid leaking sensitive data
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('Wallet import failed:', msg);
+    throw new Error('Failed to import wallet. Please check your seed phrase.');
   }
-
-  const privateKey = encodeWIF(priv, true);
-  const pub = secp.getPublicKey(priv, true);
-  const publicKey = Buffer.from(pub).toString('hex');
-  const address = createZcashAddress(Buffer.from(pub));
-
-  return {
-    address,
-    privateKey,
-    publicKey,
-    mnemonic,
-  };
 }
 
 /**

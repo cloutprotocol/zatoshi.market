@@ -3,6 +3,7 @@ import "./globals.css";
 import Providers from "@/components/Providers";
 import Header from "@/components/Header";
 import { Analytics } from "@vercel/analytics/next";
+import { ConsoleEasterEgg } from "@/components/ConsoleEasterEgg";
 
 export const metadata: Metadata = {
   title: "zatoshi.market",
@@ -52,10 +53,11 @@ export default function RootLayout({
       </head>
       <body style={{ fontFamily: "'VCR OSD Mono', monospace" }}>
         <Providers>
+          <ConsoleEasterEgg />
           <Header />
           {children}
         </Providers>
-        <Analytics />
+        <Analytics debug={false} />
       </body>
     </html>
   );

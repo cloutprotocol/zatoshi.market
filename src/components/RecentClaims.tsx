@@ -68,7 +68,7 @@ export function RecentClaims({ collectionSlug, limit = 12 }: RecentClaimsProps) 
                 name: buildTokenName(collection, mint.tokenId, metadata),
               } as ClaimedToken;
             } catch (err) {
-              console.error(`Failed to load metadata for token ${mint.tokenId}`, err);
+              // Suppress metadata load errors
               return null;
             }
           })
@@ -87,7 +87,7 @@ export function RecentClaims({ collectionSlug, limit = 12 }: RecentClaimsProps) 
                 setImageLoaded((prev) => ({ ...prev, [claim.tokenId]: true }));
               }
             } catch (err) {
-              console.warn(`Failed to preload image for token ${claim.tokenId}`, err);
+              // Suppress image preload errors
             }
           }
         });

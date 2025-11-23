@@ -3,19 +3,19 @@ const IPFS_IMAGE_HASH = "bafybeiaqmceddfi4y3dyqwepjs6go477x35ypaojwgegcsee2vgy63
 const COLLECTION_SIZE = 10000;
 const BATCH_SIZE = 24;
 let visibleCount = BATCH_SIZE;
-// Prefer ipfs.io for reliability today; keep Cloudflare/zatoshi as fallbacks.
+const ORIGIN = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
 const IPFS_GATEWAYS = [
+  ORIGIN ? `${ORIGIN}/ipfs` : '/ipfs',
+  "https://dweb.link/ipfs",
   "https://ipfs.io/ipfs",
   "https://cloudflare-ipfs.com/ipfs",
-  "https://dweb.link/ipfs",
-  "https://zatoshi.market/ipfs",
 ];
 const IPFS_TIMEOUT = 7000;
 const TRANSPARENT_PIXEL = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
 const METADATA_SOURCES = [
   "/claim/metadata/metadata.json",
   "../../zgods-collection/metadata.json",
-  `${IPFS_GATEWAYS[0]}/${IPFS_METADATA_HASH}/metadata.json`,
+  `${(IPFS_GATEWAYS[0] || 'https://ipfs.io/ipfs')}/${IPFS_METADATA_HASH}/metadata.json`,
 ];
 const CLAIMED_STORAGE_KEY = 'zgods_global_claimed';
 

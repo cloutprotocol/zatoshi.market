@@ -62,7 +62,7 @@ export async function loadImageWithRace(
         return { url, success: true, index };
     } catch (error) {
         // All URLs failed - try one more time with first URL
-        console.warn('All image URLs failed to load', { urls, error });
+        // console.warn('All image URLs failed to load', { urls, error });
         return { url: urls[0], success: false, index: 0 };
     }
 }

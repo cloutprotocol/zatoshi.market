@@ -2,12 +2,12 @@ const WHITELIST_URL = "./whitelist.csv";
 const IPFS_METADATA_HASH = "bafybeicqjqzixdtawkbcuyaagrmk3vyfweidwzb6hwbucadhoxoe2pd3qm";
 const IPFS_IMAGE_HASH = "bafybeiaqmceddfi4y3dyqwepjs6go477x35ypaojwgegcsee2vgy63yobq";
 const COLLECTION_SIZE = 10000;
-// Prefer ipfs.io for reliability today; keep Cloudflare/dweb/zatoshi as fallbacks.
+const CLAIM_ORIGIN = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
 const IPFS_GATEWAYS = [
+  CLAIM_ORIGIN ? `${CLAIM_ORIGIN}/ipfs` : '/ipfs',
+  "https://dweb.link/ipfs",
   "https://ipfs.io/ipfs",
   "https://cloudflare-ipfs.com/ipfs",
-  "https://dweb.link/ipfs",
-  "https://zatoshi.market/ipfs",
 ];
 const IPFS_TIMEOUT = 7000;
 const TRANSPARENT_PIXEL = "data:image/gif;base64,R0lGODlhAQABAAAAACw=";

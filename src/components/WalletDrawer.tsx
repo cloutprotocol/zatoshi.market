@@ -53,6 +53,8 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasFetchedFresh, setHasFetchedFresh] = useState(false);
   const [justCopied, setJustCopied] = useState(false);
+  const [revealPrivateKey, setRevealPrivateKey] = useState(false);
+  const [revealMnemonic, setRevealMnemonic] = useState(false);
 
   const fetchBalance = useCallback(async (forceRefresh: boolean = false) => {
     if (!wallet?.address) return;
@@ -267,7 +269,7 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
   };
 
   const handleImportWallet = async () => {
-    const input = prompt('Enter your private key:');
+    const input = prompt('Enter your private key (WIF):');
     if (!input) return;
     const value = input.trim();
     try {
@@ -288,6 +290,33 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
     } catch (error) {
       console.error('❌ Import error:', error);
       alert('Invalid private key. Please enter a valid Zcash private key (starts with L or K).');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImportMnemonic = async () => {
+    const input = prompt('Enter your 12-word seed phrase:');
+    if (!input) return;
+    const value = input.trim().toLowerCase();
+    try {
+      setLoading(true);
+      console.log('🔑 Attempting mnemonic import...');
+      const imported = await importFromMnemonic(value);
+      console.log('✅ Mnemonic import successful:', imported.address);
+
+      const password = prompt('Set a password to encrypt your wallet (required):');
+      if (!password || password.length < 8) {
+        alert('Password required (min 8 chars). Wallet not saved.');
+        return;
+      }
+
+      await saveEncrypted(imported, password);
+      connectWallet(imported);
+      alert(`Wallet imported successfully! Address: ${imported.address}`);
+    } catch (error) {
+      console.error('❌ Import error:', error);
+      alert('Invalid seed phrase. Please check your words and try again.');
     } finally {
       setLoading(false);
     }
@@ -341,13 +370,12 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
 
   const handleExport = () => setShowExport(true);
 
-  const confirmExport = () => {
-    if (wallet?.privateKey) {
-      navigator.clipboard.writeText(wallet.privateKey);
-      alert('Private key (WIF) copied to clipboard! Keep it safe.');
-      setShowExport(false);
-    }
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    alert(`${label} copied to clipboard! Keep it safe.`);
   };
+
+
 
   const handleDisconnect = () => {
     if (confirm('Disconnect wallet?')) {
@@ -489,7 +517,13 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
                   onClick={handleImportWallet}
                   className="w-full px-6 py-3 bg-gold-500/10 text-gold-400 font-bold rounded border border-gold-500/30 hover:bg-gold-500/20 transition-all"
                 >
-                  IMPORT WALLET
+                  IMPORT PRIVATE KEY
+                </button>
+                <button
+                  onClick={handleImportMnemonic}
+                  className="w-full px-6 py-3 bg-gold-500/10 text-gold-400 font-bold rounded border border-gold-500/30 hover:bg-gold-500/20 transition-all"
+                >
+                  IMPORT SEED PHRASE
                 </button>
               </div>
             </div>
@@ -756,7 +790,7 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
                   onClick={handleExport}
                   className="w-full px-6 py-2 bg-gold-500/10 text-gold-400 text-sm border border-gold-500/30 rounded hover:bg-gold-500/20 transition-all"
                 >
-                  Export Private Key
+                  Export Wallet
                 </button>
                 <button
                   onClick={handleDisconnect}
@@ -934,134 +968,99 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
         </div>
       )}
 
-      {/* Export Choice Modal */}
-      {showExport && (
+      {/* Export Modal */}
+      {showExport && wallet && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
-          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded max-w-md w-full p-8">
-            <h3 className="text-2xl font-bold text-gold-300 mb-4">EXPORT OPTIONS</h3>
-            <div className="bg-gold-500/10 border border-gold-500/30 rounded p-4 mb-6">
-              <p className="text-sm text-gold-300">
-                Choose which format to export your wallet credentials. Both provide full access to your wallet.
+          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded max-w-lg w-full p-8">
+            <h3 className="text-xl font-bold text-gold-400 mb-4">Export Wallet</h3>
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded mb-6">
+              <p className="text-red-400 text-sm font-bold">
+                WARNING: Never share these keys. Anyone with them can steal your funds.
               </p>
             </div>
-            <div className="space-y-3 mb-6">
-              <button
-                onClick={() => {
-                  const password = prompt('Enter your wallet password to view private key:');
-                  if (password) {
-                    setShowExport(false);
-                    setShowPrivateKey(true);
-                  }
-                }}
-                className="w-full px-6 py-4 bg-gold-500/10 text-gold-300 border border-gold-500/30 rounded hover:bg-gold-500/20 transition-all text-left"
-              >
-                <div className="font-bold mb-1">WIF Private Key</div>
-                <div className="text-xs text-gold-300/60">Single-line format (starts with L or K)</div>
-              </button>
-              <button
-                onClick={() => {
-                  if (!wallet?.mnemonic) {
-                    alert('No recovery phrase available for this wallet (imported via private key)');
-                    return;
-                  }
-                  const password = prompt('Enter your wallet password to view 12-word phrase:');
-                  if (password) {
-                    setShowExport(false);
-                    setShowMnemonicExport(true);
-                  }
-                }}
-                className="w-full px-6 py-4 bg-gold-500/10 text-gold-300 border border-gold-500/30 rounded hover:bg-gold-500/20 transition-all text-left"
-              >
-                <div className="font-bold mb-1">12-Word Recovery Phrase</div>
-                <div className="text-xs text-gold-300/60">BIP39 mnemonic (if available)</div>
-              </button>
-            </div>
-            <button
-              onClick={() => setShowExport(false)}
-              className="w-full px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded border border-gold-500/30 hover:bg-gold-500/30 transition-all"
-            >
-              CANCEL
-            </button>
-          </div>
-        </div>
-      )}
 
-      {/* Private Key Modal */}
-      {showPrivateKey && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
-          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded max-w-md w-full p-8">
-            <h3 className="text-2xl font-bold text-gold-300 mb-4">PRIVATE KEY (WIF)</h3>
-            <div className="bg-gold-500/10 border border-gold-500/30 rounded p-4 mb-4">
-              <p className="text-sm text-gold-300 mb-2">
-                <strong>SECURITY NOTICE:</strong> Anyone with this key has full access to your wallet.
-              </p>
-              <ul className="text-xs text-gold-300 space-y-1 list-disc list-inside">
-                <li>Keep it secure and private</li>
-                <li>Store offline in safe location</li>
-                <li>Be aware of screen recording</li>
-              </ul>
-            </div>
-            <div className="bg-black/40 p-4 rounded mb-6 break-all">
-              <p className="text-gold-300 font-mono text-sm">{wallet?.privateKey}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => {
-                  if (wallet?.privateKey) {
-                    navigator.clipboard.writeText(wallet.privateKey);
-                    alert('Private key (WIF) copied to clipboard!');
-                  }
-                }}
-                className="px-6 py-3 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-all"
-              >
-                COPY
-              </button>
-              <button
-                onClick={() => setShowPrivateKey(false)}
-                className="px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded border border-gold-500/30 hover:bg-gold-500/30 transition-all"
-              >
-                CLOSE
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Mnemonic Export Modal */}
-      {showMnemonicExport && wallet && wallet.mnemonic && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-6">
-          <div className="backdrop-blur-xl bg-black/40 border border-gold-500/30 rounded max-w-2xl w-full p-8">
-            <h3 className="text-2xl font-bold text-gold-300 mb-4">12-WORD RECOVERY PHRASE</h3>
-            <div className="bg-gold-500/10 border border-gold-500/30 rounded p-4 mb-6">
-              <p className="text-sm text-gold-300">
-                <strong>BACKUP:</strong> Write down these 12 words in order. This is the only way to recover your wallet if you lose your password.
-              </p>
-            </div>
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              {wallet.mnemonic.split(' ').map((word, i) => (
-                <div key={i} className="bg-black/40 p-3 rounded text-center">
-                  <span className="text-gold-200/60 text-xs">{i + 1}. </span>
-                  <span className="text-gold-300 font-mono">{word}</span>
+            <div className="space-y-6">
+              {/* Private Key Section */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-gold-200/60 uppercase tracking-wider">Private Key (WIF)</label>
+                  <button
+                    onClick={() => setRevealPrivateKey(!revealPrivateKey)}
+                    className="text-[10px] text-gold-400 hover:text-gold-300 uppercase tracking-wider"
+                  >
+                    {revealPrivateKey ? 'Hide' : 'Show'}
+                  </button>
                 </div>
-              ))}
+                <div className={`p-3 bg-black/60 border border-gold-500/20 rounded break-all font-mono text-xs text-gold-100/80 relative ${!revealPrivateKey ? 'cursor-pointer' : ''}`} onClick={() => !revealPrivateKey && setRevealPrivateKey(true)}>
+                  <div className={!revealPrivateKey ? 'blur-sm select-none' : ''}>
+                    {wallet.privateKey}
+                  </div>
+                  {!revealPrivateKey && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-gold-400/50 text-[10px] uppercase tracking-widest font-bold">Click to Reveal</span>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => copyToClipboard(wallet.privateKey, 'Private Key')}
+                  className="w-full py-2 bg-gold-500/10 text-gold-400 text-xs border border-gold-500/30 rounded hover:bg-gold-500/20 transition-all"
+                >
+                  Copy Private Key
+                </button>
+              </div>
+
+              {/* Seed Phrase Section */}
+              <div className="space-y-2 pt-4 border-t border-gold-500/10">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-gold-200/60 uppercase tracking-wider">Recovery Phrase</label>
+                  {wallet.mnemonic && (
+                    <button
+                      onClick={() => setRevealMnemonic(!revealMnemonic)}
+                      className="text-[10px] text-gold-400 hover:text-gold-300 uppercase tracking-wider"
+                    >
+                      {revealMnemonic ? 'Hide' : 'Show'}
+                    </button>
+                  )}
+                </div>
+                {wallet.mnemonic ? (
+                  <>
+                    <div className={`p-3 bg-black/60 border border-gold-500/20 rounded break-words font-mono text-xs text-gold-100/80 relative ${!revealMnemonic ? 'cursor-pointer' : ''}`} onClick={() => !revealMnemonic && setRevealMnemonic(true)}>
+                      <div className={!revealMnemonic ? 'blur-sm select-none' : ''}>
+                        {wallet.mnemonic}
+                      </div>
+                      {!revealMnemonic && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-gold-400/50 text-[10px] uppercase tracking-widest font-bold">Click to Reveal</span>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => copyToClipboard(wallet.mnemonic, 'Seed Phrase')}
+                      className="w-full py-2 bg-gold-500/10 text-gold-400 text-xs border border-gold-500/30 rounded hover:bg-gold-500/20 transition-all"
+                    >
+                      Copy Seed Phrase
+                    </button>
+                  </>
+                ) : (
+                  <div className="p-3 bg-black/20 border border-gold-500/10 rounded text-center">
+                    <p className="text-gold-400/30 text-xs italic">
+                      No recovery phrase available (imported via private key)
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+
+            <div className="mt-8 flex justify-end">
               <button
                 onClick={() => {
-                  if (wallet.mnemonic) {
-                    navigator.clipboard.writeText(wallet.mnemonic);
-                    alert('12-word phrase copied to clipboard!');
-                  }
+                  setShowExport(false);
+                  setRevealPrivateKey(false);
+                  setRevealMnemonic(false);
                 }}
-                className="px-6 py-3 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-all"
+                className="px-6 py-2 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-all"
               >
-                COPY
-              </button>
-              <button
-                onClick={() => setShowMnemonicExport(false)}
-                className="px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded border border-gold-500/30 hover:bg-gold-500/30 transition-all"
-              >
-                CLOSE
+                Done
               </button>
             </div>
           </div>

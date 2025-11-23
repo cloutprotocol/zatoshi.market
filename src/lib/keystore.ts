@@ -55,8 +55,8 @@ export function deleteKeystore() {
 }
 
 export async function saveKeystore(wallet: Wallet, password: string): Promise<void> {
-  const { mnemonic: _mnemonic, ...toStore } = wallet;
-  const data = new TextEncoder().encode(JSON.stringify(toStore));
+  // Store the entire wallet object including mnemonic
+  const data = new TextEncoder().encode(JSON.stringify(wallet));
   const salt = new Uint8Array(randomBytes(16));
   const iv = new Uint8Array(randomBytes(12));
   const key = await deriveKey(password, salt);
