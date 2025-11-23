@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { getAllowlistEntry } from "./claimAllowlists";
 
 const MAX_RESERVE_ATTEMPTS = 200;
-const RESERVATION_TTL_MS = 15 * 60 * 1000; // 15 minutes
+export const RESERVATION_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 function normalizeAddress(address: string) {
   return (address || "").toLowerCase();
@@ -33,6 +33,41 @@ async function getClaimCountsForAddress(
     minted,
     reserved,
   };
+}
+
+async function expireStaleReservations(
+  ctx: any,
+  slug: string,
+  now: number,
+  cutoff: number,
+  maxBatch = 128
+) {
+  const stale = await ctx.db
+    .query("collectionClaims")
+    .withIndex("by_collection_status_updatedAt", (q) =>
+      q.eq("collectionSlug", slug).eq("status", "reserved").lt("updatedAt", cutoff)
+    )
+    .order("asc")
+    .take(maxBatch);
+
+  for (const doc of stale) {
+    await ctx.db.patch(doc._id, {
+      status: "failed",
+      lastError: "Reservation expired",
+      updatedAt: now,
+    });
+    await ctx.db.insert("collectionClaimEvents", {
+      collectionSlug: slug,
+      tokenId: doc.tokenId,
+      address: doc.address,
+      batchId: doc.batchId,
+      status: "failed",
+      message: "Reservation expired",
+      createdAt: now,
+    });
+  }
+
+  return stale.length;
 }
 
 export const getClaimStats = query({
@@ -136,42 +171,42 @@ export const reserveTokens = mutation({
     const reusedDocs: any[] = [];
     const newAllocations: number[] = [];
 
-    // Fetch existing tokenIds and active reservations to avoid duplicates
-    const mintedDocs = await ctx.db
-      .query("collectionClaims")
-      .withIndex("by_collection_status", (q) => q.eq("collectionSlug", slug).eq("status", "minted"))
-      .collect();
-    const reservedDocsRaw = await ctx.db
-      .query("collectionClaims")
-      .withIndex("by_collection_status", (q) => q.eq("collectionSlug", slug).eq("status", "reserved"))
-      .collect();
+    // Periodically sweep stale reservations for the entire collection so supply frees up
+    await expireStaleReservations(ctx, slug, now, cutoff);
 
-    // Expire stale reservations globally to free supply
-    const expired = reservedDocsRaw.filter((doc) => (doc.updatedAt ?? doc.createdAt ?? 0) < cutoff);
-    for (const doc of expired) {
-      await ctx.db.patch(doc._id, {
-        status: "failed",
-        lastError: "Reservation expired",
-        updatedAt: now,
-      });
-      await ctx.db.insert("collectionClaimEvents", {
-        collectionSlug: slug,
-        tokenId: doc.tokenId,
-        address: doc.address,
-        batchId: doc.batchId,
-        status: "failed",
-        message: "Reservation expired",
-        createdAt: now,
-      });
+    // Fetch existing tokenIds and active reservations to avoid duplicates
+    const addressDocs = await ctx.db
+      .query("collectionClaims")
+      .withIndex("by_collection_address", (q) => q.eq("collectionSlug", slug).eq("address", address))
+      .collect();
+    const mintedForAddress = addressDocs.filter((doc) => doc.status === "minted");
+    const reservedDocsRaw = addressDocs.filter((doc) => doc.status === "reserved");
+
+    // Expire stale reservations belonging to this wallet
+    const reservedActive: typeof reservedDocsRaw = [];
+    for (const doc of reservedDocsRaw) {
+      const updatedAt = doc.updatedAt ?? doc.createdAt ?? 0;
+      if (updatedAt < cutoff) {
+        await ctx.db.patch(doc._id, {
+          status: "failed",
+          lastError: "Reservation expired",
+          updatedAt: now,
+        });
+        await ctx.db.insert("collectionClaimEvents", {
+          collectionSlug: slug,
+          tokenId: doc.tokenId,
+          address: doc.address,
+          batchId: doc.batchId,
+          status: "failed",
+          message: "Reservation expired",
+          createdAt: now,
+        });
+      } else {
+        reservedActive.push(doc);
+      }
     }
 
-    let reservedDocs = reservedDocsRaw.filter(
-      (doc) => (doc.updatedAt ?? doc.createdAt ?? 0) >= cutoff && doc.status === "reserved"
-    );
-    const mintedForAddress = mintedDocs.filter((m) => (m.address || "").toLowerCase() === address);
-    let reservedForAddress = reservedDocs
-      .filter((doc) => (doc.address || "").toLowerCase() === address)
-      .sort((a, b) => a.createdAt - b.createdAt);
+    let reservedForAddress = reservedActive.sort((a, b) => a.createdAt - b.createdAt);
 
     // Trim any over-allocation from lingering reservations (keep oldest first)
     const maxReservedAllowed = Math.max(allowlist.max - mintedForAddress.length, 0);
@@ -179,7 +214,6 @@ export const reserveTokens = mutation({
       const overflow = reservedForAddress.slice(maxReservedAllowed);
       const overflowIds = new Set(overflow.map((d) => d._id));
       reservedForAddress = reservedForAddress.slice(0, maxReservedAllowed);
-      reservedDocs = reservedDocs.filter((doc) => !overflowIds.has(doc._id));
       for (const doc of overflow) {
         await ctx.db.patch(doc._id, {
           status: "failed",
@@ -208,7 +242,19 @@ export const reserveTokens = mutation({
     }
 
     const targetCount = Math.max(1, Math.min(maxCount, remainingCapacity));
-    const taken = new Set<number>([...mintedDocs, ...reservedDocs].map((d) => d.tokenId));
+    const seenAvailability = new Map<number, boolean>();
+    const isTokenAvailable = async (tokenId: number) => {
+      if (seenAvailability.has(tokenId)) {
+        return seenAvailability.get(tokenId)!;
+      }
+      const existing = await ctx.db
+        .query("collectionClaims")
+        .withIndex("by_collection_token", (q) => q.eq("collectionSlug", slug).eq("tokenId", tokenId))
+        .first();
+      const available = !existing || existing.status === "failed";
+      seenAvailability.set(tokenId, available);
+      return available;
+    };
 
     // Reuse any previously reserved tokens for this address before allocating new ones
     for (const doc of reservedForAddress) {
@@ -238,8 +284,10 @@ export const reserveTokens = mutation({
     while (reserved.length < targetCount && attempts < MAX_RESERVE_ATTEMPTS) {
       attempts += 1;
       const candidate = Math.floor(Math.random() * args.supply);
-      if (taken.has(candidate) || reserved.includes(candidate)) continue;
-      taken.add(candidate);
+      if (reserved.includes(candidate)) continue;
+      const available = await isTokenAvailable(candidate);
+      if (!available) continue;
+      seenAvailability.set(candidate, false);
       reserved.push(candidate);
       newAllocations.push(candidate);
     }

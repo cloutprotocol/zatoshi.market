@@ -33,6 +33,29 @@ type WhitelistEntry = {
   isVip: boolean;
 };
 
+type AllocationEntry = {
+  address: string;
+  max: number;
+  isVip: boolean;
+  mintedCount: number;
+  reservedCount: number;
+  reservedExpiredCount: number;
+  failedCount: number;
+  remaining: number;
+  mintedTokenIds: number[];
+  reservedTokenIds: number[];
+  duplicateTokenIds: number[];
+  issues: string[];
+};
+
+type AllocationResult = {
+  total: number;
+  start: number;
+  limit: number;
+  nextStart: number | null;
+  entries: AllocationEntry[];
+};
+
 export default function ClaimStatsPage() {
   const params = useParams();
   const slug = String(params?.slug || '').toLowerCase();
@@ -42,6 +65,9 @@ export default function ClaimStatsPage() {
   const [topMinters, setTopMinters] = useState<TopMinter[]>([]);
   const [recentMints, setRecentMints] = useState<RecentMint[]>([]);
   const [whitelist, setWhitelist] = useState<Map<string, WhitelistEntry>>(new Map());
+  const [allocationResult, setAllocationResult] = useState<AllocationResult | null>(null);
+  const [allocationLoading, setAllocationLoading] = useState(true);
+  const [allocationError, setAllocationError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadStats = useCallback(async () => {
@@ -89,11 +115,39 @@ export default function ClaimStatsPage() {
     }
   }, [slug, collection?.claimWhitelistPath]);
 
+  const loadAllocations = useCallback(
+    async (start = 0) => {
+      setAllocationLoading(true);
+      setAllocationError(null);
+      try {
+        const convex = getConvexClient();
+        if (!convex) throw new Error('Convex client unavailable');
+
+        const res = await convex.query((api as any).claimStats.getAllocationStatus, {
+          collectionSlug: slug,
+          start,
+          limit: 25,
+        });
+        setAllocationResult(res as AllocationResult);
+      } catch (err) {
+        console.error('Failed to load allocations:', err);
+        setAllocationError(err instanceof Error ? err.message : 'Failed to load allocation data');
+      } finally {
+        setAllocationLoading(false);
+      }
+    },
+    [slug]
+  );
+
   useEffect(() => {
     loadStats();
     const interval = setInterval(loadStats, 10000); // Refresh every 10s
     return () => clearInterval(interval);
   }, [loadStats]);
+
+  useEffect(() => {
+    loadAllocations(0);
+  }, [loadAllocations]);
 
   if (!collection) {
     return (
@@ -264,6 +318,135 @@ export default function ClaimStatsPage() {
                 </div>
               </div>
             )}
+
+            <div className="glass-card p-6 border border-gold-500/20 rounded-lg">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold">Allocation Inspector</h2>
+                  <p className="text-gold-200/70 text-sm">
+                    Inspect each wallet&apos;s minted count, open reservations, and remaining allocation.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="px-3 py-2 border border-gold-500/40 text-sm uppercase tracking-wide disabled:opacity-40"
+                    onClick={() =>
+                      loadAllocations(
+                        Math.max((allocationResult?.start ?? 0) - (allocationResult?.limit ?? 25), 0)
+                      )
+                    }
+                    disabled={
+                      allocationLoading || !allocationResult || (allocationResult?.start ?? 0) === 0
+                    }
+                  >
+                    ◀ Prev
+                  </button>
+                  <button
+                    className="px-3 py-2 border border-gold-500/40 text-sm uppercase tracking-wide disabled:opacity-40"
+                    onClick={() =>
+                      allocationResult?.nextStart != null && loadAllocations(allocationResult.nextStart)
+                    }
+                    disabled={allocationLoading || !allocationResult || allocationResult.nextStart == null}
+                  >
+                    Next ▶
+                  </button>
+                  <button
+                    className="px-3 py-2 border border-gold-500/40 text-sm uppercase tracking-wide disabled:opacity-40"
+                    onClick={() => loadAllocations(allocationResult?.start ?? 0)}
+                    disabled={allocationLoading}
+                  >
+                    Refresh
+                  </button>
+                </div>
+              </div>
+              {allocationError && (
+                <div className="mb-4 text-red-400 text-sm">{allocationError}</div>
+              )}
+              {allocationResult && allocationResult.total > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gold-300/70 border-b border-gold-500/20">
+                        <th className="py-2 pr-4">Address</th>
+                        <th className="py-2 pr-4">Allocated</th>
+                        <th className="py-2 pr-4">Minted</th>
+                        <th className="py-2 pr-4">Reserved</th>
+                        <th className="py-2 pr-4">Remaining</th>
+                        <th className="py-2 pr-4">Issues</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allocationResult.entries.map((entry) => {
+                        const shortened = `${entry.address.slice(0, 6)}...${entry.address.slice(-4)}`;
+                        return (
+                          <tr key={entry.address} className="border-b border-gold-500/10 last:border-none">
+                            <td className="py-2 pr-4 font-mono text-xs">
+                              <div className="flex items-center gap-2">
+                                <span title={entry.address}>{shortened}</span>
+                                {entry.isVip && <span className="text-xs text-gold-400">⭐ VIP</span>}
+                              </div>
+                            </td>
+                            <td className="py-2 pr-4">{entry.max}</td>
+                            <td
+                              className="py-2 pr-4"
+                              title={
+                                entry.mintedTokenIds.length
+                                  ? entry.mintedTokenIds.map((id) => `#${id}`).join(', ')
+                                  : 'No mints yet'
+                              }
+                            >
+                              {entry.mintedCount}
+                            </td>
+                            <td
+                              className="py-2 pr-4"
+                              title={
+                                entry.reservedTokenIds.length
+                                  ? entry.reservedTokenIds.map((id) => `#${id}`).join(', ')
+                                  : 'No active reservations'
+                              }
+                            >
+                              {entry.reservedCount}
+                            </td>
+                            <td className="py-2 pr-4">{entry.remaining}</td>
+                            <td className="py-2 pr-4">
+                              {entry.issues.length === 0 ? (
+                                <span className="text-gold-400/60">—</span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1">
+                                  {entry.issues.map((issue) => (
+                                    <span
+                                      key={`${entry.address}-${issue}`}
+                                      className="px-2 py-1 rounded-full text-xs bg-red-500/20 border border-red-400/40"
+                                      title={
+                                        issue === 'over_minted'
+                                          ? 'Minted count exceeds allocation'
+                                          : issue === 'over_reserved'
+                                          ? 'Active reservations exceed remaining allocation'
+                                          : `Duplicate token IDs detected: ${entry.duplicateTokenIds.join(', ')}`
+                                      }
+                                    >
+                                      {issue.replace('_', ' ')}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div className="text-xs text-gold-200/60 mt-3">
+                    Showing {allocationResult.start + 1}–
+                    {allocationResult.start + allocationResult.entries.length} of {allocationResult.total} addresses
+                  </div>
+                </div>
+              ) : allocationLoading ? (
+                <div className="text-gold-200/70">Loading allocation data...</div>
+              ) : (
+                <div className="text-gold-200/70">No allowlist entries found.</div>
+              )}
+            </div>
           </div>
         )}
       </div>
