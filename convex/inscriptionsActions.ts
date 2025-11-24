@@ -38,6 +38,7 @@ import {
   base64ToBytes,
 } from "./zcashHelpers";
 import { PLATFORM_FEE_ZATS, TREASURY_ADDRESS } from './treasury.config';
+import { POINTS_PER_MINT } from "./userPoints";
 import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha256";
 
@@ -993,6 +994,16 @@ export const broadcastSignedRevealAction = action({
       zrc20Op,
       zrc20Amount,
     } as any);
+
+    try {
+      await ctx.runMutation(api.userPoints.awardPoints, {
+        address: rec.address,
+        delta: POINTS_PER_MINT,
+        category: "minted",
+      });
+    } catch (awardErr) {
+      console.error("[points] Failed to award inscription points", awardErr);
+    }
 
     await ctx.runMutation(internal.txContexts.patch, { _id: rec._id, status: 'completed', updatedAt: Date.now() });
     try {

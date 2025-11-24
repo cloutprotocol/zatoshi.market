@@ -84,6 +84,7 @@ export function ProfileHeader({
     [profile?.socialLinks]
   );
   const vipBadge = badges.find((badge) => badge.badgeSlug === 'vip');
+  const otherBadges = badges.filter((badge) => badge.badgeSlug !== 'vip');
   const handlePrivacyToggle = () => {
     if (!privacyChanging) {
       onTogglePrivacy?.();
@@ -159,9 +160,9 @@ export function ProfileHeader({
           </div>
         </div>
         <div className="flex-1 space-y-4">
-          {badges.length > 0 && (
+          {otherBadges.length > 0 && (
             <div className="flex flex-wrap gap-3">
-              {badges.map((badge) => (
+              {otherBadges.map((badge) => (
                 <BadgePill key={`${badge.badgeSlug}-${badge.source || 'default'}`} badge={badge} />
               ))}
             </div>
