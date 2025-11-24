@@ -31,6 +31,14 @@ class AddressSummary:
     issues: Set[str] = field(default_factory=set)
 
     def to_row(self) -> List[str]:
+        minted_count = len(self.minted_tokens)
+        reserved_count = len(self.reserved_tokens)
+        remaining_allocation = self.allocation - minted_count
+        remaining_after_reservations = self.allocation - minted_count - reserved_count
+        over_allocated = minted_count > self.allocation
+        if over_allocated:
+            self.issues.add("over_allocated")
+        highlight = "red" if over_allocated else ""
         minted_list = ",".join(str(t) for t in sorted(self.minted_tokens))
         reserved_list = ",".join(str(t) for t in sorted(self.reserved_tokens))
         inscription_list = ",".join(str(t) for t in sorted(self.inscription_tokens))
@@ -41,15 +49,19 @@ class AddressSummary:
             self.address,
             str(self.allocation),
             "yes" if self.is_vip else "no",
-            str(len(self.minted_tokens)),
+            str(minted_count),
+            str(remaining_allocation),
+            str(remaining_after_reservations),
+            "YES" if over_allocated else "",
             minted_list,
-            str(len(self.reserved_tokens)),
+            str(reserved_count),
             reserved_list,
             str(self.failed_count),
             failure_info,
             str(len(self.inscription_tokens)),
             inscription_list,
             ";".join(sorted(self.issues)) or "-",
+            highlight,
         ]
 
 
@@ -73,7 +85,7 @@ def load_allowlist(slug: str) -> Dict[str, dict]:
     return normalized
 
 
-def analyze_collection(slug: str) -> None:
+def analyze_collection(slug: str, snapshot_root: Path) -> None:
     slug = slug.lower()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -88,7 +100,7 @@ def analyze_collection(slug: str) -> None:
     }
     token_history: Dict[int, List[dict]] = defaultdict(list)
 
-    claims_path = SNAPSHOT_ROOT / "collectionClaims" / "documents.jsonl"
+    claims_path = snapshot_root / "collectionClaims" / "documents.jsonl"
     for doc in load_jsonl(claims_path):
         if doc.get("collectionSlug") != slug:
             continue
@@ -117,7 +129,7 @@ def analyze_collection(slug: str) -> None:
             "doc": doc,
         })
 
-    events_path = SNAPSHOT_ROOT / "collectionClaimEvents" / "documents.jsonl"
+    events_path = snapshot_root / "collectionClaimEvents" / "documents.jsonl"
     inscription_events: Dict[int, List[Tuple[str, dict]]] = defaultdict(list)
     for event in load_jsonl(events_path):
         if event.get("collectionSlug") != slug:
@@ -210,6 +222,9 @@ def analyze_collection(slug: str) -> None:
             "allocation",
             "isVip",
             "mintedCount",
+            "remainingAllocation",
+            "remainingAfterReservations",
+            "overAllocated",
             "mintedTokens",
             "reservedCount",
             "reservedTokens",
@@ -218,6 +233,7 @@ def analyze_collection(slug: str) -> None:
             "inscriptionCount",
             "inscriptionTokens",
             "issues",
+            "highlight",
         ])
         for addr, summary in sorted(address_summary.items()):
             writer.writerow(summary.to_row())
@@ -267,8 +283,15 @@ def analyze_collection(slug: str) -> None:
 def main():
     parser = argparse.ArgumentParser(description="Analyze Convex claim snapshot data")
     parser.add_argument("slug", nargs="?", default="zgods", help="Collection slug to analyze (default: zgods)")
+    parser.add_argument(
+        "--snapshot-root",
+        dest="snapshot_root",
+        default=str(SNAPSHOT_ROOT),
+        help="Path to the snapshot directory (default: temp/snapshots)",
+    )
     args = parser.parse_args()
-    analyze_collection(args.slug)
+    snapshot_root = Path(args.snapshot_root)
+    analyze_collection(args.slug, snapshot_root)
 
 if __name__ == "__main__":
     main()

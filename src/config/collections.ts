@@ -14,7 +14,7 @@ export const collections: Record<string, CollectionConfig> = {
     slug: "zgods",
     name: "ZGODS",
     description:
-      "The first ZRC-721 Inscription Collection on the Zcash Privacy Blockchain. Claim allocations and mint inscription IDs tied to IPFS metadata.",
+      "Official PFP collection of the $ZERO ZRC20 Community.",
     supply: 10000,
     metaCid: "bafybeicqjqzixdtawkbcuyaagrmk3vyfweidwzb6hwbucadhoxoe2pd3qm",
     imageCid: "bafybeiaqmceddfi4y3dyqwepjs6go477x35ypaojwgegcsee2vgy63yobq",

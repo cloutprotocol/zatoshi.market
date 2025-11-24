@@ -2,6 +2,42 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 const normalizeSlug = (slug: string) => slug.trim().toLowerCase();
+const normalizeAddress = (address: string) => (address || "").toLowerCase();
+
+async function loadUserBadges(ctx: any, address: string) {
+  const badges = await ctx.db
+    .query("userBadges")
+    .withIndex("by_address", (q: any) => q.eq("address", address))
+    .collect();
+
+  if (!badges.length) return [];
+
+  const uniqueSlugs = [...new Set(badges.map((b: any) => normalizeSlug(b.badgeSlug)))];
+  const defs = await Promise.all(
+    uniqueSlugs.map((slug) =>
+      ctx.db
+        .query("badgeDefinitions")
+        .withIndex("by_slug", (q: any) => q.eq("slug", slug))
+        .first()
+    )
+  );
+  const defMap = new Map(defs.filter(Boolean).map((d) => [d!.slug, d!]));
+
+  return badges.map((b: any) => {
+    const def = defMap.get(normalizeSlug(b.badgeSlug));
+    return {
+      address: b.address,
+      badgeSlug: normalizeSlug(b.badgeSlug),
+      source: b.source,
+      reason: b.reason,
+      createdAt: b.createdAt,
+      label: def?.label ?? b.badgeSlug,
+      description: def?.description,
+      icon: def?.icon,
+      level: def?.level,
+    };
+  });
+}
 
 export const upsertBadgeDefinition = mutation({
   args: {
@@ -55,38 +91,8 @@ export const listBadgeDefinitions = query({
 export const getUserBadges = query({
   args: { address: v.string() },
   handler: async (ctx, args) => {
-    const badges = await ctx.db
-      .query("userBadges")
-      .withIndex("by_address", (q) => q.eq("address", args.address))
-      .collect();
-
-    if (!badges.length) return [];
-
-    const uniqueSlugs = [...new Set(badges.map((b) => normalizeSlug(b.badgeSlug)))];
-    const defs = await Promise.all(
-      uniqueSlugs.map((slug) =>
-        ctx.db
-          .query("badgeDefinitions")
-          .withIndex("by_slug", (q) => q.eq("slug", slug))
-          .first()
-      )
-    );
-    const defMap = new Map(defs.filter(Boolean).map((d) => [d!.slug, d!]));
-
-    return badges.map((b) => {
-      const def = defMap.get(normalizeSlug(b.badgeSlug));
-      return {
-        address: b.address,
-        badgeSlug: normalizeSlug(b.badgeSlug),
-        source: b.source,
-        reason: b.reason,
-        createdAt: b.createdAt,
-        label: def?.label ?? b.badgeSlug,
-        description: def?.description,
-        icon: def?.icon,
-        level: def?.level,
-      };
-    });
+    const address = normalizeAddress(args.address);
+    return loadUserBadges(ctx, address);
   },
 });
 
@@ -100,6 +106,7 @@ export const grantBadge = mutation({
   },
   handler: async (ctx, args) => {
     const slug = normalizeSlug(args.badgeSlug);
+    const address = normalizeAddress(args.address);
 
     // Ensure definition exists (best-effort)
     const def = await ctx.db
@@ -116,12 +123,12 @@ export const grantBadge = mutation({
 
     const existing = await ctx.db
       .query("userBadges")
-      .withIndex("by_address_badge", (q) => q.eq("address", args.address).eq("badgeSlug", slug))
+      .withIndex("by_address_badge", (q) => q.eq("address", address).eq("badgeSlug", slug))
       .first();
     if (existing) return existing._id;
 
     return await ctx.db.insert("userBadges", {
-      address: args.address,
+      address,
       badgeSlug: slug,
       source: args.source,
       reason: args.reason,
@@ -134,14 +141,39 @@ export const revokeBadge = mutation({
   args: { address: v.string(), badgeSlug: v.string() },
   handler: async (ctx, args) => {
     const slug = normalizeSlug(args.badgeSlug);
+    const address = normalizeAddress(args.address);
     const existing = await ctx.db
       .query("userBadges")
-      .withIndex("by_address_badge", (q) => q.eq("address", args.address).eq("badgeSlug", slug))
+      .withIndex("by_address_badge", (q) => q.eq("address", address).eq("badgeSlug", slug))
       .first();
     if (existing) {
       await ctx.db.delete(existing._id);
       return true;
     }
     return false;
+  },
+});
+
+export const getUserStatus = query({
+  args: { address: v.string() },
+  handler: async (ctx, args) => {
+    const address = normalizeAddress(args.address);
+    const [badges, points] = await Promise.all([
+      loadUserBadges(ctx, address),
+      ctx.db
+        .query("userPoints")
+        .withIndex("by_address", (q) => q.eq("address", address))
+        .first(),
+    ]);
+
+    return {
+      address,
+      badges,
+      points: {
+        total: points?.totalPoints ?? 0,
+        minted: points?.mintedPoints ?? 0,
+        updatedAt: points?.updatedAt ?? 0,
+      },
+    };
   },
 });

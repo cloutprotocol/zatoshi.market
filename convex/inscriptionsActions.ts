@@ -580,6 +580,14 @@ export const buildUnsignedCommitAction = action({
     type: v.optional(v.string()),
     inscriptionAmount: v.optional(v.number()),
     fee: v.optional(v.number()),
+    excludeUtxos: v.optional(
+      v.array(
+        v.object({
+          txid: v.string(),
+          vout: v.number(),
+        })
+      )
+    ),
   },
   handler: async (ctx, args) => {
     // ZIP 317 Fee Floor: Client-side signing path uses same floor as server
@@ -618,12 +626,19 @@ export const buildUnsignedCommitAction = action({
       console.log(`[utxo][unsigned-commit] ${args.address} total=${utxos.length} required=${required} max=${maxVal} min=${minVal}`);
     } catch { }
     // Optimization: Sort first, then check inscriptions lazily
+    const locked = await ctx.runQuery(internal.utxoLocks.getLocksForAddress, { address: args.address }).catch(() => []);
+    const lockedSet = new Set((locked || []).map((l: any) => `${l.txid}:${l.vout}`));
+    const excludeSet = new Set((args.excludeUtxos || []).map((u) => `${u.txid}:${u.vout}`));
+
     const sorted = utxos.slice().sort((a, b) => b.value - a.value);
     const selected: typeof utxos = [];
     let totalIn = 0;
 
     for (const u of sorted) {
       if (totalIn >= required) break;
+
+      const key = `${u.txid}:${u.vout}`;
+      if (excludeSet.has(key) || lockedSet.has(key)) continue;
 
       const hasInsc = await checkInscriptionAt(`${u.txid}:${u.vout}`);
       if (!hasInsc) {
@@ -749,9 +764,16 @@ export const buildUnsignedCommitAction = action({
     });
 
     // Lock UTXOs tied to this context
-    await ctx.runMutation(internal.utxoLocks.lockUtxos, { items: selected.map(u => ({ txid: u.txid, vout: u.vout })), address: args.address, lockedBy: contextId });
+    const lockRes = await ctx.runMutation(internal.utxoLocks.lockUtxos, { items: selected.map(u => ({ txid: u.txid, vout: u.vout })), address: args.address, lockedBy: contextId });
+    if (!lockRes?.success) {
+      throw new Error('Unable to reserve clean UTXOs right now. Please retry in a moment.');
+    }
 
-    return { contextId, commitSigHashHexes: sigHashes.map(bytesToHex) };
+    return {
+      contextId,
+      commitSigHashHexes: sigHashes.map(bytesToHex),
+      inputs: selected.map((u) => ({ txid: u.txid, vout: u.vout })),
+    };
   }
 });
 
@@ -973,6 +995,11 @@ export const broadcastSignedRevealAction = action({
     } as any);
 
     await ctx.runMutation(internal.txContexts.patch, { _id: rec._id, status: 'completed', updatedAt: Date.now() });
+    try {
+      if (rec.utxos?.length) {
+        await ctx.runMutation(internal.utxoLocks.unlockUtxos, { items: rec.utxos.map((u: any) => ({ txid: u.txid, vout: u.vout })) });
+      }
+    } catch { }
     return { revealTxid, inscriptionId };
   }
 });

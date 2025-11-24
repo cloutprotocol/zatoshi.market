@@ -1,7 +1,8 @@
 export const IPFS_GATEWAYS = [
   'https://dweb.link/ipfs', // Protocol Labs
   'https://ipfs.io/ipfs', // Official gateway
-  '/ipfs',
+  'https://cloudflare-ipfs.com/ipfs',
+  'https://gateway.pinata.cloud/ipfs',
 ] as const;
 
 export const UPSTREAM_IPFS_GATEWAYS = IPFS_GATEWAYS.filter((url) => !url.startsWith('/'));

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
 import { BadgePill } from '@/components/BadgePill';
@@ -99,6 +100,7 @@ export function ClaimClient({ collection }: Props) {
   const [minting, setMinting] = useState(false);
   const [batchId, setBatchId] = useState<string | null>(null);
   const [mintResults, setMintResults] = useState<MintResult[]>([]);
+  const [utxoWarning, setUtxoWarning] = useState<string | null>(null);
   const [claimedTokens, setClaimedTokens] = useState<ClaimedToken[]>([]);
   const [loadingClaims, setLoadingClaims] = useState(false);
   const [claimedImageLoaded, setClaimedImageLoaded] = useState<Record<string, boolean>>({});
@@ -251,6 +253,7 @@ export function ClaimClient({ collection }: Props) {
 
     setError(null);
     setMintResults([]);
+    setUtxoWarning(null);
     setClaiming(true);
     try {
       const reserve = (await convex.mutation(api.collectionClaims.reserveTokens, {
@@ -304,6 +307,7 @@ export function ClaimClient({ collection }: Props) {
     setPendingReservations([]);
     setPendingPayloads([]);
     setBatchId(null);
+    setUtxoWarning(null);
   };
 
   const confirmAndMint = async () => {
@@ -325,6 +329,7 @@ export function ClaimClient({ collection }: Props) {
     const newBatchId = `batch-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     setBatchId(newBatchId);
     setMintResults([]);
+    setUtxoWarning(null);
     setError(null);
     setShowConfirm(false);
     setClaiming(true);
@@ -384,6 +389,13 @@ export function ClaimClient({ collection }: Props) {
         } catch (err: any) {
           const msg = err?.message || String(err);
           setMintResults((prev) => [...prev, { tokenId, status: 'failed', error: msg }]);
+          const normalizedMsg = msg.toLowerCase();
+          if (normalizedMsg.includes('previous mint is still pending')) {
+            setUtxoWarning((current) =>
+              current ??
+              'All spendable UTXOs from your wallet are already tied up in pending mints. Wait for the earlier transactions to confirm (≈1 minute) or split your balance into more UTXOs, then try again. The failed tokens will return to the pool once their reservation expires.'
+            );
+          }
           await convex.mutation(api.collectionClaims.finalizeToken, {
             collectionSlug: collection.slug,
             tokenId,
@@ -564,6 +576,19 @@ export function ClaimClient({ collection }: Props) {
                     </div>
                   ))}
                 </div>
+                {utxoWarning && (
+                  <div className="mt-3 rounded-md border border-amber-400/40 bg-amber-500/5 px-4 py-3 text-sm text-amber-200 space-y-2">
+                    <p>{utxoWarning}</p>
+                    <p className="text-amber-100/90">
+                      Need fresh UTXOs? Use the
+                      {' '}
+                      <Link href="/inscribe?tab=utxo" className="underline font-semibold">
+                        Inscribe → UTXO manager
+                      </Link>
+                      {' '}dialog to split a large coin into multiple smaller ones before retrying.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>

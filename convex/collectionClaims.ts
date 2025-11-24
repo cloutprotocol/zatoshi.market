@@ -2,6 +2,7 @@ import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { getAllowlistEntry } from "./claimAllowlists";
 import { Id } from "./_generated/dataModel";
+import { awardMintPoints, POINTS_PER_MINT } from "./userPoints";
 
 const MAX_RESERVE_ATTEMPTS = 200;
 export const RESERVATION_TTL_MS = 15 * 60 * 1000; // 15 minutes
@@ -120,7 +121,8 @@ export const listMinted = query({
   },
   handler: async (ctx, args) => {
     const slug = args.collectionSlug.toLowerCase();
-    const limit = Math.max(1, Math.min(args.limit ?? 25, 200));
+    const MAX_LIMIT = 10000;
+    const limit = Math.max(1, Math.min(args.limit ?? 25, MAX_LIMIT));
 
     // Pull minted entries for this collection and then filter by address (case-insensitive)
     const minted = await ctx.db
@@ -369,6 +371,7 @@ export const finalizeToken = mutation({
         if (totalClaimed >= allowlist.max) {
           throw new Error("Allocation exhausted for this wallet");
         }
+        const now = Date.now();
         await ctx.db.insert("collectionClaims", {
           collectionSlug: slug,
           tokenId: args.tokenId,
@@ -379,9 +382,11 @@ export const finalizeToken = mutation({
           batchId: args.batchId,
           attempts: 1,
           lastError: args.error,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
+          createdAt: now,
+          updatedAt: now,
+          pointsAwardedAt: now,
         });
+        await awardMintPoints(ctx.db, address, POINTS_PER_MINT);
       }
       return;
     }
@@ -465,15 +470,21 @@ export const finalizeToken = mutation({
       }
     }
 
-    await ctx.db.patch(existing._id, {
+    const wasMinted = existing.status === "minted";
+    const patchNow = Date.now();
+    const patchDoc: any = {
       status: args.success ? "minted" : "failed",
       inscriptionId: args.inscriptionId,
       txid: args.txid,
       batchId: args.batchId ?? existing.batchId,
       attempts: (existing.attempts ?? 0) + 1,
       lastError: args.error,
-      updatedAt: Date.now(),
-    });
+      updatedAt: patchNow,
+    };
+    if (args.success) {
+      patchDoc.pointsAwardedAt = existing.pointsAwardedAt ?? patchNow;
+    }
+    await ctx.db.patch(existing._id, patchDoc);
 
     await ctx.db.insert("collectionClaimEvents", {
       collectionSlug: slug,
@@ -486,6 +497,10 @@ export const finalizeToken = mutation({
       inscriptionId: args.inscriptionId,
       createdAt: Date.now(),
     });
+
+    if (args.success && !wasMinted) {
+      await awardMintPoints(ctx.db, address, POINTS_PER_MINT);
+    }
   },
 });
 

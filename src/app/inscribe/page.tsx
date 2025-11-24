@@ -750,6 +750,21 @@ function InscribePageContent() {
     return cleaned || 'An error occurred';
   };
 
+  const friendlyErrorMessage = error ? cleanErrorMessage(error) : null;
+  const normalizedErrorMessage = friendlyErrorMessage?.toLowerCase() ?? '';
+  const isPendingMintError = normalizedErrorMessage.includes('previous mint is still pending');
+  const isMempoolConflictError = normalizedErrorMessage.includes('mempool-conflict');
+  const isRateLimitError =
+    normalizedErrorMessage.includes('unpaid action limit exceeded') ||
+    normalizedErrorMessage.includes('action limit exceeded');
+  const isUtxoLockError = normalizedErrorMessage.includes('utxo lock failed');
+  const isSplitInputError =
+    normalizedErrorMessage.includes('non-inscribed utxo') ||
+    normalizedErrorMessage.includes('all available utxos are inscribed');
+  const isPrepError =
+    normalizedErrorMessage.includes('finalizecommitandgetrevealpreimageaction') ||
+    normalizedErrorMessage.includes('buildunsignedcommitaction');
+
   const executeBatchMint = async () => {
     if (!wallet?.privateKey || !wallet?.address) return;
     // tick and amount are already validated by handleBatchMint before opening modal
@@ -2574,19 +2589,50 @@ function InscribePageContent() {
               )}
 
               {/* Error Display */}
-              {error && (
-                <div className="mt-6 my-4 p-4 sm:p-6 bg-red-500/10 border border-red-500/30 rounded relative max-w-2xl mx-auto">
+              {friendlyErrorMessage && (
+                <div
+                  className={`mt-6 my-4 p-4 sm:p-6 rounded relative max-w-2xl mx-auto ${
+                    isPendingMintError ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-red-500/10 border border-red-500/30'
+                  }`}
+                >
                   <button
                     onClick={() => setError(null)}
-                    className="absolute top-3 right-3 text-red-400/60 hover:text-red-300 transition-colors"
+                    className={`absolute top-3 right-3 transition-colors ${
+                      isPendingMintError ? 'text-amber-300/60 hover:text-amber-200' : 'text-red-400/60 hover:text-red-300'
+                    }`}
                     aria-label="Close"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
-                  <h3 className="text-red-300 font-bold mb-3 text-base">⚠ Transaction Error</h3>
-                  {cleanErrorMessage(error).includes('mempool-conflict') ? (
+                  <h3
+                    className={`${
+                      isPendingMintError ? 'text-amber-200' : 'text-red-300'
+                    } font-bold mb-3 text-base`}
+                  >
+                    {isPendingMintError ? 'Heads-up: previous transaction still pending' : '⚠ Transaction Error'}
+                  </h3>
+                  {isPendingMintError ? (
+                    <div className="text-amber-100/90 text-sm space-y-2">
+                      <p>
+                        Your last inscription from this wallet is still propagating through the network. Zcash temporarily &quot;locks&quot; the UTXO that funded it—even if you have many other UTXOs showing in the wallet.
+                      </p>
+                      <p>
+                        You can simply wait ~1 minute for the prior transaction to confirm, or jump into the{' '}
+                        <button
+                          onClick={() => {
+                            setActiveTab('utxo');
+                            setError(null);
+                          }}
+                          className="underline font-semibold hover:text-amber-50 transition-colors"
+                        >
+                          UTXO Management
+                        </button>{' '}
+                        tab to split a fresh coin so you have brand-new inputs ready immediately.
+                      </p>
+                    </div>
+                  ) : isMempoolConflictError ? (
                     <p className="text-red-400 text-sm">
                       A previous transaction is still pending. Wait a few minutes and try again, or use the{' '}
                       <button
@@ -2600,24 +2646,24 @@ function InscribePageContent() {
                       </button>{' '}
                       tab to prepare fresh UTXOs.
                     </p>
-                  ) : error.includes('unpaid action limit exceeded') || error.includes('action limit exceeded') ? (
+                  ) : isRateLimitError ? (
                     <p className="text-red-400 text-sm">
                       Provider rate limit hit or transaction too complex. Please wait a moment and try again, or reduce outputs to 10 or fewer and ensure sufficient transparent ZEC balance.
                     </p>
-                  ) : error.includes('UTXO lock failed') ? (
+                  ) : isUtxoLockError ? (
                     <p className="text-red-400 text-sm">
                       Your UTXOs are currently locked by another operation. Please wait a moment and try again.
                     </p>
-                  ) : (error.includes('non-inscribed UTXO') || error.includes('All available UTXOs are inscribed')) ? (
+                  ) : isSplitInputError ? (
                     <p className="text-red-400 text-sm">
                       Split failed: A single, non-inscribed UTXO large enough for the split was not found. Please send a fresh, clean UTXO to your wallet and try again.
                     </p>
-                  ) : error.includes('finalizeCommitAndGetRevealPreimageAction') || error.includes('buildUnsignedCommitAction') ? (
+                  ) : isPrepError ? (
                     <p className="text-red-400 text-sm">
                       Failed to prepare inscription transaction. This may be due to insufficient balance or unavailable UTXOs. Please check your wallet balance and try again.
                     </p>
                   ) : (
-                    <p className="text-red-400 text-sm">{cleanErrorMessage(error)}</p>
+                    <p className="text-red-400 text-sm">{friendlyErrorMessage}</p>
                   )}
                 </div>
               )}

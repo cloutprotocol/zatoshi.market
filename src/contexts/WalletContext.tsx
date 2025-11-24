@@ -17,6 +17,12 @@ export interface UserBadge {
   createdAt: number;
 }
 
+export interface UserPointsSummary {
+  total: number;
+  minted: number;
+  updatedAt: number;
+}
+
 interface WalletContextType {
   wallet: Wallet | null;
   isConnected: boolean;
@@ -24,6 +30,7 @@ interface WalletContextType {
   hasStoredKeystore: boolean;
   mounted: boolean;
   badges: UserBadge[];
+  points: UserPointsSummary | null;
   connectWallet: (wallet: Wallet) => void; // in-memory only
   saveEncrypted: (wallet: Wallet, password: string) => Promise<void>;
   unlockWallet: (password: string) => Promise<boolean>;
@@ -41,15 +48,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
   const [hasStoredKeystore, setHasStoredKeystore] = useState(false);
   const [badges, setBadges] = useState<UserBadge[]>([]);
+  const [points, setPoints] = useState<UserPointsSummary | null>(null);
 
   const refreshBadges = useCallback(async (address?: string) => {
     const addr = address ?? wallet?.address;
-    if (!addr) return;
+    if (!addr) {
+      setBadges([]);
+      setPoints(null);
+      return;
+    }
     const convex = getConvexClient();
     if (!convex) return;
     try {
-      const res = await convex.query(api.badges.getUserBadges, { address: addr });
-      setBadges(res || []);
+      const res = await convex.query(api.badges.getUserStatus, { address: addr });
+      setBadges(res?.badges ?? []);
+      setPoints(
+        res?.points
+          ? {
+              total: typeof res.points.total === 'number' ? res.points.total : 0,
+              minted: typeof res.points.minted === 'number' ? res.points.minted : 0,
+              updatedAt: typeof res.points.updatedAt === 'number' ? res.points.updatedAt : Date.now(),
+            }
+          : { total: 0, minted: 0, updatedAt: Date.now() }
+      );
     } catch (e) {
       console.error('Badge fetch failed:', e);
     }
@@ -137,6 +158,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setWallet(null);
     setIsConnected(false);
     setBadges([]);
+    setPoints(null);
     // Clear session storage
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('zatoshi_session_wallet');
@@ -147,6 +169,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setWallet(null);
     setIsConnected(false);
     setBadges([]);
+    setPoints(null);
     deleteKeystore();
     setHasStoredKeystore(false);
     // Clear session storage
@@ -168,6 +191,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         hasStoredKeystore,
         mounted,
         badges,
+        points,
         connectWallet,
         saveEncrypted,
         unlockWallet,

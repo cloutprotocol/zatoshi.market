@@ -223,6 +223,39 @@ export default defineSchema({
     .index("by_badge_slug", ["badgeSlug"])
     .index("by_address_badge", ["address", "badgeSlug"]),
 
+  // Aggregated reward points per wallet
+  userPoints: defineTable({
+    address: v.string(),
+    totalPoints: v.number(),
+    mintedPoints: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_address", ["address"])
+    .index("by_total_points", ["totalPoints"]),
+
+  // Wallet-backed public profiles
+  userProfiles: defineTable({
+    address: v.string(),
+    username: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    bio: v.optional(v.string()),
+    socialLinks: v.optional(
+      v.object({
+        twitter: v.optional(v.string()),
+        discord: v.optional(v.string()),
+        website: v.optional(v.string()),
+      })
+    ),
+    pfpInscriptionId: v.optional(v.string()),
+    pinnedTokenIds: v.array(v.string()),
+    isPrivate: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_address", ["address"])
+    .index("by_username", ["username"]),
+
   // Collection claims (ZRC-721 allocations)
   collectionClaims: defineTable({
     collectionSlug: v.string(),
@@ -236,6 +269,7 @@ export default defineSchema({
     lastError: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
+    pointsAwardedAt: v.optional(v.number()),
   })
     .index("by_collection_token", ["collectionSlug", "tokenId"])
     .index("by_collection_status", ["collectionSlug", "status"])
@@ -257,4 +291,14 @@ export default defineSchema({
     .index("by_collection", ["collectionSlug"])
     .index("by_address", ["address"])
     .index("by_batch", ["batchId"]),
+
+  // Profile followers
+  userFollowers: defineTable({
+    address: v.string(),
+    follower: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_address", ["address"])
+    .index("by_follower", ["follower"])
+    .index("by_address_follower", ["address", "follower"]),
 });

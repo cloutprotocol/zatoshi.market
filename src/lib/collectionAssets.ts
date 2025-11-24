@@ -13,6 +13,13 @@ export type CollectionTokenMetadata = {
 const uniqueList = (items: (string | null | undefined)[]) =>
   Array.from(new Set(items.filter(Boolean) as string[]));
 
+const buildProxyUrl = (cid: string, path: string) => {
+  const params = new URLSearchParams();
+  params.set('cid', cid);
+  if (path) params.set('path', path.replace(/^\/+/, ''));
+  return `/api/ipfs/proxy?${params.toString()}`;
+};
+
 export const buildGatewayUrl = (cid: string, path: string, gatewayIndex = 0) =>
   `${IPFS_GATEWAYS[gatewayIndex]}/${cid}/${path}`;
 
@@ -21,6 +28,7 @@ export function buildMetadataUrls(collection: CollectionConfig, tokenId: number)
   // Local copy inside /public for known collections
   paths.push(`/collections/${collection.slug}/claim/metadata/${tokenId}.json`);
   if (collection.metaCid) {
+    paths.push(buildProxyUrl(collection.metaCid, `${tokenId}.json`));
     IPFS_GATEWAYS.forEach((_, idx) => {
       paths.push(buildGatewayUrl(collection.metaCid!, `${tokenId}.json`, idx));
     });
@@ -54,6 +62,7 @@ export function buildImageUrls(
 ) {
   const fromMeta = metadata?.img || (typeof metadata?.image === 'string' ? (metadata.image as string) : undefined);
   const urls = uniqueList([
+    ...(collection.imageCid ? [buildProxyUrl(collection.imageCid, `${tokenId}.png`)] : []),
     ...(collection.imageCid
       ? IPFS_GATEWAYS.map((_, idx) => buildGatewayUrl(collection.imageCid!, `${tokenId}.png`, idx))
       : []),

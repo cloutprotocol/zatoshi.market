@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useWallet } from '@/contexts/WalletContext';
 import { generateWallet, importFromMnemonic, importFromPrivateKey } from '@/lib/wallet';
 import { zcashRPC } from '@/services/zcash';
@@ -20,7 +21,18 @@ interface WalletDrawerProps {
 }
 
 export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesktopExpanded }: WalletDrawerProps) {
-  const { wallet, connectWallet, disconnectWallet, mounted, hasStoredKeystore, unlockWallet, saveEncrypted, lockWallet } = useWallet();
+  const router = useRouter();
+  const {
+    wallet,
+    connectWallet,
+    disconnectWallet,
+    mounted,
+    hasStoredKeystore,
+    unlockWallet,
+    saveEncrypted,
+    lockWallet,
+    points,
+  } = useWallet();
   const [balance, setBalance] = useState({ confirmed: 0, unconfirmed: 0 });
   const [usdPrice, setUsdPrice] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -361,6 +373,12 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
     }
   };
 
+  const handleOpenProfile = useCallback(() => {
+    if (!wallet?.address) return;
+    router.push(`/u/${wallet.address.toLowerCase()}`);
+    onClose();
+  }, [wallet?.address, onClose, router]);
+
   const handleCopyMnemonic = () => {
     if (wallet?.mnemonic) {
       navigator.clipboard.writeText(wallet.mnemonic);
@@ -447,10 +465,12 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
   return (
     <>
       {/* Overlay - mobile only */}
-      <div
-        className="fixed inset-0 top-16 bg-black/60 z-40 lg:hidden"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 z-40 lg:hidden pointer-events-none">
+        <div
+          className="absolute top-16 left-0 right-0 bottom-0 bg-black/60 pointer-events-auto"
+          onClick={onClose}
+        />
+      </div>
 
       {/* Desktop Toggle Button - always visible */}
       <button
@@ -534,6 +554,11 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl text-gold-400 font-bold">WALLET</h2>
+                {points && (
+                  <span className="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide rounded-full border border-gold-500/30 bg-gold-500/10 text-gold-100">
+                    {points.total} pts
+                  </span>
+                )}
                   <button
                     onClick={handleCopyAddressQuiet}
                     className="p-1.5 hover:bg-gold-500/20 rounded transition-all"
@@ -548,6 +573,12 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                       </svg>
                     )}
+                  </button>
+                  <button
+                    onClick={handleOpenProfile}
+                    className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide rounded-full border border-gold-500/30 text-gold-100 hover:bg-gold-500/10 transition"
+                  >
+                    Profile
                   </button>
                 </div>
                 <button

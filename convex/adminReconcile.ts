@@ -1,6 +1,7 @@
 import { mutation, action, query } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { awardMintPoints, POINTS_PER_MINT } from "./userPoints";
 
 function normalizeAddress(address: string | null | undefined) {
   return (address || "").toLowerCase();
@@ -55,6 +56,7 @@ export const applyInscribedMints = mutation({
           lastError: undefined,
           createdAt: now,
           updatedAt: now,
+          pointsAwardedAt: now,
         });
         await ctx.db.insert("collectionClaimEvents", {
           collectionSlug: slug,
@@ -67,6 +69,7 @@ export const applyInscribedMints = mutation({
           inscriptionId: update.inscriptionId,
           createdAt: now,
         });
+        await awardMintPoints(ctx.db, address, POINTS_PER_MINT);
         results.push({ tokenId: update.tokenId, action: "inserted", message: `Created new mint record (${_id}).` });
         continue;
       }
@@ -81,6 +84,7 @@ export const applyInscribedMints = mutation({
         continue;
       }
 
+      const shouldAward = !target.pointsAwardedAt;
       await ctx.db.patch(target._id, {
         status: "minted",
         address,
@@ -90,6 +94,7 @@ export const applyInscribedMints = mutation({
         attempts: (target.attempts ?? 0) + 1,
         lastError: undefined,
         updatedAt: now,
+        pointsAwardedAt: target.pointsAwardedAt ?? now,
       });
       await ctx.db.insert("collectionClaimEvents", {
         collectionSlug: slug,
@@ -102,6 +107,9 @@ export const applyInscribedMints = mutation({
         inscriptionId: update.inscriptionId,
         createdAt: now,
       });
+      if (shouldAward) {
+        await awardMintPoints(ctx.db, address, POINTS_PER_MINT);
+      }
       results.push({ tokenId: update.tokenId, action: "patched" });
     }
 
@@ -756,16 +764,69 @@ export const applySmartFixClaimsBatch = mutation({
         .first();
 
       if (existing && existing.status !== "minted") {
+        const shouldAward = !existing.pointsAwardedAt;
         await ctx.db.patch(existing._id, {
           status: "minted",
           inscriptionId: update.inscriptionId,
           updatedAt: now,
+          pointsAwardedAt: existing.pointsAwardedAt ?? now,
         });
+        if (shouldAward) {
+          await awardMintPoints(ctx.db, normalizeAddress(existing.address), POINTS_PER_MINT);
+        }
         fixed++;
       }
     }
 
     return { fixed };
+  },
+});
+
+export const awardPointsForMintHistory = mutation({
+  args: {
+    collectionSlug: v.string(),
+    afterUpdatedAt: v.optional(v.number()),
+    batchSize: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const slug = args.collectionSlug.toLowerCase();
+    const after = args.afterUpdatedAt ?? 0;
+    const limit = Math.max(1, Math.min(args.batchSize ?? 200, 1000));
+
+    const minted = await ctx.db
+      .query("collectionClaims")
+      .withIndex("by_collection_status_updatedAt", (q) =>
+        q.eq("collectionSlug", slug).eq("status", "minted").gt("updatedAt", after)
+      )
+      .order("asc")
+      .take(limit);
+
+    let awarded = 0;
+    let processed = 0;
+    let nextCursor = after;
+
+    for (const claim of minted) {
+      processed++;
+      const updatedAt = claim.updatedAt ?? claim.createdAt ?? Date.now();
+      nextCursor = Math.max(nextCursor, updatedAt);
+
+      if (claim.pointsAwardedAt) {
+        continue;
+      }
+
+      const awardTime = Date.now();
+      await ctx.db.patch(claim._id, { pointsAwardedAt: awardTime });
+      await awardMintPoints(ctx.db, normalizeAddress(claim.address), POINTS_PER_MINT);
+      awarded++;
+    }
+
+    return {
+      collectionSlug: slug,
+      processed,
+      awarded,
+      nextCursor,
+      done: minted.length < limit,
+    };
   },
 });
 
@@ -1660,4 +1721,3 @@ export const analyzeFailedClaims = query({
     };
   },
 });
-
