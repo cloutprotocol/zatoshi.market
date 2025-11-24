@@ -31,6 +31,9 @@ const SECURITY_HEADERS = [
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@noble/secp256k1'],
+  experimental: {
+    externalDir: true,
+  },
   typescript: {
     // Skip type checking during build - rely on separate tsc check
     ignoreBuildErrors: true,
