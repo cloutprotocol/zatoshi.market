@@ -2828,7 +2828,12 @@ function InscribePageContent() {
                 if (pendingArgs.type?.startsWith('zrc20')) { setTick(''); setAmount(''); setMaxSupply(''); setMintLimit(''); }
               }
             } catch (e: any) {
-              setError(e?.message || String(e));
+              const message = e?.message || String(e);
+              if (message.includes('Not enough spendable funds')) {
+                setError('Not enough unlocked ZEC in this wallet to cover the inscription + network fees. Try splitting a fresh UTXO or reduce the batch size.');
+              } else {
+                setError(message);
+              }
             } finally { setLoading(false); }
           }}
           feeOptions={feeTiers}
