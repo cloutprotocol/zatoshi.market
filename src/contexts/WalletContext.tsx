@@ -31,7 +31,7 @@ interface WalletContextType {
   mounted: boolean;
   badges: UserBadge[];
   points: UserPointsSummary | null;
-  connectWallet: (wallet: Wallet) => void; // in-memory only
+  connectWallet: (wallet: Wallet) => void; // in-memory only, no session storage
   saveEncrypted: (wallet: Wallet, password: string) => Promise<void>;
   unlockWallet: (password: string) => Promise<boolean>;
   lockWallet: () => void;
@@ -65,10 +65,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setPoints(
         res?.points
           ? {
-              total: typeof res.points.total === 'number' ? res.points.total : 0,
-              minted: typeof res.points.minted === 'number' ? res.points.minted : 0,
-              updatedAt: typeof res.points.updatedAt === 'number' ? res.points.updatedAt : Date.now(),
-            }
+            total: typeof res.points.total === 'number' ? res.points.total : 0,
+            minted: typeof res.points.minted === 'number' ? res.points.minted : 0,
+            updatedAt: typeof res.points.updatedAt === 'number' ? res.points.updatedAt : Date.now(),
+          }
           : { total: 0, minted: 0, updatedAt: Date.now() }
       );
     } catch (e) {
@@ -81,18 +81,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (typeof window !== 'undefined') {
       setHasStoredKeystore(hasKeystore());
 
-      // Try to restore unlocked wallet from session
-      try {
-        const sessionWallet = sessionStorage.getItem('zatoshi_session_wallet');
-        if (sessionWallet) {
-          const parsed = JSON.parse(sessionWallet);
-          setWallet(parsed);
-          setIsConnected(true);
-          refreshBadges(parsed.address);
-        }
-      } catch (e) {
-        console.error('Session wallet restore error:', e);
-      }
+      // Wallet is kept in-memory only for security.
+      // No session storage restore to prevent secret leaks.
 
       // Migrate legacy plaintext wallet if present
       try {
@@ -126,10 +116,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setWallet(newWallet);
     setIsConnected(true);
     refreshBadges(newWallet.address);
-    // Save to session storage to persist across page refreshes
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('zatoshi_session_wallet', JSON.stringify(newWallet));
-    }
+    // In-memory only - do not persist to session storage
   };
 
   const saveEncrypted = async (newWallet: Wallet, password: string) => {
@@ -143,10 +130,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setWallet(unlocked);
       setIsConnected(true);
       refreshBadges(unlocked.address);
-      // Save to session storage to persist across page refreshes
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('zatoshi_session_wallet', JSON.stringify(unlocked));
-      }
+      // In-memory only - do not persist to session storage
       return true;
     } catch (e) {
       console.error('Unlock failed:', e);
@@ -159,10 +143,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsConnected(false);
     setBadges([]);
     setPoints(null);
-    // Clear session storage
-    if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('zatoshi_session_wallet');
-    }
   };
 
   const disconnectWallet = () => {
@@ -172,10 +152,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setPoints(null);
     deleteKeystore();
     setHasStoredKeystore(false);
-    // Clear session storage
-    if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('zatoshi_session_wallet');
-    }
   };
 
   const updateBalance = (_confirmed: number, _unconfirmed: number) => {
