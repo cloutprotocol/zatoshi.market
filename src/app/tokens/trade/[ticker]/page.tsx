@@ -10,7 +10,7 @@ import FinalizeTrade from "../../../../components/psbt/FinalizeTrade";
 import { Doc } from "../../../../../convex/_generated/dataModel";
 
 export default function TokenTradePage({ params }: { params: { ticker: string } }) {
-    const ticker = params.ticker.toUpperCase();
+    const ticker = decodeURIComponent(params.ticker).toUpperCase();
     const listings = useQuery(api.psbt.listListingsByTicker, { ticker });
 
     const [tokenInfo, setTokenInfo] = useState<ZerdinalsToken | null>(null);
@@ -45,7 +45,7 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 rounded-full bg-gold-500 flex items-center justify-center text-xl font-bold text-black border-2 border-gold-400">
-                                    {ticker[0]}
+                                    {Array.from(ticker)[0]}
                                 </div>
                                 <h1 className="text-4xl font-black tracking-tight text-gold-100">{ticker}</h1>
                             </div>

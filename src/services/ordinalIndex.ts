@@ -57,6 +57,9 @@ export interface OrdinalIndexBalancesResponse {
   limit: number;
   holders: OrdinalIndexBalanceEntry[];
   total_holders?: number;
+  total_positive_holders?: number;
+  positive_only?: boolean;
+  tick?: string;
 }
 
 export interface TokenSummary {
