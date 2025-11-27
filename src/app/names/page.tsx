@@ -375,7 +375,7 @@ export default function NamesPage() {
                 ) : q.trim() ? (
                   'No names match your filter.'
                 ) : view === 'recent' ? (
-                  'No names found yet. Try "Refresh Recent" to ingest from chain.'
+                  'No names found yet. Try "Sync" to ingest from chain.'
                 ) : (
                   'No names found.'
                 )}

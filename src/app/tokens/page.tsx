@@ -23,17 +23,11 @@ const Dither = dynamic(() => import('@/components/Dither'), {
 
 type TokenStats = {
   holders?: number;
+  holders_total?: number;
   transfersCompleted?: number;
   summary?: TokenSummary;
   integrity?: TokenIntegrity;
   updatedAt: number;
-};
-
-type TokenDetailState = {
-  holders?: OrdinalIndexBalanceEntry[];
-  loading: boolean;
-  error?: string;
-  fetchedAt?: number;
 };
 
 type SortKey = 'holders' | 'progress' | 'recent' | 'ticker';
@@ -154,7 +148,6 @@ export default function TokenListPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const [selectedTick, setSelectedTick] = useState<string | null>(null);
-  const [tokenDetails, setTokenDetails] = useState<Record<string, TokenDetailState>>({});
 
   const lastFetchRef = useRef<number>(0);
   const hydrationInFlight = useRef<Set<string>>(new Set());
@@ -167,8 +160,8 @@ export default function TokenListPage() {
   const [fetchingPage, setFetchingPage] = useState(false);
 
   // Priority: top tokens by holders from Convex, to surface first
+  // Removed prefetch logic to prevent constant polling
   const topHolders = useQuery(api.tokenStats.getTopHolders, { limit: 50, minHolders: 0 });
-  const [priorityTokens, setPriorityTokens] = useState<Record<string, OrdinalIndexToken>>({});
 
   const hasLoadedTokens = useRef(false);
 
@@ -227,62 +220,7 @@ export default function TokenListPage() {
     }
   };
 
-  // Prefetch summaries for top holder tokens not yet present to surface them early
-  useEffect(() => {
-    if (!topHolders) return;
-    const existing = new Set<string>([
-      ...tokens.map((t) => t.ticker.toLowerCase()),
-      ...Object.keys(priorityTokens),
-    ]);
-    const missing = topHolders
-      .map((t: any) => (t?.tick || '').toLowerCase())
-      .filter((t: string) => t && !existing.has(t));
-
-    if (!missing.length) return;
-
-    let cancelled = false;
-    (async () => {
-      const limit = 5;
-      for (let i = 0; i < missing.length && !cancelled; i += limit) {
-        const batch = missing.slice(i, i + limit);
-        await Promise.all(
-          batch.map(async (tick) => {
-            try {
-              const summary = await ordinalIndexAPI.getTokenSummary(tick);
-              // Construct minimal token for UI
-              const up = (tick || '').toUpperCase();
-              const max = summary?.max ?? '0';
-              const dec = summary?.dec ?? '0';
-              const lim = summary?.lim ?? '0';
-              const supplyBase = summary?.supply_base_units ?? '0';
-              const mintedWhole = baseUnitsToWhole(supplyBase, dec);
-              const progress = Number(max) > 0 ? mintedWhole / Number(max) : 0;
-              const token: OrdinalIndexToken = {
-                ticker: up,
-                max: max ?? '0',
-                max_base_units: '0',
-                supply: String(mintedWhole),
-                supply_base_units: supplyBase ?? '0',
-                lim: lim ?? '0',
-                dec: dec ?? '0',
-                deployer: '',
-                inscription_id: '',
-                progress,
-              };
-              setPriorityTokens((prev) => ({ ...prev, [tick]: token }));
-            } catch (err) {
-              // Ignore failures; the token may show up via paging later
-              console.warn('Failed to prefetch summary for', tick, err);
-            }
-          })
-        );
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [topHolders, tokens, priorityTokens]);
+  // Removed prefetch effect
 
 
 
@@ -320,10 +258,10 @@ export default function TokenListPage() {
   // Merge priority tokens with paged tokens, dedup by ticker (case-insensitive)
   const allTokens: OrdinalIndexToken[] = useMemo(() => {
     const map = new Map<string, OrdinalIndexToken>();
-    Object.values(priorityTokens).forEach((t) => map.set(t.ticker.toLowerCase(), t));
+    // Removed priorityTokens merge
     tokens.forEach((t) => map.set(t.ticker.toLowerCase(), t));
     return Array.from(map.values());
-  }, [priorityTokens, tokens]);
+  }, [tokens]);
 
   const enrichedTokens: EnrichedToken[] = useMemo(() => {
     return allTokens.map((token) => {
@@ -443,6 +381,7 @@ export default function TokenListPage() {
             if (!t) return;
             next[t] = {
               holders: value?.holders ?? prev[t]?.holders,
+              holders_total: value?.summary?.holders_total ?? prev[t]?.holders_total,
               transfersCompleted:
                 (value?.summary?.transfers_completed as number | undefined) ??
                 prev[t]?.transfersCompleted,
@@ -483,65 +422,9 @@ export default function TokenListPage() {
   const selectedStats = selectedTick
     ? tokenStats[selectedTick.toLowerCase()]
     : undefined;
-  const selectedDetail = selectedTick
-    ? tokenDetails[selectedTick.toLowerCase()]
-    : undefined;
 
-  // Holder snapshots for selected token (used for sparkline)
-  const snapshotsSince = useMemo(() => Date.now() - 7 * 24 * 60 * 60 * 1000, []);
-  const snapshots = useQuery(api.tokenStats.getHolderSnapshots, {
-    tick: (selectedTick || '__none__').toLowerCase(),
-    since: snapshotsSince,
-    limit: 120,
-  });
 
-  useEffect(() => {
-    if (!selectedTick) return;
-    const lower = selectedTick.toLowerCase();
-    const detail = selectedDetail;
-    if (detail?.holders?.length && !detail.error) {
-      return;
-    }
-
-    let cancelled = false;
-    setTokenDetails((prev) => ({
-      ...prev,
-      [lower]: { ...(prev[lower] ?? {}), loading: true, error: undefined },
-    }));
-
-    ordinalIndexAPI
-      .getTokenBalances(selectedTick, 0, 15)
-      .then((response) => {
-        if (cancelled) return;
-        setTokenDetails((prev) => ({
-          ...prev,
-          [lower]: {
-            holders: response.holders ?? [],
-            loading: false,
-            fetchedAt: Date.now(),
-          },
-        }));
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setTokenDetails((prev) => ({
-          ...prev,
-          [lower]: {
-            holders: prev[lower]?.holders,
-            loading: false,
-            error:
-              err instanceof Error
-                ? err.message
-                : 'Failed to load top holders',
-            fetchedAt: prev[lower]?.fetchedAt,
-          },
-        }));
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedTick, selectedDetail]);
+  // Removed holder snapshots and top holders fetching logic
 
   const totalMinted = enrichedTokens.reduce(
     (sum, entry) => sum + entry.mintedSupply,
@@ -611,9 +494,7 @@ export default function TokenListPage() {
             onLoadMore={loadMoreTokens}
             hasMore={apiHasMore}
             loadingMore={fetchingPage}
-            tokenDetails={tokenDetails}
             tokenStats={tokenStats}
-            snapshots={snapshots}
           />
         )}
 
@@ -632,40 +513,7 @@ export default function TokenListPage() {
   );
 }
 
-function HoldersSparkline({ data }: { data: { holders?: number; capturedAt?: number }[] }) {
-  const points = (data || []).map((d) => ({
-    x: d.capturedAt ?? 0,
-    y: typeof d.holders === 'number' ? d.holders : 0,
-  }));
-  if (!points.length) return <div className="text-gold-300/60 text-xs">No data</div>;
-  const minY = Math.min(...points.map((p) => p.y));
-  const maxY = Math.max(...points.map((p) => p.y));
-  const minX = Math.min(...points.map((p) => p.x));
-  const maxX = Math.max(...points.map((p) => p.x));
-  const w = 600;
-  const h = 80;
-  const pad = 4;
-  const scaleX = (x: number) => pad + ((x - minX) / Math.max(1, maxX - minX)) * (w - 2 * pad);
-  const scaleY = (y: number) => h - pad - ((y - minY) / Math.max(1, maxY - minY)) * (h - 2 * pad);
-  const dAttr = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${scaleX(p.x).toFixed(2)} ${scaleY(p.y).toFixed(2)}`)
-    .join(' ');
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-20">
-      <path d={dAttr} stroke="#f5d487" strokeWidth={2} fill="none" />
-      {maxY !== minY && (
-        <>
-          <text x={w - 4} y={12} textAnchor="end" className="fill-current text-[10px]" fill="#c2a96a">
-            {formatNumber(maxY)}
-          </text>
-          <text x={w - 4} y={h - 4} textAnchor="end" className="fill-current text-[10px]" fill="#c2a96a">
-            {formatNumber(minY)}
-          </text>
-        </>
-      )}
-    </svg>
-  );
-}
+// Removed HoldersSparkline component
 
 interface StatsFooterProps {
   status: OrdinalIndexStatus | null;
@@ -1045,8 +893,6 @@ function TokensTable({
                   <TokenDetailPanel
                     token={base}
                     stats={tokenStats[base.ticker.toLowerCase()]}
-                    detailState={tokenDetails[base.ticker.toLowerCase()]}
-                    snapshots={snapshots}
                     onClose={() => onSelect(null)}
                   />
                 </div>
@@ -1161,8 +1007,6 @@ function TokensTable({
                               <TokenDetailPanel
                                 token={base}
                                 stats={tokenStats[base.ticker.toLowerCase()]}
-                                detailState={tokenDetails[base.ticker.toLowerCase()]}
-                                snapshots={snapshots}
                                 onClose={() => onSelect(null)}
                               />
                             </div>
@@ -1200,16 +1044,12 @@ function TokensTable({
 interface TokenDetailPanelProps {
   token: OrdinalIndexToken;
   stats?: TokenStats;
-  detailState?: TokenDetailState;
-  snapshots?: { holders: number; capturedAt: number }[] | null | undefined;
   onClose: () => void;
 }
 
 function TokenDetailPanel({
   token,
   stats,
-  detailState,
-  snapshots,
   onClose,
 }: TokenDetailPanelProps) {
   const holders = stats?.holders;
@@ -1326,43 +1166,10 @@ function TokenDetailPanel({
           <span>Limit: {formatNumber(Number(token.lim))}</span>
           <span>Decimals: {token.dec}</span>
         </div>
-        <div className="mt-4">
-          <div className="text-xs uppercase tracking-[0.3em] text-gold-300/70 mb-2">
-            Holders (7d)
-          </div>
-          <HoldersSparkline data={(snapshots as any) || []} />
-        </div>
       </div>
 
       <div className="mt-8 grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="border border-gold-500/20 bg-black/30 p-4">
-          <h3 className="text-sm font-bold uppercase tracking-[0.3em] text-gold-300/70 mb-3">
-            Top Holders
-          </h3>
-          {detailState?.loading ? (
-            <div className="text-gold-300/60 text-sm">Loading holders…</div>
-          ) : detailState?.error ? (
-            <div className="text-red-300 text-sm">{detailState.error}</div>
-          ) : detailState?.holders && detailState.holders.length > 0 ? (
-            <div className="space-y-2">
-              {detailState.holders.map((holder) => (
-                <div
-                  key={holder.address}
-                  className="flex items-center justify-between gap-3 text-sm"
-                >
-                  <div className="text-gold-100 font-mono">
-                    {shortAddress(holder.address)}
-                  </div>
-                  <div className="text-gold-300/80 font-mono">
-                    {formatBaseUnits(holder.overall)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-gold-300/60 text-sm">No holder data.</div>
-          )}
-        </div>
+        {/* Removed Top Holders section */}
 
         {/* Debug Stats - Only show if integrity data exists */}
         {stats?.integrity && (
