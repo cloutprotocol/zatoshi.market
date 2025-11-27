@@ -146,7 +146,7 @@ export const refreshHolderCounts = action({
         integrity = (await integrityRes.json()) as TokenIntegrity;
       }
 
-      const holders = summary?.holders ?? integrity?.total_holders ?? 0;
+      const holders = summary?.holders ?? integrity?.holders_positive ?? 0;
       const source = summary?.holders !== undefined ? "summary" : "integrity";
 
       results.push({ tick: t, holders, summary, integrity, updatedAt: now });
