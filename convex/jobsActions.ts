@@ -17,6 +17,37 @@ import {
   broadcastTransaction,
 } from "./zcashHelpers";
 
+// Try to detect when a just-broadcast transaction is visible in our node's mempool
+async function waitForTxSeen(txid: string, timeoutMs = 8000, pollMs = 800): Promise<boolean> {
+  try {
+    const url = process.env.ZCASH_RPC_URL;
+    if (!url) return false;
+    const user = process.env.ZCASH_RPC_USER || "";
+    const pass = process.env.ZCASH_RPC_PASSWORD || "";
+    const auth = user && pass ? `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}` : undefined;
+    const start = Date.now();
+    let i = 0;
+    while (Date.now() - start < timeoutMs) {
+      i++;
+      try {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(auth ? { Authorization: auth } : {}),
+          },
+          body: JSON.stringify({ jsonrpc: '2.0', id: i, method: 'getrawtransaction', params: [txid, 1] }),
+        });
+        if (r.ok) {
+          const j: any = await r.json();
+          if (j?.result) return true;
+        }
+      } catch { /* transient */ }
+      await new Promise((res) => setTimeout(res, pollMs));
+    }
+  } catch { /* ignore */ }
+  return false;
+}
 export const runNextMint = action({
   args: { jobId: v.id("jobs") },
   handler: async (ctx, args) => {
@@ -145,8 +176,11 @@ export const runNextMint = action({
           throw broadcastErr; // Other errors are fatal for this attempt
         }
 
-        // Wait for propagation
-        await new Promise((r) => setTimeout(r, waitMs));
+        // Wait for propagation (prefer our RPC mempool, fallback to fixed delay)
+        const seen = await waitForTxSeen(commitTxid, waitMs, Math.max(300, Math.floor(waitMs / 10)));
+        if (!seen) {
+          await new Promise((r) => setTimeout(r, waitMs));
+        }
 
         const inscriptionData = buildInscriptionDataBuffer(contentStr, contentType);
         const revealHex = await buildRevealTxHex({

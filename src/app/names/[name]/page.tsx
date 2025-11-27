@@ -34,14 +34,14 @@ export default function NameDetailPage({ params }: { params: { name: string } })
   return (
     <main className="relative min-h-screen text-gold-100 pt-20">
       <div className="fixed inset-0 w-full h-full opacity-15 -z-10">
-        <Dither waveColor={[0.8,0.6,0.2]} disableAnimation={false} enableMouseInteraction={true} mouseRadius={0.3} colorNum={4} waveAmplitude={0.15} waveFrequency={2.2} waveSpeed={0.035}/>
+        <Dither waveColor={[0.8, 0.6, 0.2]} disableAnimation={false} enableMouseInteraction={true} mouseRadius={0.3} colorNum={4} waveAmplitude={0.15} waveFrequency={2.2} waveSpeed={0.035} />
       </div>
 
       <div className="relative z-10 max-w-[900px] mx-auto px-2 md:px-2 pb-16">
         <div className="flex items-center justify-between gap-4 mb-6">
           <div>
             <p className="text-xs uppercase tracking-[0.4em] text-gold-300/60">Name Detail</p>
-            <h1 className="text-3xl font-black text-gold-100 mt-1">{name}.zec</h1>
+            <h1 className="text-2xl font-black text-gold-100 mt-1">{name}.zec</h1>
             <div className="text-sm text-gold-300/70 mt-1">Owner: <span className="font-mono">{shortAddress(owner)}</span></div>
           </div>
           <Link href="/names" className="text-xs uppercase tracking-[0.3em] border border-gold-500/30 px-3 py-1">Back</Link>

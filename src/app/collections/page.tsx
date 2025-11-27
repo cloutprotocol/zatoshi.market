@@ -451,8 +451,8 @@ function FilterBar({
             key={filter.value}
             onClick={() => onStatusFilterChange(filter.value)}
             className={`px-3 py-1 text-xs font-bold tracking-[0.2em] uppercase transition ${statusFilter === filter.value
-                ? 'bg-gold-500 text-black'
-                : 'text-gold-200/70 border border-gold-500/30'
+              ? 'bg-gold-500 text-black'
+              : 'text-gold-200/70 border border-gold-500/30'
               }`}
           >
             {filter.label}
@@ -678,7 +678,7 @@ function CollectionDetailPanel({
           <p className="text-xs uppercase tracking-[0.4em] text-gold-300/60">
             Collection Detail
           </p>
-          <h2 className="text-3xl font-black text-gold-100">
+          <h2 className="text-2xl font-black text-gold-100">
             {collection.collection}
           </h2>
           <p className="text-sm text-gold-300/70">

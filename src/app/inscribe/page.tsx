@@ -913,31 +913,7 @@ function InscribePageContent() {
 
       console.log(`Batch requires ${totalRequired.toLocaleString()} zats (${totalRequiredZEC} ZEC) for ${batchCount} inscriptions`);
 
-      // Check wallet balance before starting
-      try {
-        const balance = await zcashRPC.getBalance(wallet.address, true);
-        // API returns ZEC; convert to zats for calculations
-        const availableFunds = Math.round((balance.confirmed || 0) * 100_000_000);
-        const availableZEC = (availableFunds / 100000000).toFixed(8);
-
-        if (availableFunds < totalRequired) {
-          const shortfall = totalRequired - availableFunds;
-          const shortfallZEC = (shortfall / 100000000).toFixed(8);
-          throw new Error(
-            `Insufficient funds: You need ${totalRequired.toLocaleString()} zats (${totalRequiredZEC} ZEC) for this batch, ` +
-            `but only have ${availableFunds.toLocaleString()} zats (${availableZEC} ZEC) available. ` +
-            `You're short by ${shortfall.toLocaleString()} zats (${shortfallZEC} ZEC). ` +
-            `Please add more ZEC to your wallet or reduce the batch count to ${Math.floor(availableFunds / perInscriptionCost)} or fewer.`
-          );
-        }
-        console.log(`✓ Balance check passed: ${availableFunds.toLocaleString()} zats available`);
-      } catch (balanceError: any) {
-        // If balance check fails (network issue), still allow the operation but log warning
-        if (balanceError.message.includes('Insufficient funds')) {
-          throw balanceError; // Re-throw our custom insufficient funds error
-        }
-        console.warn('Could not verify balance, proceeding anyway:', balanceError);
-      }
+      // Skip pre-balance network check to reduce latency; server will fail fast if insufficient
 
       const res = await convex.action(api.inscriptionsActions.batchMintAction, {
         wif: wallet.privateKey,
@@ -955,74 +931,6 @@ function InscribePageContent() {
       const startTime = Date.now();
       setBatchStartTime(startTime);
       setBatchStatus({ status: 'running', completed: 0, total: batchCount, ids: [], estimatedProgress: 0 });
-
-      // Estimate: ~12 seconds per inscription
-      const estimatedSecondsPerInscription = 12;
-
-      // Update estimated progress every 500ms
-      const estimateInterval = setInterval(() => {
-        const elapsed = (Date.now() - startTime) / 1000;
-        const estimatedCompleted = Math.min(batchCount, elapsed / estimatedSecondsPerInscription);
-        const estimatedProgress = (estimatedCompleted / batchCount) * 100;
-
-        setBatchStatus(prev => {
-          if (!prev || prev.status !== 'running') return prev;
-          // Only use estimated progress if we haven't completed any yet
-          if (prev.completed === 0) {
-            return { ...prev, estimatedProgress: Math.min(estimatedProgress, 95) }; // Cap at 95% until real data
-          }
-          return prev;
-        });
-      }, 500);
-
-      // Poll immediately once, then start interval
-      const pollJob = async () => {
-        try {
-          const job = await convex.query(api.jobs.getJob, { jobId: res.jobId });
-          if (job) {
-            const friendlyError = job.error ? cleanErrorMessage(job.error) : null;
-            const ids = job.inscriptionIds || [];
-            setBatchStatus({ status: job.status, completed: job.completedCount, total: job.totalCount, ids, error: friendlyError, totalCostZats: job.totalCostZats });
-
-            // Append log lines for any new inscriptions detected
-            setBatchLog(prev => {
-              const prevIds = lastBatchIdsRef.current;
-              const newOnes = ids.filter(id => !prevIds.includes(id));
-              lastBatchIdsRef.current = ids;
-              if (newOnes.length === 0) return prev;
-              const lines = newOnes.map((id, idx) => `Minted inscription #${job.completedCount - newOnes.length + idx + 1}: ${id}`);
-              return [...prev, ...lines];
-            });
-
-            if (job.status === 'completed' || job.status === 'failed') {
-              clearInterval(estimateInterval);
-              if (job.status === 'completed') {
-                triggerFireworks(job.totalCount);
-                setBatchLog(prev => [...prev, `Batch finished: ${job.totalCount} inscriptions minted.`]);
-              } else {
-                setBatchLog(prev => [...prev, `Batch stopped after ${job.completedCount} of ${job.totalCount}. You can retry to continue.`]);
-              }
-              return true; // Done
-            }
-          }
-        } catch (e) {
-          console.error('Job poll error', e);
-        }
-        return false; // Continue polling
-      };
-
-      // Poll immediately
-      const done = await pollJob();
-      if (!done) {
-        // Start polling every 1.5 seconds for more responsive updates
-        const interval = setInterval(async () => {
-          const isDone = await pollJob();
-          if (isDone) {
-            clearInterval(interval);
-            clearInterval(estimateInterval);
-          }
-        }, 1500);
-      }
     } catch (err) {
       console.error('Batch mint error:', err);
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -1136,6 +1044,24 @@ function InscribePageContent() {
     return () => { cancelled = true; if (intervalId) clearInterval(intervalId); };
   }, [batchJobId]);
 
+  // Lightweight estimated progress ticker (UI-only, no network). Runs until first real completion update.
+  useEffect(() => {
+    if (!batchStartTime || !batchStatus || batchStatus.status !== 'running') return;
+    const total = Math.max(1, batchStatus.total || 1);
+    const estimatedSecondsPerInscription = 12;
+    const timer = setInterval(() => {
+      const elapsed = (Date.now() - (batchStartTime || 0)) / 1000;
+      const estimatedCompleted = Math.min(total, elapsed / estimatedSecondsPerInscription);
+      const estimatedProgress = Math.min(95, (estimatedCompleted / total) * 100);
+      setBatchStatus(prev => {
+        if (!prev || prev.status !== 'running') return prev;
+        if (prev.completed > 0) return prev; // real data takes precedence
+        return { ...prev, estimatedProgress };
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [batchStartTime, batchStatus?.status, batchStatus?.total]);
+
   const triggerFireworks = (count: number) => {
     console.log('🎆 Triggering fireworks! Count:', count);
 
@@ -1219,7 +1145,7 @@ function InscribePageContent() {
   const zrc20Cost = calculateTotalCost(PLATFORM_FEES.INSCRIPTION, 0); // Baseline for zrc20
 
   return (
-    <main className="min-h-screen h-screen bg-black text-gold-300 lg:pt-20 pb-4 overflow-hidden">
+    <main className="min-h-screen bg-black text-gold-300 lg:pt-20 pb-8">
       <style dangerouslySetInnerHTML={{
         __html: `
         @keyframes fadeIn {
@@ -1296,10 +1222,10 @@ function InscribePageContent() {
         </div>
       </div>
 
-      <div className="mx-auto h-full flex flex-col lg:pr-[400px] pl-6 pt-32 lg:pt-0">
-        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 h-full min-h-0">
+      <div className="w-full flex flex-col pl-4 sm:pl-6 pr-4 lg:pr-[380px] pt-32 lg:pt-0">
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 w-full max-w-6xl">
           {/* Left Sidebar - Tabs (Desktop only) */}
-          <div className="hidden lg:flex lg:w-56 flex-shrink-0 flex-col lg:overflow-y-auto lg:pl-0">
+          <div className="hidden lg:flex lg:w-56 flex-shrink-0 flex-col lg:pl-0">
             <div className="flex flex-col gap-2">
               {SHOW_NAMES && (
                 <button
@@ -1443,16 +1369,21 @@ function InscribePageContent() {
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 bg-black/40 border border-none rounded backdrop-blur-xl overflow-y-auto min-h-0 lg:min-w-[750px]">
+          <div className="flex-1 bg-black/40 border border-none rounded backdrop-blur-xl lg:min-w-[750px]">
             <div className="p-4 sm:p-6 lg:p-8 pt-6 lg:pt-8">
 
               {/* NAME REGISTRATION TAB */}
               {activeTab === 'names' && (
-                <div className="max-w-2xl mx-auto">
-                  <div className="text-center mb-6 sm:mb-7">
-                    <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">Register Your Zcash Name</h2>
-                    <p className="text-gold-400/60 text-xs sm:text-sm">
-                      Secure your .zec or .zcash identity on the blockchain
+                <div className="max-w-4xl mx-auto">
+                  <div className="mb-6 sm:mb-8">
+                    <p className="text-[10px] uppercase tracking-[0.5em] text-gold-400/60 mb-1">
+                      Zcash Names
+                    </p>
+                    <h2 className="text-2xl sm:text-2xl font-black text-gold-100">
+                      Register Your Zcash Name
+                    </h2>
+                    <p className="text-gold-400/70 text-sm sm:text-base mt-2 max-w-2xl">
+                      Secure your .zec or .zcash identity on the blockchain.
                     </p>
                   </div>
 
@@ -1595,11 +1526,16 @@ function InscribePageContent() {
 
               {/* TEXT INSCRIPTION TAB */}
               {activeTab === 'text' && (
-                <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
-                  <div className="text-center mb-4 sm:mb-6">
-                    <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">Text Inscription</h2>
-                    <p className="text-gold-400/60 text-xs sm:text-sm">
-                      Inscribe any text or data permanently on Zcash
+                <div className="max-w-4xl mx-auto space-y-3 sm:space-y-4">
+                  <div className="mb-4 sm:mb-6">
+                    <p className="text-[10px] uppercase tracking-[0.5em] text-gold-400/60 mb-1">
+                      Text Mode
+                    </p>
+                    <h2 className="text-2xl font-black text-gold-100">
+                      Text Inscription
+                    </h2>
+                    <p className="text-gold-400/70 text-sm sm:text-base mt-2">
+                      Inscribe any text or data permanently on Zcash.
                     </p>
                   </div>
 
@@ -1813,21 +1749,24 @@ function InscribePageContent() {
 
               {/* IMAGES INSCRIPTION TAB */}
               {activeTab === 'images' && (
-                <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
-                  <div className="text-center mb-4 sm:mb-6">
-                    <div className="flex items-center justify-center gap-3">
-                      <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">Image Inscription</h2>
+                <div className="max-w-4xl mx-auto space-y-3 sm:space-y-4">
+                  <div className="mb-4 sm:mb-6">
+                    <p className="text-[10px] uppercase tracking-[0.5em] text-gold-400/60 mb-1">
+                      Image Mode
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-2xl font-black text-gold-100">Image Inscription</h2>
                       <div className="relative group">
-                        <span className="bg-red-500/20 border border-red-500/50 text-red-300 text-xs font-bold px-2 py-0.5 rounded-full">
-                          EXPERIMENTAL
+                        <span className="bg-red-500/20 border border-red-500/50 text-red-300 text-[10px] font-bold px-2 py-0.5 uppercase tracking-[0.3em]">
+                          Experimental
                         </span>
-                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 px-3 py-2 bg-black/90 border border-gold-500/30 rounded text-xs text-gold-300 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
-                          Non-standard relay via rpc.zatoshi.market. Files up to 20KB are allowed but may take longer to propagate.
+                        <div className="absolute left-0 sm:left-1/2 sm:-translate-x-1/2 top-full mt-2 w-56 px-3 py-2 bg-black/90 border border-gold-500/30 rounded text-xs text-gold-300 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none z-50">
+                          Non-standard relay via rpc.zatoshi.market. Files up to {MAX_IMAGE_SIZE_KB}KB are allowed but may take longer to propagate.
                         </div>
                       </div>
                     </div>
-                    <p className="text-gold-400/60 text-xs sm:text-sm">
-                      Inscribe PNG, GIF, or SVG images (max {MAX_IMAGE_SIZE_KB}KB)
+                    <p className="text-gold-400/70 text-sm sm:text-base mt-2">
+                      Inscribe PNG, GIF, or SVG images (max {MAX_IMAGE_SIZE_KB}KB).
                     </p>
                   </div>
 
@@ -2032,14 +1971,21 @@ function InscribePageContent() {
               {/* ZRC-20 TAB */}
               {/* ZRC-20 Tab Content */}
               {activeTab === 'zrc20' && (
-                <div className="space-y-6">
+                <div className="w-full max-w-4xl mx-auto">
                   {/* Header - Moved above form as requested */}
-                  <div className="text-center mb-8">
-                    <h2 className="text-2xl font-bold text-gold-100 font-mono">
+                  <div className="mb-8">
+                    <p className="text-[10px] uppercase tracking-[0.5em] text-gold-400/60 mb-1">
+                      ZRC-20 Flow
+                    </p>
+                    <h2 className="text-2xl font-black text-gold-100">
                       {zrcOp === 'deploy' ? 'Deploy ZRC-20 Token' : zrcOp === 'mint' ? 'Mint ZRC-20 Token' : 'Transfer ZRC-20 Token'}
                     </h2>
-                    <p className="text-gold-500/60 text-xs mt-2 uppercase tracking-widest">
-                      {zrcOp === 'deploy' ? 'Launch a new token on Zcash' : zrcOp === 'mint' ? 'Mint tokens from deployed ZRC-20 contracts' : 'Send ZRC-20 tokens to another address'}
+                    <p className="text-gold-400/70 text-sm sm:text-base mt-2 max-w-2xl">
+                      {zrcOp === 'deploy'
+                        ? 'Launch a new token on Zcash with a capped supply and mint limits.'
+                        : zrcOp === 'mint'
+                          ? 'Mint tokens from deployed ZRC-20 contracts.'
+                          : 'Send ZRC-20 tokens to another address.'}
                     </p>
                   </div>
 
@@ -2069,7 +2015,7 @@ function InscribePageContent() {
                         const invalidAmount = amountClean !== '' && !/^\d+$/.test(amountClean);
 
                         return (
-                          <div className="relative overflow-hidden border border-gold-500/20 bg-black/40 p-6 md:p-8 shadow-[0_0_45px_rgba(234,179,8,0.15)]">
+                          <div className="relative overflow-hidden border border-gold-500/20 bg-black/40 p-6 md:p-8 shadow-[0_0_35px_rgba(234,179,8,0.12)] rounded-1xl">
                             <div className="absolute inset-y-0 right-0 flex items-center pr-6 pointer-events-none">
                               <span className="text-[160px] leading-none font-black text-gold-500/10 tracking-tight">
                                 {backgroundLetters}
@@ -2086,7 +2032,7 @@ function InscribePageContent() {
                                     <p className="text-[10px] uppercase tracking-[0.5em] text-gold-300/60 mb-1">
                                       Token Detail
                                     </p>
-                                    <h2 className="text-3xl font-black text-gold-100">{tickerUpper}</h2>
+                                    <h2 className="text-2xl font-black text-gold-100">{tickerUpper}</h2>
                                     <p className="text-xs text-gold-300/70 font-mono">
                                       {tokenSummary.name || 'ZRC-20 Asset'}
                                     </p>
@@ -2109,7 +2055,7 @@ function InscribePageContent() {
                                   <p className="text-[10px] uppercase tracking-[0.3em] text-gold-300/60 mb-1">
                                     Minted / Max
                                   </p>
-                                  <div className="text-2xl font-black text-gold-100">
+                                  <div className="text-xl sm:text-2xl font-black text-gold-100 font-mono break-all leading-tight">
                                     {mintedAmount.toLocaleString()}
                                   </div>
                                   <p className="text-xs text-gold-300/50">
@@ -2120,14 +2066,18 @@ function InscribePageContent() {
                                   <p className="text-[10px] uppercase tracking-[0.3em] text-gold-300/60 mb-1">
                                     Holders
                                   </p>
-                                  <div className="text-2xl font-black text-gold-100">{holdersLabel}</div>
+                                  <div className="text-xl sm:text-2xl font-black text-gold-100 font-mono break-all leading-tight">
+                                    {holdersLabel}
+                                  </div>
                                   <p className="text-xs text-gold-300/50">{transfersLabel} transfers</p>
                                 </div>
                                 <div className="bg-black/30 border border-gold-500/10 p-4">
                                   <p className="text-[10px] uppercase tracking-[0.3em] text-gold-300/60 mb-1">
                                     Limits
                                   </p>
-                                  <div className="text-2xl font-black text-gold-100">{limitLabel}</div>
+                                  <div className="text-xl sm:text-2xl font-black text-gold-100 font-mono break-all leading-tight">
+                                    {limitLabel}
+                                  </div>
                                   <p className="text-xs text-gold-300/50">
                                     Decimals: {tokenSummary.dec ?? 0}
                                   </p>
@@ -3026,11 +2976,14 @@ function InscribePageContent() {
 
               {/* UTXO TAB */}
               {activeTab === 'utxo' && (
-                <div className="max-w-2xl mx-auto">
-                  <div className="text-center mb-4 sm:mb-4">
-                    <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">UTXO Management</h2>
-                    <p className="text-gold-400/60 text-xs sm:text-sm">
-                      Split larger UTXOs into smaller ones to prepare funding for batch operations
+                <div className="max-w-4xl mx-auto">
+                  <div className="mb-4 sm:mb-6">
+                    <p className="text-[10px] uppercase tracking-[0.5em] text-gold-400/60 mb-1">
+                      Funding Prep
+                    </p>
+                    <h2 className="text-2xl font-black text-gold-100">UTXO Management</h2>
+                    <p className="text-gold-400/70 text-sm sm:text-base mt-2">
+                      Split larger UTXOs into smaller ones to prepare funding for batch operations.
                     </p>
                   </div>
 
@@ -3245,10 +3198,13 @@ function InscribePageContent() {
               {/* HISTORY TAB */}
               {activeTab === 'history' && (
                 <div className="max-w-5xl mx-auto">
-                  <div className="text-center mb-4 sm:mb-6">
-                    <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">Inscription History</h2>
-                    <p className="text-gold-400/60 text-xs sm:text-sm">
-                      Audit trail of your inscriptions on Zcash
+                  <div className="mb-4 sm:mb-6">
+                    <p className="text-[10px] uppercase tracking-[0.5em] text-gold-400/60 mb-1">
+                      Activity
+                    </p>
+                    <h2 className="text-2xl font-black text-gold-100">Inscription History</h2>
+                    <p className="text-gold-400/70 text-sm sm:text-base mt-2">
+                      Audit trail of your inscriptions on Zcash.
                     </p>
                   </div>
 
