@@ -9,7 +9,6 @@ import {
   ordinalIndexAPI,
   type OrdinalIndexToken,
   type OrdinalIndexStatus,
-  type OrdinalIndexBalanceEntry,
   type TokenIntegrity,
   type TokenSummary,
   type ZRC20Status,
@@ -724,7 +723,6 @@ interface TokensTableProps {
   onLoadMore: () => void;
   hasMore: boolean;
   loadingMore: boolean;
-  tokenDetails: Record<string, TokenDetailState>;
   tokenStats: Record<string, TokenStats>;
   snapshots: any; // Using any for now to match existing usage, ideally typed
 }
@@ -781,7 +779,6 @@ function TokensTable({
   onLoadMore,
   hasMore,
   loadingMore,
-  tokenDetails,
   tokenStats,
   snapshots,
 }: TokensTableProps) {
@@ -1168,11 +1165,9 @@ function TokenDetailPanel({
         </div>
       </div>
 
-      <div className="mt-8 grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {/* Removed Top Holders section */}
-
-        {/* Debug Stats - Only show if integrity data exists */}
-        {stats?.integrity && (
+      {/* Debug Stats - Only show if integrity data exists */}
+      {stats?.integrity && (
+        <div className="mt-8">
           <div className="border border-gold-500/20 bg-black/30 p-4 space-y-3 text-sm text-gold-300/80">
             <div className="flex justify-between">
               <span>Inscription</span>
@@ -1199,8 +1194,8 @@ function TokenDetailPanel({
               </span>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </section>
   );
 }

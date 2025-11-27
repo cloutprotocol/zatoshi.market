@@ -450,11 +450,10 @@ function FilterBar({
           <button
             key={filter.value}
             onClick={() => onStatusFilterChange(filter.value)}
-            className={`px-3 py-1 text-xs font-bold tracking-[0.2em] uppercase transition ${
-              statusFilter === filter.value
+            className={`px-3 py-1 text-xs font-bold tracking-[0.2em] uppercase transition ${statusFilter === filter.value
                 ? 'bg-gold-500 text-black'
                 : 'text-gold-200/70 border border-gold-500/30'
-            }`}
+              }`}
           >
             {filter.label}
           </button>
@@ -566,9 +565,8 @@ function CollectionsTable({
             return (
               <tr
                 key={entry.base.collection}
-                className={`border-b border-gold-500/10 cursor-pointer transition ${
-                  isSelected ? 'bg-gold-500/10' : 'hover:bg-white/5'
-                }`}
+                className={`border-b border-gold-500/10 cursor-pointer transition ${isSelected ? 'bg-gold-500/10' : 'hover:bg-white/5'
+                  }`}
                 onClick={() => onSelect(entry.base.collection)}
               >
                 <td className="px-4 py-3 text-gold-300/70">
@@ -745,62 +743,34 @@ function CollectionDetailPanel({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-8">
-        <div className="border border-gold-500/20 bg-black/30 p-4">
-          <h3 className="text-sm font-bold uppercase tracking-[0.3em] text-gold-300/70 mb-3">
-            Top Holders
-          </h3>
-          {detail?.loading ? (
-            <div className="text-sm text-gold-300/60">Loading…</div>
-          ) : detail?.topHolders?.length ? (
-            <div className="space-y-2">
-              {detail.topHolders.map((holder) => (
-                <div
-                  key={holder.address}
-                  className="flex items-center justify-between gap-3 text-sm"
-                >
-                  <span className="font-mono text-gold-100">
-                    {shortAddress(holder.address)}
-                  </span>
-                  <span className="text-gold-300/80">{holder.count}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-sm text-gold-300/60">
-              No holder data available.
-            </div>
-          )}
-        </div>
-
-        <div className="border border-gold-500/20 bg-black/30 p-4">
-          <h3 className="text-sm font-bold uppercase tracking-[0.3em] text-gold-300/70 mb-3">
-            Recent Tokens
-          </h3>
-          {detail?.sampleTokens?.length ? (
-            <div className="space-y-2 text-sm">
-              {detail.sampleTokens.map((token) => (
-                <div
-                  key={token.token_id}
-                  className="flex items-center justify-between gap-3"
-                >
-                  <span className="font-mono text-gold-100">
-                    #{token.token_id}
-                  </span>
-                  <span className="text-gold-300/80">
-                    {token.owner ? shortAddress(token.owner) : '—'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-sm text-gold-300/60">
-              {detail?.loading ? 'Loading tokens…' : 'No token samples yet.'}
-            </div>
-          )}
-        </div>
+      <div className="border border-gold-500/20 bg-black/30 p-4">
+        <h3 className="text-sm font-bold uppercase tracking-[0.3em] text-gold-300/70 mb-3">
+          Recent Tokens
+        </h3>
+        {detail?.sampleTokens?.length ? (
+          <div className="space-y-2 text-sm">
+            {detail.sampleTokens.map((token) => (
+              <div
+                key={token.token_id}
+                className="flex items-center justify-between gap-3"
+              >
+                <span className="font-mono text-gold-100">
+                  #{token.token_id}
+                </span>
+                <span className="text-gold-300/80">
+                  {token.owner ? shortAddress(token.owner) : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-sm text-gold-300/60">
+            {detail?.loading ? 'Loading tokens…' : 'No token samples yet.'}
+          </div>
+        )}
       </div>
-    </section>
+    </div>
+    </section >
   );
 }
 
