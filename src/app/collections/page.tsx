@@ -769,8 +769,7 @@ function CollectionDetailPanel({
           </div>
         )}
       </div>
-    </div>
-    </section >
+    </section>
   );
 }
 
