@@ -204,10 +204,20 @@ class OrdinalIndexAPIService {
   async getTokenBalances(
     tick: string,
     page = 0,
-    limit = 100
+    limit = 100,
+    options?: { positiveOnly?: boolean }
   ): Promise<OrdinalIndexBalancesResponse> {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+    });
+
+    if (options?.positiveOnly) {
+      params.set('positive_only', 'true');
+    }
+
     return this.apiCall<OrdinalIndexBalancesResponse>(
-      `/api/v1/zrc20/token/${tick.toLowerCase()}/balances?page=${page}&limit=${limit}`
+      `/api/v1/zrc20/token/${tick.toLowerCase()}/balances?${params.toString()}`
     );
   }
 

@@ -1121,11 +1121,18 @@ function TokenDetailPanel({
           <div className="text-2xl font-mono text-zinc-200">
             {formatNumber(holders)}
           </div>
-          {stats?.transfersCompleted !== undefined && (
-            <div className="text-xs text-zinc-600">
-              Transfers: {formatNumber(stats.transfersCompleted)}
-            </div>
-          )}
+          <div className="text-xs text-zinc-600 space-y-0.5">
+            {stats?.holders_total !== undefined && stats.holders_total !== holders && (
+              <div title="Total includes addresses with zero balance">
+                {formatNumber(stats.holders_total)} total addresses
+              </div>
+            )}
+            {stats?.transfersCompleted !== undefined && (
+              <div>
+                {formatNumber(stats.transfersCompleted)} transfers
+              </div>
+            )}
+          </div>
         </div>
         {stats?.integrity && (
           <div className="border border-white/5 bg-black/20 p-4 rounded">

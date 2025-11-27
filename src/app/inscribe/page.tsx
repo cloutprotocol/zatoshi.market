@@ -2144,8 +2144,15 @@ function InscribePageContent() {
                               <div className="text-lg font-mono text-zinc-200">
                                 {tokenSummary.holders?.toLocaleString() ?? '—'}
                               </div>
-                              <div className="text-[10px] text-zinc-600">
-                                {tokenSummary.transfers_completed?.toLocaleString() ?? 0} transfers
+                              <div className="text-[10px] text-zinc-600 space-y-0.5">
+                                {tokenSummary.holders_total !== undefined && tokenSummary.holders_total !== tokenSummary.holders && (
+                                  <div title="Total includes addresses with zero balance">
+                                    {tokenSummary.holders_total.toLocaleString()} total addresses
+                                  </div>
+                                )}
+                                <div>
+                                  {tokenSummary.transfers_completed?.toLocaleString() ?? 0} transfers
+                                </div>
                               </div>
                             </div>
                             <div className="border border-white/5 bg-black/20 p-3 rounded">
