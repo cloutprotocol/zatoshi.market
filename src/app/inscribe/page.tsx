@@ -104,6 +104,7 @@ function InscribePageContent() {
   const [mintLimit, setMintLimit] = useState('');
   const [tokenSummary, setTokenSummary] = useState<TokenSummary | null>(null);
   const [tokenSummaryError, setTokenSummaryError] = useState<string | null>(null);
+  const [tokenSummaryLoading, setTokenSummaryLoading] = useState(false);
 
   // Status
   const [loading, setLoading] = useState(false);
@@ -168,12 +169,22 @@ function InscribePageContent() {
       setTokenSummary(null);
       setTokenSummaryError(null);
       const t = (tick || '').trim();
-      if (!t || zrcOp === 'deploy') return;
+      if (!t || zrcOp === 'deploy') {
+        setTokenSummaryLoading(false);
+        return;
+      }
+      setTokenSummaryLoading(true);
       try {
         const summary = await ordinalIndexAPI.getTokenSummary(t);
-        if (!cancelled) setTokenSummary(summary);
+        if (!cancelled) {
+          setTokenSummary(summary);
+          setTokenSummaryLoading(false);
+        }
       } catch (e: any) {
-        if (!cancelled) setTokenSummaryError(e?.message || 'Failed to load token info');
+        if (!cancelled) {
+          setTokenSummaryError(e?.message || 'Failed to load token info');
+          setTokenSummaryLoading(false);
+        }
       }
     }
     loadSummary();
@@ -2211,6 +2222,15 @@ function InscribePageContent() {
                               })()}
                             </div>
                           )}
+                        </div>
+                      ) : tokenSummaryLoading ? (
+                        <div className="p-8 border border-gold-500/10 bg-black/40 text-center rounded-lg">
+                          <div className="text-zinc-600 mb-2">
+                            <svg className="w-8 h-8 mx-auto animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          </div>
+                          <div className="text-sm text-zinc-500">Loading token details...</div>
                         </div>
                       ) : (
                         <div className="p-8 border border-gold-500/10 bg-black/40 text-center rounded-lg">
