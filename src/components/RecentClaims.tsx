@@ -84,8 +84,8 @@ export function RecentClaims({ collectionSlug, limit = 12, title, cardSize = 'md
           if (claim.imageUrls.length > 0) {
             try {
               const result = await loadImageWithRace({ urls: claim.imageUrls, timeout: 3000 });
-              if (result.success) {
-                setOptimalImageUrls((prev) => ({ ...prev, [claim.tokenId]: result.url }));
+              if (result.success && result.url) {
+                setOptimalImageUrls((prev) => ({ ...prev, [claim.tokenId]: result.url! }));
                 setImageLoaded((prev) => ({ ...prev, [claim.tokenId]: true }));
               }
             } catch (err) {
@@ -115,8 +115,8 @@ export function RecentClaims({ collectionSlug, limit = 12, title, cardSize = 'md
     // Otherwise, try race loading now
     try {
       const result = await loadImageWithRace({ urls, timeout: 5000 });
-      if (result.success) {
-        setOptimalImageUrls((prev) => ({ ...prev, [tokenId]: result.url }));
+      if (result.success && result.url) {
+        setOptimalImageUrls((prev) => ({ ...prev, [tokenId]: result.url! }));
         setImageLoaded((prev) => ({ ...prev, [tokenId]: true }));
       } else {
         setImageError((prev) => ({ ...prev, [tokenId]: true }));
@@ -127,7 +127,7 @@ export function RecentClaims({ collectionSlug, limit = 12, title, cardSize = 'md
   };
 
   const mintedBadge = (
-    <div className="px-4 py-2 bg-gold-500/15 border border-gold-400/40 rounded-full flex items-center gap-2">
+    <div className="px-2 py-1 bg-gold-500/15 border border-gold-400/40 rounded-full flex items-center gap-2">
       <span className="relative flex h-2 w-2">
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
         <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>

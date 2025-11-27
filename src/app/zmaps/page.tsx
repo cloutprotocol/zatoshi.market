@@ -899,7 +899,7 @@ export default function ZmapsPage() {
                     setShowCart(false);
                   }
                 }}
-                className="bg-black/40 border border-gold-500/20 rounded-lg p-4 group hover:border-gold-500/40 transition-colors cursor-pointer"
+                className="bg-black/40 border border-gold-500/20 rounded-sm p-4 group hover:border-gold-500/40 transition-colors cursor-pointer"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -982,7 +982,7 @@ export default function ZmapsPage() {
               <div className="relative mb-6">
                 <div ref={scrollContainerRef} className="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
                   {cartItems.map((item, index) => (
-                    <div key={item.mapNumber} className="bg-black/30 p-4 rounded-lg flex justify-between items-center">
+                    <div key={item.mapNumber} className="bg-black/30 p-4 rounded-sm flex justify-between items-center">
                       <div>
                         <div className="text-gold-300 font-bold">ZMAP #{item.mapNumber.toLocaleString()}</div>
                         <div className="text-gold-400/60 text-sm font-mono">
@@ -1009,7 +1009,7 @@ export default function ZmapsPage() {
                     className="absolute bottom-0 left-1/2 -translate-x-1/2 text-gold-400 animate-bounce hover:text-gold-300 transition-colors cursor-pointer"
                   >
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 5v14M19 12l-7 7-7-7"/>
+                      <path d="M12 5v14M19 12l-7 7-7-7" />
                     </svg>
                   </button>
                 )}
@@ -1052,9 +1052,8 @@ export default function ZmapsPage() {
               {[1, 2, 3].map((step) => (
                 <div
                   key={step}
-                  className={`w-8 h-1 ${
-                    step === introStep ? 'bg-gold-400' : 'bg-gold-700/30'
-                  }`}
+                  className={`w-8 h-1 ${step === introStep ? 'bg-gold-400' : 'bg-gold-700/30'
+                    }`}
                 />
               ))}
             </div>

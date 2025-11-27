@@ -39,7 +39,7 @@ export default function ListingCard({ listing, onBuy }: ListingCardProps) {
 
                 {/* Price Info */}
                 <div className="mt-auto space-y-3">
-                    <div className="bg-black/40 rounded-lg p-3 border border-gold-500/10">
+                    <div className="bg-black/40 rounded-sm p-3 border border-gold-500/10">
                         <div className="flex justify-between items-baseline mb-1">
                             <span className="text-xs text-gold-300/60 font-bold uppercase tracking-wider">Price</span>
                             <span className="text-lg font-black text-gold-400">{listing.price} ZEC</span>
@@ -63,7 +63,7 @@ export default function ListingCard({ listing, onBuy }: ListingCardProps) {
                     {/* Buy Button */}
                     <button
                         onClick={() => onBuy(listing)}
-                        className="w-full py-2.5 bg-gold-500 hover:bg-gold-400 text-black font-bold rounded-lg transition-colors text-sm uppercase tracking-wide shadow-[0_0_15px_rgba(234,179,8,0.1)] hover:shadow-[0_0_20px_rgba(234,179,8,0.3)]"
+                        className="w-full py-2.5 bg-gold-500 hover:bg-gold-400 text-black font-bold rounded-sm transition-colors text-sm uppercase tracking-wide shadow-[0_0_15px_rgba(234,179,8,0.1)] hover:shadow-[0_0_20px_rgba(234,179,8,0.3)]"
                     >
                         Buy Now
                     </button>

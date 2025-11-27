@@ -51,7 +51,7 @@ export default function RootLayout({
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link href="https://fonts.cdnfonts.com/css/vcr-osd-mono" rel="stylesheet" />
       </head>
-      <body style={{ fontFamily: "'VCR OSD Mono', monospace" }}>
+      <body style={{ fontFamily: "'VCR OSD Mono', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', monospace" }}>
         <Providers>
           <ConsoleEasterEgg />
           <Header />

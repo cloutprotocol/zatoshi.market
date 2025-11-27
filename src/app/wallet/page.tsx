@@ -405,7 +405,7 @@ export default function WalletPage() {
                   <button
                     onClick={handleUnlock}
                     disabled={loading}
-                    className="px-8 py-4 bg-gold-500 text-black font-bold rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50"
+                    className="px-8 py-4 bg-gold-500 text-black font-bold rounded-sm hover:bg-gold-400 transition-all disabled:opacity-50"
                   >
                     {loading ? 'UNLOCKING...' : 'UNLOCK WALLET'}
                   </button>
@@ -413,13 +413,13 @@ export default function WalletPage() {
                 <button
                   onClick={handleCreateWallet}
                   disabled={loading}
-                  className="px-8 py-4 bg-gold-500 text-black font-bold rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50"
+                  className="px-8 py-4 bg-gold-500 text-black font-bold rounded-sm hover:bg-gold-400 transition-all disabled:opacity-50"
                 >
                   {loading ? 'GENERATING...' : 'CREATE NEW WALLET'}
                 </button>
                 <button
                   onClick={handleImportWallet}
-                  className="px-8 py-4 bg-gold-500/10 text-gold-400 font-bold rounded-lg border border-gold-500/30 hover:bg-gold-500/20 transition-all"
+                  className="px-8 py-4 bg-gold-500/10 text-gold-400 font-bold rounded-sm border border-gold-500/30 hover:bg-gold-500/20 transition-all"
                 >
                   IMPORT WALLET
                 </button>
@@ -498,13 +498,13 @@ export default function WalletPage() {
             <div className="flex gap-4 justify-center">
               <button
                 onClick={handleShowReceive}
-                className="px-8 py-3 border-2 border-gold-500 text-gold-400 font-bold rounded-lg hover:bg-gold-500/10 transition-all"
+                className="px-8 py-3 border-2 border-gold-500 text-gold-400 font-bold rounded-sm hover:bg-gold-500/10 transition-all"
               >
                 Receive
               </button>
               <button
                 disabled
-                className="px-8 py-3 bg-gold-400/30 text-black/50 font-bold rounded-lg cursor-not-allowed opacity-50"
+                className="px-8 py-3 bg-gold-400/30 text-black/50 font-bold rounded-sm cursor-not-allowed opacity-50"
                 title="Send feature temporarily disabled"
               >
                 Send
@@ -516,7 +516,7 @@ export default function WalletPage() {
           <div className="flex gap-4 mb-6">
             <button
               onClick={() => setActiveTab('zrc20')}
-              className={`flex-1 px-6 py-4 font-bold rounded-lg transition-all ${activeTab === 'zrc20'
+              className={`flex-1 px-6 py-4 font-bold rounded-sm transition-all ${activeTab === 'zrc20'
                 ? 'bg-gold-500 text-black'
                 : 'glass-card text-gold-400'
                 }`}
@@ -525,7 +525,7 @@ export default function WalletPage() {
             </button>
             <button
               onClick={() => setActiveTab('zrc721')}
-              className={`flex-1 px-6 py-4 font-bold rounded-lg transition-all ${activeTab === 'zrc721'
+              className={`flex-1 px-6 py-4 font-bold rounded-sm transition-all ${activeTab === 'zrc721'
                 ? 'bg-gold-500 text-black'
                 : 'glass-card text-gold-400'
                 }`}
@@ -534,7 +534,7 @@ export default function WalletPage() {
             </button>
             <button
               onClick={() => setActiveTab('inscriptions')}
-              className={`flex-1 px-6 py-4 font-bold rounded-lg transition-all ${activeTab === 'inscriptions'
+              className={`flex-1 px-6 py-4 font-bold rounded-sm transition-all ${activeTab === 'inscriptions'
                 ? 'bg-gold-500 text-black'
                 : 'glass-card text-gold-400'
                 }`}
@@ -546,7 +546,7 @@ export default function WalletPage() {
           {/* Content Area */}
           {activeTab === 'zrc20' && (
             <div className="glass-card p-6">
-              <div className="flex items-center gap-4 p-4 bg-black/40 rounded-lg">
+              <div className="flex items-center gap-4 p-4 bg-black/40 rounded-sm">
                 <div className="w-12 h-12 bg-gold-500 rounded-full flex items-center justify-center text-black font-bold">
                   Z
                 </div>
@@ -786,7 +786,7 @@ export default function WalletPage() {
                     alert('Private key copied to clipboard!');
                   }
                 }}
-                className="w-full px-4 py-2 bg-gold-500/10 text-gold-400 text-sm border border-gold-500/30 rounded-lg hover:bg-gold-500/20 transition-all"
+                className="w-full px-4 py-2 bg-gold-500/10 text-gold-400 text-sm border border-gold-500/30 rounded-sm hover:bg-gold-500/20 transition-all"
               >
                 Copy Private Key
               </button>
@@ -805,7 +805,7 @@ export default function WalletPage() {
               </div>
               <button
                 onClick={handleCopyMnemonic}
-                className="w-full px-4 py-2 bg-gold-500/10 text-gold-400 text-sm border border-gold-500/30 rounded-lg hover:bg-gold-500/20 transition-all"
+                className="w-full px-4 py-2 bg-gold-500/10 text-gold-400 text-sm border border-gold-500/30 rounded-sm hover:bg-gold-500/20 transition-all"
               >
                 Copy 12-Word Phrase
               </button>
@@ -813,7 +813,7 @@ export default function WalletPage() {
 
             <button
               onClick={() => setShowMnemonic(false)}
-              className="w-full px-6 py-3 bg-gold-500 text-black font-bold rounded-lg hover:bg-gold-400 transition-all"
+              className="w-full px-6 py-3 bg-gold-500 text-black font-bold rounded-sm hover:bg-gold-400 transition-all"
             >
               I HAVE SAVED MY BACKUP
             </button>
@@ -828,7 +828,7 @@ export default function WalletPage() {
             <h3 className="text-2xl font-bold text-gold-300 mb-6">RECEIVE ZEC</h3>
             {qrDataUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={qrDataUrl} alt="Wallet QR" className="mx-auto mb-6 rounded-lg" />
+              <img src={qrDataUrl} alt="Wallet QR" className="mx-auto mb-6 rounded-sm" />
             )}
             <div className="bg-black/40 p-4 rounded mb-6">
               <p className="text-gold-300 font-mono text-sm break-all">{wallet.address}</p>
@@ -836,13 +836,13 @@ export default function WalletPage() {
             <div className="flex gap-4">
               <button
                 onClick={handleCopyAddress}
-                className="flex-1 px-6 py-3 bg-gold-500 text-black font-bold rounded-lg hover:bg-gold-400 transition-all"
+                className="flex-1 px-6 py-3 bg-gold-500 text-black font-bold rounded-sm hover:bg-gold-400 transition-all"
               >
                 COPY ADDRESS
               </button>
               <button
                 onClick={() => setShowReceive(false)}
-                className="flex-1 px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded-lg border border-gold-500/30 hover:bg-gold-500/30 transition-all"
+                className="flex-1 px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded-sm border border-gold-500/30 hover:bg-gold-500/30 transition-all"
               >
                 CLOSE
               </button>
@@ -902,7 +902,7 @@ export default function WalletPage() {
               <button
                 onClick={handleSend}
                 disabled={isSending || !sendForm.to || !sendForm.amount}
-                className="flex-1 px-6 py-3 bg-gold-500 text-black font-bold rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-6 py-3 bg-gold-500 text-black font-bold rounded-sm hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSending ? 'SENDING...' : 'SEND'}
               </button>
@@ -912,7 +912,7 @@ export default function WalletPage() {
                   setShowSend(false);
                 }}
                 disabled={isSending}
-                className="flex-1 px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded-lg border border-gold-500/30 hover:bg-gold-500/30 transition-all disabled:opacity-50"
+                className="flex-1 px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded-sm border border-gold-500/30 hover:bg-gold-500/30 transition-all disabled:opacity-50"
               >
                 CANCEL
               </button>
@@ -940,7 +940,7 @@ export default function WalletPage() {
                     setShowPrivateKey(true);
                   }
                 }}
-                className="w-full px-6 py-4 bg-gold-500/10 text-gold-300 border border-gold-500/30 rounded-lg hover:bg-gold-500/20 transition-all text-left"
+                className="w-full px-6 py-4 bg-gold-500/10 text-gold-300 border border-gold-500/30 rounded-sm hover:bg-gold-500/20 transition-all text-left"
               >
                 <div className="font-bold mb-1">WIF Private Key</div>
                 <div className="text-xs text-gold-300/60">Single-line format (starts with L or K)</div>
@@ -957,7 +957,7 @@ export default function WalletPage() {
                     setShowMnemonicExport(true);
                   }
                 }}
-                className="w-full px-6 py-4 bg-gold-500/10 text-gold-300 border border-gold-500/30 rounded-lg hover:bg-gold-500/20 transition-all text-left"
+                className="w-full px-6 py-4 bg-gold-500/10 text-gold-300 border border-gold-500/30 rounded-sm hover:bg-gold-500/20 transition-all text-left"
               >
                 <div className="font-bold mb-1">12-Word Recovery Phrase</div>
                 <div className="text-xs text-gold-300/60">BIP39 mnemonic (if available)</div>
@@ -965,7 +965,7 @@ export default function WalletPage() {
             </div>
             <button
               onClick={() => setShowExport(false)}
-              className="w-full px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded-lg border border-gold-500/30 hover:bg-gold-500/30 transition-all"
+              className="w-full px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded-sm border border-gold-500/30 hover:bg-gold-500/30 transition-all"
             >
               CANCEL
             </button>
@@ -999,13 +999,13 @@ export default function WalletPage() {
                     alert('Private key (WIF) copied to clipboard!');
                   }
                 }}
-                className="flex-1 px-6 py-3 bg-gold-500 text-black font-bold rounded-lg hover:bg-gold-400 transition-all"
+                className="flex-1 px-6 py-3 bg-gold-500 text-black font-bold rounded-sm hover:bg-gold-400 transition-all"
               >
                 COPY
               </button>
               <button
                 onClick={() => setShowPrivateKey(false)}
-                className="flex-1 px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded-lg border border-gold-500/30 hover:bg-gold-500/30 transition-all"
+                className="flex-1 px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded-sm border border-gold-500/30 hover:bg-gold-500/30 transition-all"
               >
                 CLOSE
               </button>
@@ -1040,13 +1040,13 @@ export default function WalletPage() {
                     alert('12-word phrase copied to clipboard!');
                   }
                 }}
-                className="flex-1 px-6 py-3 bg-gold-500 text-black font-bold rounded-lg hover:bg-gold-400 transition-all"
+                className="flex-1 px-6 py-3 bg-gold-500 text-black font-bold rounded-sm hover:bg-gold-400 transition-all"
               >
                 COPY
               </button>
               <button
                 onClick={() => setShowMnemonicExport(false)}
-                className="flex-1 px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded-lg border border-gold-500/30 hover:bg-gold-500/30 transition-all"
+                className="flex-1 px-6 py-3 bg-gold-500/20 text-gold-400 font-bold rounded-sm border border-gold-500/30 hover:bg-gold-500/30 transition-all"
               >
                 CLOSE
               </button>

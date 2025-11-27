@@ -656,7 +656,7 @@ function FiltersBar({
   onRefresh,
 }: FiltersBarProps) {
   return (
-    <div className="sticky top-20 z-30 mb-4 flex flex-col md:flex-row items-center gap-3 p-3 border border-gold-500/10 bg-black/80 backdrop-blur-md rounded-lg shadow-xl">
+    <div className="sticky top-20 z-30 mb-4 flex flex-col md:flex-row items-center gap-3 p-3 border border-gold-500/10 bg-black/80 backdrop-blur-md rounded-sm shadow-xl">
       {/* Left: Title & Refresh */}
       <div className="flex items-center gap-4 mr-auto">
         <h2 className="text-lg font-bold text-gold-100 tracking-tight whitespace-nowrap">
@@ -763,7 +763,7 @@ interface TokensTableProps {
 
 function TokensTableSkeleton({ rows = 10 }: { rows?: number }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-gold-500/10 bg-black/40 backdrop-blur-sm">
+    <div className="overflow-hidden rounded-sm border border-gold-500/10 bg-black/40 backdrop-blur-sm">
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs md:text-sm">
           <thead className="bg-black/40 border-b border-gold-500/20">
@@ -781,7 +781,7 @@ function TokensTableSkeleton({ rows = 10 }: { rows?: number }) {
                 <td className="px-6 py-4"><div className="h-3 w-4 bg-gold-500/10 rounded" /></td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-md bg-gold-500/10" />
+                    <div className="w-8 h-8 rounded-sm bg-gold-500/10" />
                     <div className="space-y-1">
                       <div className="h-3 w-12 bg-gold-500/10 rounded" />
                       <div className="h-2 w-16 bg-gold-500/5 rounded" />
@@ -852,7 +852,7 @@ function TokensTable({
             <div
               key={base.ticker}
               onClick={() => onSelect(isSelected ? null : base.ticker)}
-              className={`p-4 rounded-lg border transition-all ${isSelected
+              className={`p-4 rounded-sm border transition-all ${isSelected
                 ? 'bg-gold-500/10 border-gold-500/40'
                 : 'bg-black/40 border-gold-500/10 hover:border-gold-500/30'
                 }`}
@@ -934,7 +934,7 @@ function TokensTable({
       </div>
 
       {/* Desktop Table View */}
-      <div className="hidden md:block overflow-hidden rounded-lg border border-gold-500/10 bg-black/40 backdrop-blur-sm">
+      <div className="hidden md:block overflow-hidden rounded-sm border border-gold-500/10 bg-black/40 backdrop-blur-sm">
         <div className="overflow-x-auto">
           <table className="min-w-full text-xs md:text-sm">
             <thead className="bg-black/40 border-b border-gold-500/20 sticky top-0 z-20 backdrop-blur-md">
@@ -1093,7 +1093,7 @@ function TokenDetailPanel({
   const burned = stats?.integrity?.burned_base_units;
 
   return (
-    <section className="mt-10 border border-gold-500/10 bg-black/40 p-6 relative overflow-hidden group rounded-lg">
+    <section className="mt-10 border border-gold-500/10 bg-black/40 p-6 relative overflow-hidden group rounded-sm">
       {/* Background decoration */}
       <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
         <div className="text-6xl md:text-9xl font-black text-gold-500 leading-none select-none">

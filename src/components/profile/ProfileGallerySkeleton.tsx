@@ -20,7 +20,7 @@ export function ProfileGallerySkeleton({ count = 6 }: { count?: number }) {
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: count }).map((_, idx) => (
             <div key={`gallery-skel-${idx}`} className="rounded-xl border border-gold-500/20 bg-black/40 p-3">
-              <div className="aspect-square rounded-lg bg-gold-500/5 animate-pulse" />
+              <div className="aspect-square rounded-sm bg-gold-500/5 animate-pulse" />
               <div className="mt-3 space-y-2">
                 <div className="h-4 w-28 rounded bg-gold-500/10 animate-pulse" />
                 <div className="h-4 w-36 rounded bg-gold-500/10 animate-pulse" />

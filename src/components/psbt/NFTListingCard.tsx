@@ -29,7 +29,7 @@ export default function NFTListingCard({ listing, onBuy }: NFTListingCardProps) 
     const { resolved, loading, errored } = useIpfsImage(imageUrls, inView, cacheKey);
 
     return (
-        <div ref={ref} className="bg-black/40 backdrop-blur-sm border border-gold-500/20 rounded-lg overflow-hidden hover:border-gold-500/40 transition-all group relative flex flex-col shadow-lg hover:shadow-gold-500/10">
+        <div ref={ref} className="bg-black/40 backdrop-blur-sm border border-gold-500/20 rounded-sm overflow-hidden hover:border-gold-500/40 transition-all group relative flex flex-col shadow-lg hover:shadow-gold-500/10">
             {/* Background decoration - Name Background */}
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80 z-10 pointer-events-none" />
 
@@ -42,7 +42,7 @@ export default function NFTListingCard({ listing, onBuy }: NFTListingCardProps) 
 
             {/* Badge */}
             <div className="absolute top-3 right-3 z-20">
-                <span className="bg-black/60 text-gold-400 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider border border-gold-500/20 backdrop-blur-md">
+                <span className="bg-black/60 text-gold-400 text-[10px] font-bold px-2 py-1 rounded-sm uppercase tracking-wider border border-gold-500/20 backdrop-blur-md">
                     #{listing.tokenId}
                 </span>
             </div>
@@ -92,7 +92,7 @@ export default function NFTListingCard({ listing, onBuy }: NFTListingCardProps) 
                     {/* Buy Button */}
                     <button
                         onClick={() => onBuy(listing)}
-                        className="w-full py-2.5 bg-gold-500 hover:bg-gold-400 text-black font-bold rounded-lg transition-all text-xs uppercase tracking-widest shadow-[0_0_20px_rgba(234,179,8,0.15)] hover:shadow-[0_0_30px_rgba(234,179,8,0.3)] hover:-translate-y-0.5"
+                        className="w-full py-2.5 bg-gold-500 hover:bg-gold-400 text-black font-bold rounded-sm transition-all text-xs uppercase tracking-widest shadow-[0_0_20px_rgba(234,179,8,0.15)] hover:shadow-[0_0_30px_rgba(234,179,8,0.3)] hover:-translate-y-0.5"
                     >
                         Buy Now
                     </button>

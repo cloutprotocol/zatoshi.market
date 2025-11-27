@@ -210,7 +210,7 @@ export default function NamesPage() {
 
       <div className="relative z-10 max-w-[1800px] mx-auto px-0 md:px-0 pb-16">
         {/* Slim Header / Filters Bar */}
-        <div className="sticky top-20 z-30 mb-6 flex flex-col md:flex-row items-center gap-3 p-3 border border-gold-500/10 bg-black/80 backdrop-blur-md rounded-lg shadow-xl">
+        <div className="sticky top-20 z-30 mb-6 flex flex-col md:flex-row items-center gap-3 p-3 border border-gold-500/10 bg-black/80 backdrop-blur-md rounded-sm shadow-xl">
           {/* Left: Title & Refresh */}
           <div className="flex items-center gap-4 mr-auto">
             <h2 className="text-lg font-bold text-gold-100 tracking-tight whitespace-nowrap">
@@ -430,7 +430,7 @@ function NamesTable({ items, listingByName, total, page, limit, setPage, hidePag
     const hasHyphen = base.includes('-');
     const isPalindrome = base === base.split('').reverse().join('');
     return (
-      <div key={row._id || `${slug}-${idx}`} className="group bg-black/40 border border-gold-500/10 rounded-md p-3 hover:bg-white/5 transition-colors">
+      <div key={row._id || `${slug}-${idx}`} className="group bg-black/40 border border-gold-500/10 rounded-sm p-3 hover:bg-white/5 transition-colors">
         <div className="flex items-start justify-between">
           <div className="text-gold-100 font-bold tracking-wide">
             <Link href={`/names/${slug}`} className="hover:text-gold-400 transition-colors">{display}</Link>
@@ -470,7 +470,7 @@ function NamesTable({ items, listingByName, total, page, limit, setPage, hidePag
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gold-500/10 bg-black/40 backdrop-blur-sm shadow-lg">
+    <div className="overflow-hidden rounded-sm border border-gold-500/10 bg-black/40 backdrop-blur-sm shadow-lg">
       <table className="min-w-full text-xs md:text-sm">
         <thead className="bg-white/5 text-gold-300/70 uppercase tracking-wider text-[10px] font-medium border-b border-gold-500/10">
           <tr>
@@ -541,7 +541,7 @@ function InlineRegister() {
   const canRegister = isConnected && wallet && name.trim().length >= 3;
 
   return (
-    <div className="border border-gold-500/10 bg-black/40 backdrop-blur-sm p-4 rounded-lg shadow-lg">
+    <div className="border border-gold-500/10 bg-black/40 backdrop-blur-sm p-4 rounded-sm shadow-lg">
       <div className="flex flex-col md:flex-row items-center gap-3">
         <input
           type="text"

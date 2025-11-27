@@ -38,7 +38,7 @@ export function ProfileGallery({ items, pinnedIds, isOwner, onTogglePin, onSelec
     const [imageLoaded, setImageLoaded] = useState(false);
     return (
       <div className="relative rounded-xl border border-gold-500/20 bg-black/40 p-3">
-        <div className="relative w-full overflow-hidden rounded-lg border border-gold-500/10 bg-black/30 aspect-square">
+        <div className="relative w-full overflow-hidden rounded-sm border border-gold-500/10 bg-black/30 aspect-square">
           {item.imageUrls[0] ? (
             <>
               <img

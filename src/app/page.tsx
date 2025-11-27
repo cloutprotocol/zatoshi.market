@@ -75,6 +75,18 @@ export default function Home() {
       .slice(0, 8);
   }, [tokens]);
 
+  const liveMintTickers = useMemo(() => liveMints.map(t => t.ticker), [liveMints]);
+  const liveMintHolders = useQuery(api.tokenStats.getLatestHolderCounts, { ticks: liveMintTickers });
+
+  const enrichedLiveMints = useMemo(() => {
+    if (!liveMintHolders) return liveMints;
+    const holderMap = new Map(liveMintHolders.map(h => [h.tick, h.holders]));
+    return liveMints.map(t => ({
+      ...t,
+      holderCount: holderMap.get(t.ticker.toLowerCase()) ?? 0
+    }));
+  }, [liveMints, liveMintHolders]);
+
 
   // 3. Trending Tokens: Combined "Established" (>500 holders) and "Trending" (>100 holders & >40% mint)
   const trendingTokens = useMemo(() => {
@@ -96,15 +108,19 @@ export default function Home() {
         let statLabel = '';
 
         // Determine the "why"
+        let statIcon;
         if (holders > 500) {
-          statLabel = `👥 ${formatNumber(holders)} Holders`;
+          statLabel = `${formatNumber(holders)} Holders`;
+          statIcon = <UsersIcon className="w-3 h-3" />;
         } else if (p >= 0.8) {
-          statLabel = `🔥 ${formatPercent(p)} Minted`;
+          statLabel = `${formatPercent(p)} Minted`;
+          statIcon = <FlameIcon className="w-3 h-3" />;
         } else {
-          statLabel = `📈 Trending`;
+          statLabel = `Trending`;
+          statIcon = <TrendingUpIcon className="w-3 h-3" />;
         }
 
-        return { ...t, statLabel, holderCount: holders };
+        return { ...t, statLabel, statIcon, holderCount: holders };
       })
       .sort((a, b) => b.holderCount - a.holderCount) // Sort by holders for now
       .slice(0, 10);
@@ -197,18 +213,15 @@ export default function Home() {
                     </h3>
                   </div>
                   <p className="text-lg text-gold-300/80 max-w-xl mx-auto md:mx-0">
-                    Claim your allocated ZGODS using the same wallet you used in the pre-sale. Supply is limited—mint yours before they&apos;re gone.
+                    Claim your allocated ZGODS using the same wallet you used in the pre-sale.
                   </p>
                   <div className="flex flex-col sm:flex-row items-center gap-3">
                     <Link
                       href="/claim/zgods"
-                      className="inline-flex items-center justify-center rounded-lg bg-gold-500 px-8 py-3 text-sm font-bold uppercase tracking-wider text-black transition-all hover:bg-gold-400 hover:shadow-[0_0_20px_rgba(234,179,8,0.3)]"
+                      className="inline-flex items-center justify-center rounded-sm bg-gold-500 px-8 py-3 text-sm font-bold uppercase tracking-wider text-black transition-all hover:bg-gold-400 hover:shadow-[0_0_20px_rgba(234,179,8,0.3)]"
                     >
                       Claim Now
                     </Link>
-                    <span className="text-xs uppercase tracking-[0.4em] text-gold-300/60">
-                      Live Drop
-                    </span>
                   </div>
                 </div>
               </div>
@@ -222,8 +235,8 @@ export default function Home() {
 
         {/* Live Mints Grid */}
         <section className="mb-16">
-          <SectionHeader title="Live Mints" link="/tokens?filter=live" />
-          <LiveMintsList tokens={liveMints} loading={loadingTokens} />
+          <SectionHeader title="Live ZRC-20 Mints" link="/tokens?filter=live" />
+          <LiveMintsList tokens={enrichedLiveMints} loading={loadingTokens} />
         </section>
 
         {/* Trending Tokens (Combined) */}
@@ -350,7 +363,7 @@ function TokenGrid({ tokens, loading }: { tokens: any[]; loading: boolean }) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-32 bg-white/5 rounded-lg animate-pulse border border-gold-500/5"></div>
+          <div key={i} className="h-32 bg-white/5 rounded-sm animate-pulse border border-gold-500/5"></div>
         ))}
       </div>
     );
@@ -358,7 +371,7 @@ function TokenGrid({ tokens, loading }: { tokens: any[]; loading: boolean }) {
 
   if (tokens.length === 0) {
     return (
-      <div className="text-center py-12 text-gold-500/40 border border-dashed border-gold-500/10 rounded-lg">
+      <div className="text-center py-12 text-gold-500/40 border border-dashed border-gold-500/10 rounded-sm">
         No tokens found for this category.
       </div>
     );
@@ -375,13 +388,13 @@ function TokenGrid({ tokens, loading }: { tokens: any[]; loading: boolean }) {
 
 function TokenCard({ token }: { token: any }) {
   const progress = token.progress || 0;
-  const isCompleted = progress >= 1;
+  const isCompleted = progress >= 0.999;
   const statLabel = token.statLabel;
 
   return (
-    <div className="group relative bg-black/40 border border-gold-500/10 rounded-lg p-4 hover:border-gold-500/30 hover:bg-white/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-gold-900/10 flex flex-col justify-between h-full">
+    <div className="group relative bg-black/40 border border-gold-500/10 rounded-sm p-4 hover:border-gold-500/30 hover:bg-white/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-gold-900/10 flex flex-col justify-between h-full">
       <div className="flex justify-between items-start mb-3">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gold-500/20 to-black border border-gold-500/20 flex items-center justify-center text-sm font-bold text-gold-100 group-hover:scale-105 transition-transform duration-300">
+        <div className="w-8 h-8 rounded-sm bg-gradient-to-br from-gold-500/20 to-black border border-gold-500/20 flex items-center justify-center text-sm font-bold text-gold-100 group-hover:scale-105 transition-transform duration-300">
           {token.ticker.slice(0, 1).toUpperCase()}
         </div>
         {isCompleted ? (
@@ -391,7 +404,7 @@ function TokenCard({ token }: { token: any }) {
         ) : (
           <Link
             href={`/inscribe?tab=zrc20&tick=${token.ticker.toLowerCase()}`}
-            className="px-2 py-0.5 bg-gold-500 text-black text-[9px] font-bold uppercase tracking-wider rounded hover:bg-gold-400 transition-colors shadow-lg shadow-gold-500/20"
+            className="relative z-20 px-2 py-0.5 bg-gold-500 text-black text-[9px] font-bold uppercase tracking-wider rounded hover:bg-gold-400 transition-colors shadow-lg shadow-gold-500/20"
           >
             Mint
           </Link>
@@ -419,7 +432,8 @@ function TokenCard({ token }: { token: any }) {
           />
         </div>
         {statLabel && (
-          <div className="pt-1 text-[10px] font-bold text-gold-400/80 uppercase tracking-wider">
+          <div className="pt-1 text-[10px] font-bold text-gold-400/80 uppercase tracking-wider flex items-center gap-1">
+            {token.statIcon}
             {statLabel}
           </div>
         )}
@@ -440,7 +454,8 @@ function LiveMintsList({ tokens, loading }: { tokens: any[]; loading: boolean })
     return (
       <div className="border border-gold-500/10 rounded-2xl bg-black/30 divide-y divide-gold-500/10">
         {[...Array(4)].map((_, idx) => (
-          <div key={idx} className="flex flex-col sm:grid sm:grid-cols-[1.4fr,0.9fr,1fr,0.8fr] gap-4 px-4 py-4 animate-pulse text-gold-400/40">
+          <div key={idx} className="flex flex-col sm:grid sm:grid-cols-[1.4fr,0.8fr,0.8fr,1fr,0.8fr] gap-4 px-4 py-4 animate-pulse text-gold-400/40">
+            <div className="h-8 bg-white/5 rounded" />
             <div className="h-8 bg-white/5 rounded" />
             <div className="h-8 bg-white/5 rounded" />
             <div className="h-8 bg-white/5 rounded" />
@@ -461,33 +476,46 @@ function LiveMintsList({ tokens, loading }: { tokens: any[]; loading: boolean })
 
   return (
     <div className="border border-gold-500/10 rounded-2xl bg-black/30 overflow-hidden">
-      <div className="hidden sm:grid grid-cols-[1.4fr,0.9fr,1fr,0.8fr] text-[10px] uppercase tracking-[0.4em] text-gold-300/60 px-4 py-3 border-b border-gold-500/10">
+      <div className="hidden sm:grid grid-cols-[1.4fr,0.8fr,0.8fr,1fr,0.8fr] text-[10px] uppercase tracking-[0.4em] text-gold-300/60 px-4 py-3 border-b border-gold-500/10">
         <span>Token</span>
         <span>Supply</span>
+        <span>Holders</span>
         <span>Progress</span>
-        <span>Action</span>
+        <span className="text-right">Action</span>
       </div>
       <div className="divide-y divide-gold-500/10">
         {tokens.map((token) => {
           const progress = Math.min((token.progress || 0) * 100, 100);
-          const completed = progress >= 100;
+          const completed = progress >= 99.9;
+          const holders = token.holderCount ?? token.holders ?? 0;
           return (
-            <div key={token.ticker} className="flex flex-col sm:grid sm:grid-cols-[1.4fr,0.9fr,1fr,0.8fr] gap-4 px-4 py-4 items-center">
+            <div key={token.ticker} className="flex flex-col sm:grid sm:grid-cols-[1.4fr,0.8fr,0.8fr,1fr,0.8fr] gap-4 px-4 py-4 items-center">
               <div className="flex items-center gap-3 w-full">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-gold-500/20 to-black border border-gold-500/20 flex items-center justify-center text-base font-bold text-gold-100">
+                <div className="w-10 h-10 rounded-sm bg-gradient-to-br from-gold-500/20 to-black border border-gold-500/20 flex items-center justify-center text-base font-bold text-gold-100">
                   {token.ticker.slice(0, 1).toUpperCase()}
                 </div>
                 <div className="min-w-0">
                   <div className="text-lg font-black text-gold-100 truncate">
                     {token.ticker}
                   </div>
-                  <div className="text-xs text-gold-400/70 font-mono truncate">
+                  <div className="text-xs text-gold-400/70 font-mono truncate flex items-center gap-1">
+                    {token.statIcon}
                     {token.statLabel || 'Live ZRC-20'}
                   </div>
                 </div>
               </div>
               <div className="w-full text-sm text-gold-300/70 font-mono">
                 {formatNumber(Number(token.supply))}
+              </div>
+              <div className="w-full text-sm text-gold-300/70 font-mono">
+                {holders > 0 ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-gold-500/50"><UsersIcon className="w-3 h-3" /></span>
+                    <span>{formatNumber(holders)}</span>
+                  </div>
+                ) : (
+                  <span className="text-gold-500/20">--</span>
+                )}
               </div>
               <div className="w-full space-y-1">
                 <div className="flex justify-between text-[10px] text-gold-300/70 font-medium">
@@ -522,5 +550,33 @@ function LiveMintsList({ tokens, loading }: { tokens: any[]; loading: boolean })
         })}
       </div>
     </div>
+  );
+}
+
+function UsersIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function FlameIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.1.2-2.2.6-3.3.7 3.7 4.4 4.5 4.5 4.5Z" />
+    </svg>
+  );
+}
+
+function TrendingUpIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+      <polyline points="16 7 22 7 22 13" />
+    </svg>
   );
 }

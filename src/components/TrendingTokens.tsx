@@ -73,12 +73,12 @@ export function TrendingTokens() {
         <div className="w-full max-w-4xl mx-auto">
             <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-gold-100">Trending ZRC-20s</h2>
-                <div className="flex bg-black/40 rounded-lg p-1 border border-gold-500/20">
+                <div className="flex bg-black/40 rounded-sm p-1 border border-gold-500/20">
                     <button
                         onClick={() => setActiveTab('minting')}
                         className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded transition-all ${activeTab === 'minting'
-                                ? 'bg-gold-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.2)]'
-                                : 'text-gold-300/60 hover:text-gold-200'
+                            ? 'bg-gold-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.2)]'
+                            : 'text-gold-300/60 hover:text-gold-200'
                             }`}
                     >
                         Now Minting
@@ -86,8 +86,8 @@ export function TrendingTokens() {
                     <button
                         onClick={() => setActiveTab('holders')}
                         className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded transition-all ${activeTab === 'holders'
-                                ? 'bg-gold-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.2)]'
-                                : 'text-gold-300/60 hover:text-gold-200'
+                            ? 'bg-gold-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.2)]'
+                            : 'text-gold-300/60 hover:text-gold-200'
                             }`}
                     >
                         Top Completed
@@ -105,7 +105,7 @@ export function TrendingTokens() {
                         <Link
                             key={token.ticker}
                             href={`/inscribe?tab=zrc20&tick=${token.ticker.toLowerCase()}`}
-                            className="group block bg-black/40 border border-gold-500/10 hover:border-gold-500/30 hover:bg-gold-500/5 transition-all p-4 rounded-lg"
+                            className="group block bg-black/40 border border-gold-500/10 hover:border-gold-500/30 hover:bg-gold-500/5 transition-all p-4 rounded-sm"
                         >
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-4">

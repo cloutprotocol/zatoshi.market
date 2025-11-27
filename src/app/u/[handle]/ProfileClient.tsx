@@ -361,8 +361,8 @@ export function ProfileClient({ handle }: ProfileClientProps) {
   if (loading) {
     return (
       <div className="space-y-8 py-6">
-      <ProfileHeaderSkeleton />
-      <ProfileGallerySkeleton />
+        <ProfileHeaderSkeleton />
+        <ProfileGallerySkeleton />
       </div>
     );
   }
@@ -424,7 +424,7 @@ export function ProfileClient({ handle }: ProfileClientProps) {
                 <input
                   value={formState.displayName}
                   onChange={(e) => setFormState((prev) => ({ ...prev, displayName: e.target.value }))}
-                  className="w-full rounded-lg border border-gold-500/40 bg-black/40 p-2 text-white"
+                  className="w-full rounded-sm border border-gold-500/40 bg-black/40 p-2 text-white"
                   placeholder="Public name"
                 />
               </label>
@@ -433,7 +433,7 @@ export function ProfileClient({ handle }: ProfileClientProps) {
                 <textarea
                   value={formState.bio}
                   onChange={(e) => setFormState((prev) => ({ ...prev, bio: e.target.value }))}
-                  className="w-full rounded-lg border border-gold-500/40 bg-black/40 p-2 text-white"
+                  className="w-full rounded-sm border border-gold-500/40 bg-black/40 p-2 text-white"
                   rows={4}
                   placeholder="Share your story"
                 />
@@ -446,7 +446,7 @@ export function ProfileClient({ handle }: ProfileClientProps) {
                   <input
                     value={formState[field]}
                     onChange={(e) => setFormState((prev) => ({ ...prev, [field]: e.target.value }))}
-                    className="w-full rounded-lg border border-gold-500/40 bg-black/40 p-2 text-white"
+                    className="w-full rounded-sm border border-gold-500/40 bg-black/40 p-2 text-white"
                     placeholder={field === 'website' ? 'https://…' : '@handle'}
                   />
                 </label>

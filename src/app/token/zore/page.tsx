@@ -115,9 +115,8 @@ export default function ZORETokenPage() {
                     </div>
                     {tokenData.priceChange24h !== undefined && (
                       <div
-                        className={`text-sm mt-1 ${
-                          tokenData.priceChange24h >= 0 ? 'text-green-400' : 'text-red-400'
-                        }`}
+                        className={`text-sm mt-1 ${tokenData.priceChange24h >= 0 ? 'text-green-400' : 'text-red-400'
+                          }`}
                       >
                         {tokenData.priceChange24h >= 0 ? '↑' : '↓'}{' '}
                         {Math.abs(tokenData.priceChange24h).toFixed(2)}%
@@ -250,7 +249,7 @@ export default function ZORETokenPage() {
                   </p>
                   <Link
                     href="/zmaps"
-                    className="inline-block px-8 py-4 bg-gold-500 text-black text-xl font-bold rounded-md hover:bg-liquid-glass hover:text-gold-900 transition-all animate-glow"
+                    className="inline-block px-8 py-4 bg-gold-500 text-black text-xl font-bold rounded-sm hover:bg-liquid-glass hover:text-gold-900 transition-all animate-glow"
                   >
                     EXPLORE ZMAPS →
                   </Link>

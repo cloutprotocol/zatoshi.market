@@ -204,7 +204,7 @@ export default function ClaimStatsPage() {
           </div>
           <Link
             href={`/claim/${slug}`}
-            className="px-4 py-2 bg-gold-500 text-black rounded-lg hover:bg-gold-400 transition-colors font-semibold"
+            className="px-4 py-2 bg-gold-500 text-black rounded-sm hover:bg-gold-400 transition-colors font-semibold"
           >
             ← Back to Claim
           </Link>
@@ -216,7 +216,7 @@ export default function ClaimStatsPage() {
 
         {counts && (
           <div className="space-y-6">
-            <div className="glass-card p-6 border border-gold-500/20 rounded-lg">
+            <div className="glass-card p-6 border border-gold-500/20 rounded-sm">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
                 <div>
                   <h2 className="text-2xl font-bold">Allocation Inspector</h2>
@@ -354,10 +354,10 @@ export default function ClaimStatsPage() {
                                       issue === 'duplicate_tokens' && entry.duplicateTokenIds.length
                                         ? `Duplicate token IDs detected: ${entry.duplicateTokenIds.join(', ')}`
                                         : issue === 'expired_reservations'
-                                        ? `${entry.reservedExpiredCount} expired reservations`
-                                        : issue === 'failed_claims'
-                                        ? `${entry.failedCount} failed attempts`
-                                        : meta.hint;
+                                          ? `${entry.reservedExpiredCount} expired reservations`
+                                          : issue === 'failed_claims'
+                                            ? `${entry.failedCount} failed attempts`
+                                            : meta.hint;
                                     return (
                                       <span
                                         key={`${entry.address}-${issue}`}
@@ -388,22 +388,22 @@ export default function ClaimStatsPage() {
               )}
             </div>
 
-            <div className="glass-card p-6 border border-gold-500/20 rounded-lg">
+            <div className="glass-card p-6 border border-gold-500/20 rounded-sm">
               <h2 className="text-2xl font-bold mb-4">Collection Progress</h2>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div className="p-4 bg-black/30 border border-gold-500/20 rounded-lg">
+                <div className="p-4 bg-black/30 border border-gold-500/20 rounded-sm">
                   <div className="text-sm text-gold-200/60 mb-1">Minted</div>
                   <div className="text-3xl font-bold text-gold-300">{counts.mintedCount.toLocaleString()}</div>
                 </div>
-                <div className="p-4 bg-black/30 border border-gold-500/20 rounded-lg">
+                <div className="p-4 bg-black/30 border border-gold-500/20 rounded-sm">
                   <div className="text-sm text-gold-200/60 mb-1">Supply</div>
                   <div className="text-3xl font-bold">{supply.toLocaleString()}</div>
                 </div>
-                <div className="p-4 bg-black/30 border border-gold-500/20 rounded-lg">
+                <div className="p-4 bg-black/30 border border-gold-500/20 rounded-sm">
                   <div className="text-sm text-gold-200/60 mb-1">Reserved</div>
                   <div className="text-3xl font-bold text-gold-400">{counts.reservedCount.toLocaleString()}</div>
                 </div>
-                <div className="p-4 bg-black/30 border border-gold-500/20 rounded-lg">
+                <div className="p-4 bg-black/30 border border-gold-500/20 rounded-sm">
                   <div className="text-sm text-gold-200/60 mb-1">Progress</div>
                   <div className="text-3xl font-bold text-gold-200">{mintProgress.toFixed(1)}%</div>
                 </div>
@@ -420,7 +420,7 @@ export default function ClaimStatsPage() {
             </div>
 
             {recentMints.length > 0 && (
-              <div className="glass-card p-6 border border-gold-500/20 rounded-lg">
+              <div className="glass-card p-6 border border-gold-500/20 rounded-sm">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
                   <div>
                     <h2 className="text-2xl font-bold">Recent Mints 🔥</h2>
@@ -441,7 +441,7 @@ export default function ClaimStatsPage() {
                   {recentMints.map((mint) => (
                     <div
                       key={`${mint.address}-${mint.tokenId}`}
-                      className="p-3 bg-black/30 border border-gold-500/20 rounded-lg"
+                      className="p-3 bg-black/30 border border-gold-500/20 rounded-sm"
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="font-mono text-sm text-gold-200">

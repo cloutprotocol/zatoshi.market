@@ -475,7 +475,7 @@ export function ClaimClient({ collection }: Props) {
           )}
         </div>
 
-        <div className="glass-card p-6 border border-gold-500/20 rounded-lg mb-6">
+        <div className="glass-card p-6 border border-gold-500/20 rounded-sm mb-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="space-y-2">
               <div className="text-sm text-gold-200/70">Connected wallet</div>
@@ -516,7 +516,7 @@ export function ClaimClient({ collection }: Props) {
         </div>
 
         {wallet?.address && !statusLoading && allocation && availableToRequest > 0 && (
-          <div className="glass-card p-6 border border-gold-500/20 rounded-lg">
+          <div className="glass-card p-6 border border-gold-500/20 rounded-sm">
             <div className="flex items-center justify-between gap-3 mb-4">
               <h2 className="text-lg sm:text-xl font-semibold">Claim</h2>
             </div>
@@ -543,7 +543,7 @@ export function ClaimClient({ collection }: Props) {
                 />
               </label>
               <button
-                className="px-5 sm:px-6 py-3 rounded-lg bg-gold-500 text-black font-bold hover:bg-gold-400 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+                className="px-5 sm:px-6 py-3 rounded-sm bg-gold-500 text-black font-bold hover:bg-gold-400 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
                 disabled={claiming || availableToRequest <= 0}
                 onClick={handleClaim}
               >
@@ -577,7 +577,7 @@ export function ClaimClient({ collection }: Props) {
                   ))}
                 </div>
                 {utxoWarning && (
-                  <div className="mt-3 rounded-md border border-amber-400/40 bg-amber-500/5 px-4 py-3 text-sm text-amber-200 space-y-2">
+                  <div className="mt-3 rounded-sm border border-amber-400/40 bg-amber-500/5 px-4 py-3 text-sm text-amber-200 space-y-2">
                     <p>{utxoWarning}</p>
                     <p className="text-amber-100/90">
                       Need fresh UTXOs? Use the
@@ -594,13 +594,13 @@ export function ClaimClient({ collection }: Props) {
           </div>
         )}
         {wallet?.address && !statusLoading && allocation && availableToRequest <= 0 && (
-          <div className="glass-card p-6 border border-gold-500/20 rounded-lg">
+          <div className="glass-card p-6 border border-gold-500/20 rounded-sm">
             <h2 className="text-lg sm:text-xl font-semibold mb-2">Allocation complete</h2>
             <p className="text-sm text-gold-200/70">You have already claimed your full allocation for this collection. Thank you!</p>
           </div>
         )}
 
-        <div className="glass-card p-6 border border-gold-500/20 rounded-lg mt-6">
+        <div className="glass-card p-6 border border-gold-500/20 rounded-sm mt-6">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
               <h3 className="text-xl font-semibold">My claimed ZGODS</h3>

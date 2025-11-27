@@ -418,7 +418,7 @@ export function CollectionClient({ slug }: Props) {
               <div className="mt-4">
                 <a
                   href={`/collection/${collection.slug}/trade`}
-                  className="inline-flex items-center justify-center px-4 py-2 text-sm font-bold bg-gold-500 hover:bg-gold-400 text-black uppercase tracking-wider rounded-lg transition-all shadow-lg shadow-gold-500/20"
+                  className="inline-flex items-center justify-center px-4 py-2 text-sm font-bold bg-gold-500 hover:bg-gold-400 text-black uppercase tracking-wider rounded-sm transition-all shadow-lg shadow-gold-500/20"
                 >
                   Trade Collection
                 </a>
@@ -700,7 +700,7 @@ function GridSkeletonCard() {
 function ListSkeletonRow() {
   return (
     <article className="grid grid-cols-[72px_1fr_auto] gap-4 items-center rounded-2xl border border-gold-500/20 bg-black/35 p-3">
-      <div className="h-16 w-16 rounded-lg border border-gold-500/10 bg-gold-500/10 animate-pulse" />
+      <div className="h-16 w-16 rounded-sm border border-gold-500/10 bg-gold-500/10 animate-pulse" />
       <div className="space-y-2">
         <div className="h-3 w-1/3 rounded bg-gold-500/10 animate-pulse" />
         <div className="h-3 w-2/3 rounded bg-gold-500/5 animate-pulse" />
@@ -761,7 +761,7 @@ function ListRow({ token }: { token: CollectionToken }) {
       ref={ref}
       className="grid grid-cols-[72px_1fr_auto] gap-4 items-center rounded-2xl border border-gold-500/20 bg-black/35 p-3"
     >
-      <div className="relative h-16 w-16 overflow-hidden rounded-lg border border-gold-500/10 bg-black/30">
+      <div className="relative h-16 w-16 overflow-hidden rounded-sm border border-gold-500/10 bg-black/30">
         {resolved && !loading && !errored && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={resolved} alt={token.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
@@ -803,9 +803,9 @@ function LockedCard({ tokenId }: { tokenId: number }) {
 function ListLockedRow({ tokenId }: { tokenId: number }) {
   return (
     <article className="grid grid-cols-[72px_1fr_auto] gap-4 items-center rounded-2xl border border-gold-500/20 bg-black/30 p-3">
-      <div className="relative h-16 w-16 overflow-hidden rounded-lg border border-gold-500/20 bg-gradient-to-br from-gold-500/20 via-black/60 to-black">
+      <div className="relative h-16 w-16 overflow-hidden rounded-sm border border-gold-500/20 bg-gradient-to-br from-gold-500/20 via-black/60 to-black">
         <div className="absolute inset-0 backdrop-blur-lg" />
-        <div className="absolute inset-0 border border-gold-500/30 rounded-lg opacity-70" />
+        <div className="absolute inset-0 border border-gold-500/30 rounded-sm opacity-70" />
         <div className="absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-[0.3em] text-gold-200/80">
           Locked
         </div>

@@ -44,7 +44,7 @@ export default function CollectionTradePage({ params }: { params: { slug: string
                         {/* Header */}
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 rounded-lg bg-gold-500/20 flex items-center justify-center text-2xl font-bold text-gold-100 border border-gold-500/40 overflow-hidden shadow-[0_0_30px_rgba(234,179,8,0.2)] backdrop-blur-md">
+                                <div className="w-16 h-16 rounded-sm bg-gold-500/20 flex items-center justify-center text-2xl font-bold text-gold-100 border border-gold-500/40 overflow-hidden shadow-[0_0_30px_rgba(234,179,8,0.2)] backdrop-blur-md">
                                     {collection.name.slice(0, 2)}
                                 </div>
                                 <div>
@@ -53,7 +53,7 @@ export default function CollectionTradePage({ params }: { params: { slug: string
                                 </div>
                             </div>
                             <div className="flex gap-3">
-                                <Link href={`/collection/${slug}`} className="px-6 py-3 bg-black/40 border border-gold-500/20 hover:bg-gold-500/10 rounded-lg text-sm font-bold transition-all hover:scale-105 text-gold-300 backdrop-blur-md uppercase tracking-wider">
+                                <Link href={`/collection/${slug}`} className="px-6 py-3 bg-black/40 border border-gold-500/20 hover:bg-gold-500/10 rounded-sm text-sm font-bold transition-all hover:scale-105 text-gold-300 backdrop-blur-md uppercase tracking-wider">
                                     View Collection
                                 </Link>
                             </div>
@@ -61,13 +61,13 @@ export default function CollectionTradePage({ params }: { params: { slug: string
 
                         {/* Stats Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="bg-black/40 border border-gold-500/20 rounded-lg p-6 backdrop-blur-md shadow-lg group hover:border-gold-500/40 transition-all">
+                            <div className="bg-black/40 border border-gold-500/20 rounded-sm p-6 backdrop-blur-md shadow-lg group hover:border-gold-500/40 transition-all">
                                 <div className="text-xs text-gold-200/60 font-bold uppercase tracking-wider mb-2">Floor Price</div>
                                 <div className="text-3xl font-black text-gold-400">
                                     {floorPrice ? `${floorPrice} ZEC` : "-"}
                                 </div>
                             </div>
-                            <div className="bg-black/40 border border-gold-500/20 rounded-lg p-6 backdrop-blur-md shadow-lg group hover:border-gold-500/40 transition-all">
+                            <div className="bg-black/40 border border-gold-500/20 rounded-sm p-6 backdrop-blur-md shadow-lg group hover:border-gold-500/40 transition-all">
                                 <div className="text-xs text-gold-200/60 font-bold uppercase tracking-wider mb-2">Active Listings</div>
                                 <div className="text-3xl font-black text-gold-400">
                                     {listings ? listings.length : "-"}
@@ -94,14 +94,14 @@ export default function CollectionTradePage({ params }: { params: { slug: string
 
                 {/* Tabs & Controls */}
                 <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                    <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-gold-500/20">
-                        <button className="px-4 py-2 bg-gold-500 text-black rounded-md text-sm font-bold shadow-sm">
+                    <div className="flex gap-1 bg-black/40 p-1 rounded-sm border border-gold-500/20">
+                        <button className="px-4 py-2 bg-gold-500 text-black rounded-sm text-sm font-bold shadow-sm">
                             Listings
                         </button>
-                        <button className="px-4 py-2 text-gold-300/60 hover:text-gold-100 rounded-md text-sm font-medium transition-colors">
+                        <button className="px-4 py-2 text-gold-300/60 hover:text-gold-100 rounded-sm text-sm font-medium transition-colors">
                             My Listings
                         </button>
-                        <button className="px-4 py-2 text-gold-300/60 hover:text-gold-100 rounded-md text-sm font-medium transition-colors">
+                        <button className="px-4 py-2 text-gold-300/60 hover:text-gold-100 rounded-sm text-sm font-medium transition-colors">
                             Trade History
                         </button>
                     </div>
@@ -109,14 +109,14 @@ export default function CollectionTradePage({ params }: { params: { slug: string
                     <div className="flex gap-3">
                         <button
                             onClick={() => setShowCreate(!showCreate)}
-                            className="px-4 py-2 bg-gold-500 hover:bg-gold-400 text-black rounded-lg text-sm font-bold transition-colors shadow-[0_0_20px_rgba(234,179,8,0.2)]"
+                            className="px-4 py-2 bg-gold-500 hover:bg-gold-400 text-black rounded-sm text-sm font-bold transition-colors shadow-[0_0_20px_rgba(234,179,8,0.2)]"
                         >
                             {showCreate ? "Cancel Listing" : "List Item"}
                         </button>
-                        <button className="px-4 py-2 bg-black/40 border border-gold-500/20 hover:bg-gold-500/10 text-gold-300 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                        <button className="px-4 py-2 bg-black/40 border border-gold-500/20 hover:bg-gold-500/10 text-gold-300 rounded-sm text-sm font-medium transition-colors flex items-center gap-2">
                             <span>Sweep</span>
                         </button>
-                        <button className="px-4 py-2 bg-black/40 border border-gold-500/20 hover:bg-gold-500/10 text-gold-300 rounded-lg text-sm font-medium transition-colors">
+                        <button className="px-4 py-2 bg-black/40 border border-gold-500/20 hover:bg-gold-500/10 text-gold-300 rounded-sm text-sm font-medium transition-colors">
                             Refresh
                         </button>
                     </div>
