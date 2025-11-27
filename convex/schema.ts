@@ -301,4 +301,56 @@ export default defineSchema({
     .index("by_address", ["address"])
     .index("by_follower", ["follower"])
     .index("by_address_follower", ["address", "follower"]),
+
+  // ZRC-20 token holder counts (latest snapshot per tick)
+  tokenHolderLatest: defineTable({
+    tick: v.string(), // lowercase ticker
+    holders: v.number(),
+    source: v.optional(v.string()), // 'summary' | 'integrity'
+    updatedAt: v.number(),
+  })
+    .index("by_tick", ["tick"])
+    .index("by_holders", ["holders"]),
+
+  // Historical snapshots for holder counts (for charting)
+  tokenHolderSnapshots: defineTable({
+    tick: v.string(), // lowercase ticker
+    holders: v.number(),
+    capturedAt: v.number(),
+    source: v.optional(v.string()),
+  })
+    .index("by_tick_capturedAt", ["tick", "capturedAt"])
+    .index("by_tick", ["tick"]),
+
+  // ZNS: Names registry
+  names: defineTable({
+    name: v.string(), // lowercase name, e.g., 'satoshi' (tld implied in UI)
+    owner: v.string(),
+    inscriptionId: v.string(),
+    txid: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    status: v.string(), // 'active' | 'revoked'
+    prefix2: v.string(), // first 2 chars for indexed prefix search
+  })
+    .index("by_name", ["name"])
+    .index("by_owner", ["owner"])
+    .index("by_prefix2", ["prefix2"])
+    .index("by_createdAt", ["createdAt"]),
+
+  // Marketplace listings for names (PSBT integration later)
+  nameListings: defineTable({
+    name: v.string(), // name being sold
+    sellerAddress: v.string(),
+    priceZec: v.number(),
+    status: v.string(), // 'active' | 'sold' | 'cancelled'
+    createdAt: v.number(),
+    buyerAddress: v.optional(v.string()),
+    txid: v.optional(v.string()), // settlement tx (future)
+    psbtBase64: v.optional(v.string()), // placeholder for future integration
+  })
+    .index("by_status", ["status"])
+    .index("by_name", ["name"])
+    .index("by_seller", ["sellerAddress"])
+    .index("by_createdAt", ["createdAt"]),
 });

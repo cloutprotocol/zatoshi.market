@@ -40,6 +40,14 @@ export default function Header() {
             >
               INSCRIBE
             </Link>
+            <Link
+              href="/tokens"
+              className="px-3 py-1 hover:text-gold-200 transition-colors"
+            >
+              ZRC-20
+            </Link>
+
+
           </div>
 
           {!mounted ? (
@@ -74,9 +82,9 @@ export default function Header() {
           >
             {/* Hamburger icon */}
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none" className="inline" xmlns="http://www.w3.org/2000/svg">
-              <rect y="6" width="28" height="3" rx="1.5" fill="currentColor"/>
-              <rect y="13" width="28" height="3" rx="1.5" fill="currentColor"/>
-              <rect y="20" width="28" height="3" rx="1.5" fill="currentColor"/>
+              <rect y="6" width="28" height="3" rx="1.5" fill="currentColor" />
+              <rect y="13" width="28" height="3" rx="1.5" fill="currentColor" />
+              <rect y="20" width="28" height="3" rx="1.5" fill="currentColor" />
             </svg>
           </button>
         </div>
@@ -99,6 +107,15 @@ export default function Header() {
                 >
                   Inscribe
                 </Link>
+                <Link
+                  href="/tokens"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="block py-3 text-gold-300 uppercase tracking-[0.3em] text-xs hover:text-gold-100"
+                >
+                  ZRC-20
+                </Link>
+
+
               </div>
 
               {/* Wallet Button - Bottom of screen on mobile */}

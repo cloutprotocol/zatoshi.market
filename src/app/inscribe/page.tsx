@@ -9,6 +9,7 @@ import Link from 'next/link';
 // Switch to Convex actions for inscription flows
 import { getConvexClient } from '@/lib/convexClient';
 import { api } from '../../../convex/_generated/api';
+import { useQuery } from 'convex/react';
 import bs58check from 'bs58check';
 import * as secp from '@noble/secp256k1';
 import { hmac } from '@noble/hashes/hmac';
@@ -32,6 +33,7 @@ import { FeeBreakdown } from '@/components/FeeBreakdown';
 import { ConfirmTransaction } from '@/components/ConfirmTransaction';
 import { InscriptionHistory } from '@/components/InscriptionHistory';
 import { zcashRPC } from '@/services/zcash';
+import { ordinalIndexAPI, type TokenSummary } from '@/services/ordinalIndex';
 
 type TabKey = 'names' | 'text' | 'images' | 'zrc20' | 'utxo' | 'history';
 const SHOW_NAMES = false;
@@ -100,6 +102,8 @@ function InscribePageContent() {
   const [amount, setAmount] = useState('');
   const [maxSupply, setMaxSupply] = useState('');
   const [mintLimit, setMintLimit] = useState('');
+  const [tokenSummary, setTokenSummary] = useState<TokenSummary | null>(null);
+  const [tokenSummaryError, setTokenSummaryError] = useState<string | null>(null);
 
   // Status
   const [loading, setLoading] = useState(false);
@@ -156,6 +160,25 @@ function InscribePageContent() {
     setResult(null);
     setError(null);
   }, [activeTab]);
+
+  // Load token summary for ZRC-20 mint/transfer to validate limits
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSummary() {
+      setTokenSummary(null);
+      setTokenSummaryError(null);
+      const t = (tick || '').trim();
+      if (!t || zrcOp === 'deploy') return;
+      try {
+        const summary = await ordinalIndexAPI.getTokenSummary(t);
+        if (!cancelled) setTokenSummary(summary);
+      } catch (e: any) {
+        if (!cancelled) setTokenSummaryError(e?.message || 'Failed to load token info');
+      }
+    }
+    loadSummary();
+    return () => { cancelled = true; };
+  }, [tick, zrcOp]);
 
   // Validate name in real-time
   const validateName = (name: string) => {
@@ -398,6 +421,26 @@ function InscribePageContent() {
     if (!tick.trim()) { setError('Please enter ticker'); return; }
     if (zrcOp === 'mint' || zrcOp === 'transfer') {
       if (!amount.trim()) { setError('Please enter amount'); return; }
+      if (!/^\d+$/.test(amount.trim())) { setError('Amount must be an integer (no decimals)'); return; }
+      // Validate against token summary if available
+      if (tokenSummary && zrcOp === 'mint') {
+        const lim = Number(tokenSummary.lim ?? 0);
+        if (lim > 0 && Number(amount) > lim) {
+          setError(`Amount exceeds per-mint limit of ${lim.toLocaleString()}`);
+          return;
+        }
+        const dec = Number(tokenSummary.dec ?? '0') || 0;
+        const supplyBase = tokenSummary.supply_base_units ? BigInt(tokenSummary.supply_base_units) : undefined;
+        const maxSupply = tokenSummary.max ? Number(tokenSummary.max) : undefined;
+        if (typeof maxSupply === 'number' && supplyBase !== undefined) {
+          const minted = Number(supplyBase / BigInt(10 ** dec));
+          const remaining = Math.max(0, maxSupply - minted);
+          if (Number(amount) > remaining) {
+            setError(`Amount exceeds remaining supply (${remaining.toLocaleString()})`);
+            return;
+          }
+        }
+      }
     }
     if (zrcOp === 'deploy') {
       if (!maxSupply.trim() || !mintLimit.trim()) { setError('Please enter max and limit'); return; }
@@ -458,6 +501,31 @@ function InscribePageContent() {
     { key: 'high', label: 'High', perTx: 100000 },   // Priority confirmation
   ] as const;
   const [selectedFeeTier, setSelectedFeeTier] = useState<typeof feeTiers[number]>(feeTiers[1]);
+
+  // ZRC-20 submit disabled logic with validation
+  const zrcSubmitDisabled = React.useMemo(() => {
+    if (loading || !isConnected) return true;
+    if (!tick.trim()) return true;
+    if (zrcOp === 'deploy') {
+      return !maxSupply.trim() || !mintLimit.trim();
+    }
+    // mint or transfer
+    if (!amount.trim()) return true;
+    if (!/^\d+$/.test(amount.trim())) return true;
+    if (zrcOp === 'mint' && tokenSummary) {
+      const lim = Number(tokenSummary.lim ?? 0);
+      if (lim > 0 && Number(amount) > lim) return true;
+      const dec = Number(tokenSummary.dec ?? '0') || 0;
+      const supplyBase = tokenSummary.supply_base_units ? BigInt(tokenSummary.supply_base_units) : undefined;
+      const max = tokenSummary.max ? Number(tokenSummary.max) : undefined;
+      if (typeof max === 'number' && supplyBase !== undefined) {
+        const minted = Number(supplyBase / BigInt(10 ** dec));
+        const remaining = Math.max(0, max - minted);
+        if (Number(amount) > remaining) return true;
+      }
+    }
+    return false;
+  }, [loading, isConnected, tick, zrcOp, amount, tokenSummary, maxSupply, mintLimit]);
   const [batchJobId, setBatchJobId] = useState<string | null>(null);
   const [batchStatus, setBatchStatus] = useState<{ status: string; completed: number; total: number; ids: string[]; estimatedProgress?: number; error?: string | null; totalCostZats?: number | null } | null>(null);
   const [batchStartTime, setBatchStartTime] = useState<number | null>(null);
@@ -1906,66 +1974,96 @@ function InscribePageContent() {
               )}
 
               {/* ZRC-20 TAB */}
+              {/* ZRC-20 Tab Content */}
               {activeTab === 'zrc20' && (
-                <div className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
-                  <div className="text-center mb-4 sm:mb-6">
-                    <h2 className="text-lg sm:text-xl lg:text-2xl font-bold mb-2 bg-gradient-to-br from-white via-gold-100 to-gold-200 bg-clip-text text-transparent">Mint ZRC-20 Token</h2>
-                    <p className="text-gold-400/60 text-xs sm:text-sm">
-                      Mint tokens from deployed ZRC-20 contracts
+                <div className="space-y-6">
+                  {/* Header - Moved above form as requested */}
+                  <div className="text-center mb-8">
+                    <h2 className="text-2xl font-bold text-gold-100 font-mono">
+                      {zrcOp === 'deploy' ? 'Deploy ZRC-20 Token' : zrcOp === 'mint' ? 'Mint ZRC-20 Token' : 'Transfer ZRC-20 Token'}
+                    </h2>
+                    <p className="text-gold-500/60 text-xs mt-2 uppercase tracking-widest">
+                      {zrcOp === 'deploy' ? 'Launch a new token on Zcash' : zrcOp === 'mint' ? 'Mint tokens from deployed ZRC-20 contracts' : 'Send ZRC-20 tokens to another address'}
                     </p>
                   </div>
 
-                  <div className="bg-gold-500/10 p-3 sm:p-4 rounded border border-gold-500/30 mb-4 sm:mb-6">
-                    <p className="text-gold-300 text-xs sm:text-sm">
-                      <strong>Note:</strong> Make sure the token has been deployed first and check the minting limits on{' '}
-                      <a
-                        href="https://zerdinals.com"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-gold-400 hover:underline"
-                      >
-                        Zerdinals Explorer
-                      </a>
-                    </p>
-                  </div>
-
-                  {/* Operation */}
+                  {/* Operation Selector */}
                   <div>
                     <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Operation</label>
                     <div className="relative">
                       <select
                         value={zrcOp}
-                        onChange={(e) => setZrcOp(e.target.value as any)}
-                        className="appearance-none w-full bg-black/40 border border-gold-500/30 rounded pl-3 pr-10 py-2 sm:pl-4 sm:pr-10 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50"
+                        onChange={(e) => {
+                          setZrcOp(e.target.value as any);
+                          setTick('');
+                          setAmount('');
+                          setTokenSummary(null);
+                        }}
+                        className="w-full appearance-none bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50 font-mono"
                         disabled={loading}
                       >
                         <option value="mint">Mint</option>
                         <option value="deploy">Deploy</option>
                         <option value="transfer">Transfer</option>
                       </select>
-                      <div className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gold-400 text-xs">
-                        \/
+                      <div className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gold-500/50">
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
                       </div>
                     </div>
                   </div>
 
-                  <div>
+                  {/* Ticker Input with Autocomplete */}
+                  <div className="relative">
                     <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Token Ticker</label>
-                    <input
-                      type="text"
-                      value={tick}
-                      onChange={(e) => setTick(e.target.value.toUpperCase())}
-                      className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 font-mono uppercase outline-none focus:border-gold-500/50"
-                      placeholder="ZERO"
-                      maxLength={4}
-                      disabled={loading}
-                    />
+                    <div className="relative group">
+                      <input
+                        type="text"
+                        value={tick}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTick(val);
+                          // Clear summary if cleared
+                          if (!val) setTokenSummary(null);
+                        }}
+                        maxLength={4}
+                        className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50 placeholder:text-gold-500/20 font-mono uppercase"
+                        placeholder="ZORE"
+                        disabled={loading}
+                      />
+                      {/* Autocomplete Dropdown */}
+                      {zrcOp !== 'deploy' && tick.length > 0 && !tokenSummary && (
+                        <TickerAutocomplete
+                          query={tick}
+                          onSelect={(t) => setTick(t)}
+                        />
+                      )}
+                    </div>
+                    {zrcOp === 'deploy' && (
+                      <div className="text-[11px] text-gold-300/60 mt-1">4 characters max. Case-insensitive.</div>
+                    )}
                   </div>
 
                   {zrcOp !== 'deploy' && (
                     <div>
                       <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Amount</label>
-                      <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} onWheel={(e) => e.currentTarget.blur()} className="w-full bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
+                      <div className="flex items-center gap-2">
+                        <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} onWheel={(e) => e.currentTarget.blur()} className="flex-1 bg-black/40 border border-gold-500/30 rounded px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-base text-gold-300 outline-none focus:border-gold-500/50" placeholder="1000" disabled={loading} />
+                        {zrcOp === 'mint' && tokenSummary && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setAmount(String(Number(tokenSummary.lim ?? 0) || 0))}
+                              className="px-3 py-2 text-xs border border-gold-500/30 hover:bg-gold-500/10"
+                            >
+                              Limit
+                            </button>
+
+                          </>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-gold-300/60 mt-1">Whole tokens only. No decimals.</div>
                     </div>
                   )}
                   {zrcOp === 'deploy' && (
@@ -1981,20 +2079,156 @@ function InscribePageContent() {
                     </div>
                   )}
 
-                  <div className="bg-black/40 p-2.5 sm:p-3 rounded border border-gold-500/20">
-                    <p className="text-gold-400/60 text-xs mb-1.5">Preview:</p>
-                    <pre className="text-gold-300 text-xs font-mono overflow-x-auto">
-                      {JSON.stringify(
-                        zrcOp === 'deploy'
-                          ? { p: 'zrc-20', op: 'deploy', tick: tick || 'TICK', max: maxSupply || '0', lim: mintLimit || '0' }
-                          : zrcOp === 'transfer'
-                            ? { p: 'zrc-20', op: 'transfer', tick: tick || 'TICK', amt: amount || '0' }
-                            : { p: 'zrc-20', op: 'mint', tick: tick || 'TICK', amt: amount || '0' },
-                        null,
-                        2
+                  {/* Token & Mint Validation - Enhanced Detail Panel */}
+                  {(zrcOp === 'mint' || zrcOp === 'transfer') && (
+                    <div className="mt-6">
+                      {tokenSummary ? (
+                        <div className="border border-gold-500/10 bg-black/40 p-6 relative overflow-hidden group rounded-lg">
+                          {/* Background decoration */}
+                          <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                            <div className="text-9xl font-black text-gold-500 leading-none select-none">
+                              {tokenSummary.tick.substring(0, 2)}
+                            </div>
+                          </div>
+
+                          {/* Header */}
+                          <div className="flex items-start justify-between gap-4 mb-6 relative z-10">
+                            <div>
+                              <p className="text-xs uppercase tracking-[0.4em] text-zinc-500 mb-1">
+                                Token Detail
+                              </p>
+                              <h2 className="text-3xl font-black text-zinc-100">
+                                {tokenSummary.tick}
+                              </h2>
+                            </div>
+                            {tokenSummary.integrity && (
+                              <div className={`px-3 py-1 border ${tokenSummary.integrity.consistent ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-red-500/30 bg-red-500/10 text-red-400'} text-xs font-bold uppercase tracking-wider rounded`}>
+                                {tokenSummary.integrity.consistent ? 'Healthy' : 'Check Ledger'}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Stats Grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 relative z-10">
+                            <div className="border border-white/5 bg-black/20 p-3 rounded">
+                              <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-1">
+                                Minted / Max
+                              </div>
+                              <div className="text-lg font-mono text-zinc-200">
+                                {(() => {
+                                  const dec = Number(tokenSummary.dec ?? '0') || 0;
+                                  const base = tokenSummary.supply_base_units ? BigInt(tokenSummary.supply_base_units) : BigInt(0);
+                                  const minted = Number(base / BigInt(10 ** dec));
+                                  return minted.toLocaleString();
+                                })()}
+                              </div>
+                              <div className="text-[10px] text-zinc-600">
+                                of {Number(tokenSummary.max ?? 0).toLocaleString()}
+                              </div>
+                            </div>
+                            <div className="border border-white/5 bg-black/20 p-3 rounded">
+                              <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-1">
+                                Holders
+                              </div>
+                              <div className="text-lg font-mono text-zinc-200">
+                                {tokenSummary.holders?.toLocaleString() ?? '—'}
+                              </div>
+                              <div className="text-[10px] text-zinc-600">
+                                {tokenSummary.transfers_completed?.toLocaleString() ?? 0} transfers
+                              </div>
+                            </div>
+                            <div className="border border-white/5 bg-black/20 p-3 rounded">
+                              <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-1">
+                                Limits
+                              </div>
+                              <div className="text-lg font-mono text-zinc-200">
+                                {Number(tokenSummary.lim ?? 0).toLocaleString()}
+                              </div>
+                              <div className="text-[10px] text-zinc-600">
+                                Decimals: {tokenSummary.dec ?? 0}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Progress Bar */}
+                          <div className="relative z-10">
+                            {(() => {
+                              const dec = Number(tokenSummary.dec ?? '0') || 0;
+                              const base = tokenSummary.supply_base_units ? BigInt(tokenSummary.supply_base_units) : BigInt(0);
+                              const minted = Number(base / BigInt(10 ** dec));
+                              const max = Number(tokenSummary.max ?? 0);
+                              const progress = max > 0 ? (minted / max) * 100 : 0;
+
+                              return (
+                                <div className="space-y-2">
+                                  <div className="flex justify-between text-xs">
+                                    <span className="text-zinc-400 font-mono">{progress.toFixed(1)}% Minted</span>
+                                    <span className="text-zinc-600 uppercase tracking-wider text-[10px]">{progress >= 100 ? 'Completed' : 'Minting'}</span>
+                                  </div>
+                                  <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full bg-gradient-to-r from-gold-600 to-gold-400 rounded-full transition-all duration-500 ${progress < 100 ? 'shine-effect' : ''}`}
+                                      style={{ width: `${Math.min(progress, 100)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+
+                          {/* Validation Messages */}
+                          {zrcOp === 'mint' && (
+                            <div className="mt-4 pt-4 border-t border-white/5 relative z-10">
+                              {(() => {
+                                const lim = Number(tokenSummary.lim ?? 0);
+                                const dec = Number(tokenSummary.dec ?? '0') || 0;
+                                const base = tokenSummary.supply_base_units ? BigInt(tokenSummary.supply_base_units) : BigInt(0);
+                                const minted = Number(base / BigInt(10 ** dec));
+                                const max = Number(tokenSummary.max ?? 0);
+                                const remaining = Math.max(0, max - minted);
+                                const a = Number(amount || '0');
+                                const overLim = lim > 0 && a > lim;
+                                const overRemain = max > 0 && a > remaining;
+
+                                return (
+                                  <div className="space-y-2 text-xs">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-zinc-500">Remaining Supply:</span>
+                                      <span className="font-mono text-zinc-300">{remaining.toLocaleString()}</span>
+                                    </div>
+
+                                    {(overLim || overRemain || (!/^\d+$/.test((amount || '').trim()) && (amount || '').trim() !== '')) && (
+                                      <div className="bg-red-500/10 border border-red-500/30 rounded p-2 space-y-1 mt-2">
+                                        {overLim && <div className="text-red-400 flex items-center gap-2"><span className="text-lg leading-none">×</span> Exceeds per-mint limit of {lim.toLocaleString()}</div>}
+                                        {overRemain && <div className="text-red-400 flex items-center gap-2"><span className="text-lg leading-none">×</span> Exceeds remaining supply</div>}
+                                        {!/^\d+$/.test((amount || '').trim()) && (amount || '').trim() !== '' && (
+                                          <div className="text-red-400 flex items-center gap-2"><span className="text-lg leading-none">×</span> Amount must be an integer</div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="p-8 border border-gold-500/10 bg-black/40 text-center rounded-lg">
+                          <div className="text-zinc-600 mb-2">
+                            <svg className="w-8 h-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                          </div>
+                          <div className="text-sm text-zinc-500">Enter a valid ticker to load token details</div>
+                        </div>
                       )}
-                    </pre>
-                  </div>
+                      {tokenSummaryError && (
+                        <div className="mt-2 text-xs text-red-400 text-center bg-red-500/10 border border-red-500/20 p-2 rounded">
+                          {tokenSummaryError}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <FeeBreakdown
                     platformFee={zrc20Cost.platformFee}
@@ -2003,7 +2237,7 @@ function InscribePageContent() {
                     total={zrc20Cost.total}
                   />
 
-                  <button onClick={handleZRC20Mint} disabled={loading || !isConnected || !tick.trim() || (zrcOp !== 'deploy' && !amount.trim()) || (zrcOp === 'deploy' && (!maxSupply.trim() || !mintLimit.trim()))} className="w-full px-4 py-2.5 sm:px-5 sm:py-3 bg-gold-500 text-black font-bold text-sm sm:text-base rounded hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed">{loading ? (
+                  <button onClick={handleZRC20Mint} disabled={zrcSubmitDisabled} className="w-full px-4 py-2.5 sm:px-5 sm:py-3 bg-gold-500 text-black font-bold text-sm sm:text-base rounded hover:bg-gold-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed">{loading ? (
                     <svg className="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -2591,15 +2825,13 @@ function InscribePageContent() {
               {/* Error Display */}
               {friendlyErrorMessage && (
                 <div
-                  className={`mt-6 my-4 p-4 sm:p-6 rounded relative max-w-2xl mx-auto ${
-                    isPendingMintError ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-red-500/10 border border-red-500/30'
-                  }`}
+                  className={`mt-6 my-4 p-4 sm:p-6 rounded relative max-w-2xl mx-auto ${isPendingMintError ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-red-500/10 border border-red-500/30'
+                    }`}
                 >
                   <button
                     onClick={() => setError(null)}
-                    className={`absolute top-3 right-3 transition-colors ${
-                      isPendingMintError ? 'text-amber-300/60 hover:text-amber-200' : 'text-red-400/60 hover:text-red-300'
-                    }`}
+                    className={`absolute top-3 right-3 transition-colors ${isPendingMintError ? 'text-amber-300/60 hover:text-amber-200' : 'text-red-400/60 hover:text-red-300'
+                      }`}
                     aria-label="Close"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2607,9 +2839,8 @@ function InscribePageContent() {
                     </svg>
                   </button>
                   <h3
-                    className={`${
-                      isPendingMintError ? 'text-amber-200' : 'text-red-300'
-                    } font-bold mb-3 text-base`}
+                    className={`${isPendingMintError ? 'text-amber-200' : 'text-red-300'
+                      } font-bold mb-3 text-base`}
                   >
                     {isPendingMintError ? 'Heads-up: previous transaction still pending' : '⚠ Transaction Error'}
                   </h3>
@@ -2847,8 +3078,28 @@ function InscribePageContent() {
 
 export default function InscribePage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="text-gold-400 animate-pulse">Loading...</div></div>}>
+    <Suspense fallback={<div className="min-h-screen bg-black text-gold-100 flex items-center justify-center">Loading...</div>}>
       <InscribePageContent />
     </Suspense>
+  );
+}
+
+function TickerAutocomplete({ query, onSelect }: { query: string; onSelect: (tick: string) => void }) {
+  const results = useQuery(api.tokenStats.searchTokens, { query });
+
+  if (!results || results.length === 0) return null;
+
+  return (
+    <div className="absolute top-full left-0 right-0 mt-1 bg-black border border-gold-500/30 rounded shadow-xl z-50 max-h-48 overflow-y-auto">
+      {results.map((tick) => (
+        <button
+          key={tick}
+          onClick={() => onSelect(tick.toUpperCase())}
+          className="w-full text-left px-4 py-2 text-sm text-gold-300 hover:bg-gold-500/10 hover:text-gold-100 transition-colors font-mono uppercase border-b border-gold-500/10 last:border-0"
+        >
+          {tick}
+        </button>
+      ))}
+    </div>
   );
 }
