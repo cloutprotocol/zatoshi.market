@@ -159,8 +159,8 @@ export default function TokenListPage() {
   const [fetchingPage, setFetchingPage] = useState(false);
 
   // Priority: top tokens by holders from Convex, to surface first
-  // Removed prefetch logic to prevent constant polling
-  const topHolders = useQuery(api.tokenStats.getTopHolders, { limit: 50, minHolders: 0 });
+  // Fetch more tokens from cache for instant display
+  const topHolders = useQuery(api.tokenStats.getTopHolders, { limit: 500, minHolders: 0 });
 
   const hasLoadedTokens = useRef(false);
 
@@ -349,6 +349,40 @@ export default function TokenListPage() {
     });
     return sorted;
   }, [filteredTokens, sortKey, sortDir]);
+
+  // Instantly populate tokenStats from Convex cache (topHolders)
+  useEffect(() => {
+    if (!topHolders || topHolders.length === 0) return;
+
+    setTokenStats((prev) => {
+      const next = { ...prev };
+      let hasChanges = false;
+
+      topHolders.forEach((item: any) => {
+        const tick = (item?.tick || '').toLowerCase();
+        if (!tick) return;
+
+        // Only populate if we don't have fresher data
+        const existing = prev[tick];
+        const convexTime = item?.updatedAt ?? 0;
+        const existingTime = existing?.updatedAt ?? 0;
+
+        if (convexTime >= existingTime) {
+          next[tick] = {
+            holders: item?.holders ?? existing?.holders,
+            holders_total: existing?.holders_total,
+            transfersCompleted: existing?.transfersCompleted,
+            summary: existing?.summary,
+            integrity: existing?.integrity,
+            updatedAt: convexTime,
+          };
+          hasChanges = true;
+        }
+      });
+
+      return hasChanges ? next : prev;
+    });
+  }, [topHolders]);
 
   // No-op: pagination handled by fetching next API page
 
@@ -724,7 +758,7 @@ interface TokensTableProps {
   hasMore: boolean;
   loadingMore: boolean;
   tokenStats: Record<string, TokenStats>;
-  snapshots: any; // Using any for now to match existing usage, ideally typed
+  snapshots?: any; // Optional - only used if detail panel is shown
 }
 
 function TokensTableSkeleton({ rows = 10 }: { rows?: number }) {

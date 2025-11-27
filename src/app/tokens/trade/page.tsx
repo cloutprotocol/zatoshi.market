@@ -120,11 +120,10 @@ export default function TradePage() {
                     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
                         <div>
                             <h1 className="text-4xl md:text-5xl font-black tracking-tight text-gold-100">
-                                Trade <span className="text-gold-500">Inscriptions</span> across Zashi
+                                Trade <span className="text-gold-500">Inscriptions</span> across Zcash
                             </h1>
                             <p className="mt-4 text-lg text-gold-200/70 max-w-2xl">
-                                Discover live PSBT listings, sweep entire ticks, or list your own ZRC-20 transfers
-                                without leaving the browser wallet.
+                                Browse curated Zcash inscription markets, plan sweeps, and track premium inventory in one immersive view.
                             </p>
                         </div>
                         <div className="bg-black/40 border border-gold-500/20 rounded-2xl p-5 w-full lg:w-[380px] shadow-[0_0_35px_rgba(234,179,8,0.08)]">
