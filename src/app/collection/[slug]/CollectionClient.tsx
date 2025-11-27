@@ -10,7 +10,8 @@ import {
 } from '@/lib/collectionAssets';
 import type { MintedTokenSummary } from '@/types/profile';
 import { getConvexClient } from '@/lib/convexClient';
-import { loadImageWithRace } from '@/lib/imageLoader';
+import { loadImageWithRace, useIpfsImage } from '@/lib/imageLoader';
+import { useInViewport } from '@/hooks/useInViewport';
 import { api } from '../../../../convex/_generated/api';
 
 type Props = { slug: string };
@@ -381,8 +382,8 @@ export function CollectionClient({ slug }: Props) {
   const mintedValue = claimStats
     ? claimStats.mintedCount.toLocaleString()
     : loading
-    ? '…'
-    : mintedTotal.toLocaleString();
+      ? '…'
+      : mintedTotal.toLocaleString();
   const ownersValue = ownerCount > 0 ? ownerCount.toLocaleString() : loading ? '…' : '0';
   const supplyValue = (collection.supply ?? claimStats?.mintedIds?.length ?? tokens.length).toLocaleString();
 
@@ -390,7 +391,7 @@ export function CollectionClient({ slug }: Props) {
     collection.slug === 'zgods'
       ? '/collections/zgods/3vUZmMCg.gif'
       : mintedTokens.find((token) => token.imageUrls?.length)?.imageUrls?.[0] ??
-        displayedTokens[0]?.imageUrls?.[0];
+      displayedTokens[0]?.imageUrls?.[0];
 
   return (
     <section className="flex flex-col gap-6 pb-20">
@@ -414,6 +415,14 @@ export function CollectionClient({ slug }: Props) {
               <p className="text-sm text-gold-200/80">
                 {collection.description || 'Official verified collection.'}
               </p>
+              <div className="mt-4">
+                <a
+                  href={`/collection/${collection.slug}/trade`}
+                  className="inline-flex items-center justify-center px-4 py-2 text-sm font-bold bg-gold-500 hover:bg-gold-400 text-black uppercase tracking-wider rounded-lg transition-all shadow-lg shadow-gold-500/20"
+                >
+                  Trade Collection
+                </a>
+              </div>
             </div>
           </div>
           <div className="grid gap-3 text-center sm:grid-cols-4">
@@ -450,9 +459,8 @@ export function CollectionClient({ slug }: Props) {
                 <button
                   key={option.value}
                   onClick={() => setViewMode(option.value)}
-                  className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] ${
-                    viewMode === option.value ? 'bg-gold-500/20 text-gold-100' : 'text-gold-400'
-                  }`}
+                  className={`px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] ${viewMode === option.value ? 'bg-gold-500/20 text-gold-100' : 'text-gold-400'
+                    }`}
                 >
                   {option.icon}
                 </button>
@@ -551,11 +559,10 @@ function FilterSidebar({
             <button
               key={option.value}
               onClick={() => setStatusFilter(option.value)}
-              className={`rounded-full border px-3 py-1 text-xs font-semibold tracking-[0.2em] ${
-                statusFilter === option.value
-                  ? 'border-gold-400 bg-gold-500/10 text-gold-100'
-                  : 'border-gold-500/20 text-gold-300/70 hover:border-gold-400/50'
-              }`}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold tracking-[0.2em] ${statusFilter === option.value
+                ? 'border-gold-400 bg-gold-500/10 text-gold-100'
+                : 'border-gold-500/20 text-gold-300/70 hover:border-gold-400/50'
+                }`}
             >
               {option.label}
             </button>
@@ -596,11 +603,10 @@ function FilterSidebar({
                       <button
                         key={`${group.trait}-${option.value}`}
                         onClick={() => onToggleTrait(group.trait, option.value)}
-                        className={`w-full rounded-xl border px-3 py-2 text-left text-sm flex items-center justify-between ${
-                          selected
-                            ? 'border-gold-400 bg-gold-500/10 text-gold-100'
-                            : 'border-gold-500/10 text-gold-200/80 hover:border-gold-400/40'
-                        }`}
+                        className={`w-full rounded-xl border px-3 py-2 text-left text-sm flex items-center justify-between ${selected
+                          ? 'border-gold-400 bg-gold-500/10 text-gold-100'
+                          : 'border-gold-500/10 text-gold-200/80 hover:border-gold-400/40'
+                          }`}
                       >
                         <span>{option.value}</span>
                         <span className="text-xs text-gold-300/80">{option.count}</span>
@@ -811,80 +817,4 @@ function ListLockedRow({ tokenId }: { tokenId: number }) {
       <div className="text-sm font-mono text-gold-300/90">#{tokenId}</div>
     </article>
   );
-}
-
-function useIpfsImage(urls: string[], enabled: boolean, cacheKey?: string) {
-  const [resolved, setResolved] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [errored, setErrored] = useState(false);
-
-  useEffect(() => {
-    if (!enabled || urls.length === 0) {
-      setResolved(null);
-      setLoading(false);
-      setErrored(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setErrored(false);
-    loadImageWithRace({ urls, timeout: 5000, cacheKey })
-      .then((result) => {
-        if (cancelled) return;
-        if (result.success && result.url) {
-          setResolved(result.url);
-          setErrored(false);
-        } else {
-          setResolved(null);
-          setErrored(true);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setResolved(null);
-          setErrored(true);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [urls, enabled, cacheKey]);
-
-  return { resolved, loading, errored };
-}
-
-function useInViewport<T extends HTMLElement>(rootMargin = '300px 0px 300px 0px') {
-  const [inView, setInView] = useState(false);
-  const observerRef = useRef<IntersectionObserver | null>(null);
-
-  const ref = useCallback(
-    (node: T | null) => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-        observerRef.current = null;
-      }
-      if (!node || inView) return;
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              setInView(true);
-              observer.disconnect();
-            }
-          });
-        },
-        { rootMargin }
-      );
-      observer.observe(node);
-      observerRef.current = observer;
-    },
-    [inView, rootMargin]
-  );
-
-  useEffect(() => () => observerRef.current?.disconnect(), []);
-
-  return { ref, inView } as { ref: (node: T | null) => void; inView: boolean };
 }

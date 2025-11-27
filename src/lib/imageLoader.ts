@@ -149,3 +149,48 @@ export function preloadImages(urls: string[]): void {
     img.src = url;
   });
 }
+
+import { useState, useEffect } from 'react';
+
+export function useIpfsImage(urls: string[], enabled: boolean, cacheKey?: string) {
+  const [resolved, setResolved] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errored, setErrored] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || urls.length === 0) {
+      setResolved(null);
+      setLoading(false);
+      setErrored(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setErrored(false);
+    loadImageWithRace({ urls, timeout: 5000, cacheKey })
+      .then((result) => {
+        if (cancelled) return;
+        if (result.success && result.url) {
+          setResolved(result.url);
+          setErrored(false);
+        } else {
+          setResolved(null);
+          setErrored(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResolved(null);
+          setErrored(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [urls, enabled, cacheKey]);
+
+  return { resolved, loading, errored };
+}

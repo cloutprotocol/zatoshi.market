@@ -2,13 +2,18 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 // Create a new PSBT listing
+// Create a new PSBT listing
 export const createListing = mutation({
     args: {
         psbtBase64: v.string(),
         sellerAddress: v.string(),
         price: v.number(),
-        tokenTicker: v.string(),
-        tokenAmount: v.number(),
+        // ZRC-20
+        tokenTicker: v.optional(v.string()),
+        tokenAmount: v.optional(v.number()),
+        // NFT
+        collectionSlug: v.optional(v.string()),
+        tokenId: v.optional(v.number()),
     },
     handler: async (ctx, args) => {
         const listingId = await ctx.db.insert("psbtListings", {
@@ -17,6 +22,8 @@ export const createListing = mutation({
             price: args.price,
             tokenTicker: args.tokenTicker,
             tokenAmount: args.tokenAmount,
+            collectionSlug: args.collectionSlug,
+            tokenId: args.tokenId,
             status: "active",
             createdAt: Date.now(),
         });
@@ -57,6 +64,25 @@ export const listListingsByTicker = query({
         const listings = await ctx.db
             .query("psbtListings")
             .withIndex("by_ticker", (q) => q.eq("tokenTicker", args.ticker))
+            .filter((q) => q.eq(q.field("status"), "active"))
+            .order("desc")
+            .take(limit);
+
+        return listings;
+    },
+});
+
+// List active listings by collection
+export const listListingsByCollection = query({
+    args: {
+        slug: v.string(),
+        limit: v.optional(v.number()),
+    },
+    handler: async (ctx, args) => {
+        const limit = args.limit || 50;
+        const listings = await ctx.db
+            .query("psbtListings")
+            .withIndex("by_collection", (q) => q.eq("collectionSlug", args.slug))
             .filter((q) => q.eq(q.field("status"), "active"))
             .order("desc")
             .take(limit);

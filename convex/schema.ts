@@ -189,8 +189,10 @@ export default defineSchema({
     psbtBase64: v.string(), // The PSBT content
     sellerAddress: v.string(), // Seller's wallet address
     price: v.number(), // Price in ZEC (or other unit)
-    tokenTicker: v.string(), // Ticker of the token being sold
-    tokenAmount: v.number(), // Amount of tokens
+    tokenTicker: v.optional(v.string()), // Ticker of the token being sold (ZRC-20)
+    tokenAmount: v.optional(v.number()), // Amount of tokens (ZRC-20)
+    collectionSlug: v.optional(v.string()), // Collection slug (NFT)
+    tokenId: v.optional(v.number()), // Token ID (NFT)
     status: v.string(), // "active" | "completed" | "cancelled"
     createdAt: v.number(), // Timestamp
     txid: v.optional(v.string()), // Final transaction ID if completed
@@ -199,6 +201,7 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_seller", ["sellerAddress"])
     .index("by_ticker", ["tokenTicker"])
+    .index("by_collection", ["collectionSlug"])
     .index("by_created_at", ["createdAt"]),
 
   // Badge definitions (global, reusable across collections)
