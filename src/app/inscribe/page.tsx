@@ -2108,21 +2108,21 @@ function InscribePageContent() {
                                   </div>
 
                                   {(overLim || overRemain || invalidAmount) && (
-                                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 space-y-1">
+                                    <div className="bg-yellow-500/5 border border-yellow-500/30 rounded-lg p-3 space-y-1">
                                       {overLim && (
-                                        <div className="text-red-400 flex items-center gap-2">
+                                        <div className="text-yellow-300 flex items-center gap-2">
                                           <span className="text-lg leading-none">×</span>
                                           Exceeds per-mint limit of {perMintLimit.toLocaleString()}
                                         </div>
                                       )}
                                       {overRemain && (
-                                        <div className="text-red-400 flex items-center gap-2">
+                                        <div className="text-yellow-300 flex items-center gap-2">
                                           <span className="text-lg leading-none">×</span>
                                           Exceeds remaining supply
                                         </div>
                                       )}
                                       {invalidAmount && (
-                                        <div className="text-red-400 flex items-center gap-2">
+                                        <div className="text-yellow-300 flex items-center gap-2">
                                           <span className="text-lg leading-none">×</span>
                                           Amount must be an integer
                                         </div>

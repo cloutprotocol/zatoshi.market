@@ -17,9 +17,10 @@ type ClaimedToken = {
 type RecentClaimsProps = {
   collectionSlug: string;
   limit?: number;
+  title?: string;
 };
 
-export function RecentClaims({ collectionSlug, limit = 12 }: RecentClaimsProps) {
+export function RecentClaims({ collectionSlug, limit = 12, title }: RecentClaimsProps) {
   const [claims, setClaims] = useState<ClaimedToken[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -124,38 +125,56 @@ export function RecentClaims({ collectionSlug, limit = 12 }: RecentClaimsProps) 
     }
   };
 
+  const mintedBadge = (
+    <div className="px-4 py-2 bg-gold-500/15 border border-gold-400/40 rounded-full flex items-center gap-2">
+      <span className="relative flex h-2 w-2">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+      </span>
+      <span className="text-sm sm:text-base font-semibold text-gold-100">
+        {totalCount.toLocaleString()} minted
+      </span>
+    </div>
+  );
+
+  const headerRow = title ? (
+    <div className="flex items-center justify-between gap-3 flex-wrap">
+      <h2 className="text-2xl font-bold text-gold-100 tracking-tight">{title}</h2>
+      {mintedBadge}
+    </div>
+  ) : (
+    <div className="flex items-center justify-end gap-4 flex-wrap">
+      {mintedBadge}
+    </div>
+  );
+
   if (loading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        {Array.from({ length: 6 }).map((_, idx) => (
-          <div key={`skeleton-${idx}`} className="aspect-square bg-black/20 border border-gold-500/10 rounded skeleton" />
-        ))}
+      <div className="space-y-4">
+        {headerRow}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          {Array.from({ length: 6 }).map((_, idx) => (
+            <div key={`skeleton-${idx}`} className="aspect-square bg-black/20 border border-gold-500/10 rounded skeleton" />
+          ))}
+        </div>
       </div>
     );
   }
 
   if (claims.length === 0) {
     return (
-      <div className="text-center py-12 text-gold-200/60">
-        No claims yet. Be the first to claim!
+      <div className="space-y-4">
+        {headerRow}
+        <div className="text-center py-12 text-gold-200/60">
+          No claims yet. Be the first to claim!
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Count Badge */}
-      <div className="flex items-center justify-end gap-4 flex-wrap">
-        <div className="px-4 py-2 bg-gold-500/15 border border-gold-400/40 rounded-full flex items-center gap-2">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-          </span>
-          <span className="text-sm sm:text-base font-semibold text-gold-100">
-            {totalCount.toLocaleString()} minted
-          </span>
-        </div>
-      </div>
+      {headerRow}
 
       {/* Carousel */}
       <div className="relative overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">

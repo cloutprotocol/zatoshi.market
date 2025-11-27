@@ -199,7 +199,7 @@ export default function Home() {
                 </h3>
 
                 <p className="mb-6 max-w-xl text-lg text-gold-300/80">
-                  The wait is over. Claim your allocated ZGODS using the same wallet you used in the pre-sale.
+                  Claim your allocated ZGODS using the same wallet you used in the pre-sale.
                 </p>
 
                 <div>
@@ -226,10 +226,7 @@ export default function Home() {
 
         {/* Recent Claims */}
         <section className="mb-16">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gold-100 tracking-tight">Recent Activity</h2>
-          </div>
-          <RecentClaims collectionSlug="zgods" limit={8} />
+          <RecentClaims collectionSlug="zgods" limit={8} title="Recent Activity" />
         </section>
 
         {/* Footer */}
