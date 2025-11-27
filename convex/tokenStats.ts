@@ -79,6 +79,57 @@ export const recordHolderCounts = mutation({
   },
 });
 
+// Single-entry variant to reduce contention on automatic retries
+export const recordHolderCount = mutation({
+  args: v.object({
+    entry: v.object({
+      tick: v.string(),
+      holders: v.number(),
+      source: v.optional(v.string()),
+      capturedAt: v.optional(v.number()),
+    }),
+  }),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const tick = normalizeTick(args.entry.tick);
+    const holders = args.entry.holders;
+    const source = args.entry.source;
+    const capturedAt = args.entry.capturedAt ?? now;
+
+    // Upsert latest (last-write-wins by updatedAt)
+    const existing = await ctx.db
+      .query("tokenHolderLatest")
+      .withIndex("by_tick", (q) => q.eq("tick", tick))
+      .first();
+    if (existing) {
+      if ((existing.updatedAt ?? 0) <= capturedAt) {
+        await ctx.db.patch(existing._id, {
+          holders,
+          source,
+          updatedAt: capturedAt,
+        });
+      }
+    } else {
+      await ctx.db.insert("tokenHolderLatest", {
+        tick,
+        holders,
+        source,
+        updatedAt: capturedAt,
+      });
+    }
+
+    // Always append snapshot
+    await ctx.db.insert("tokenHolderSnapshots", {
+      tick,
+      holders,
+      capturedAt,
+      source,
+    });
+
+    return true;
+  },
+});
+
 type TokenSummary = {
   holders?: number;
   holders_total?: number;
@@ -156,8 +207,10 @@ export const refreshHolderCounts = action({
     while (i < ticks.length) {
       const slice = ticks.slice(i, i + limit);
       const entries = await Promise.all(slice.map((t) => fetchOne(t)));
-      // Persist in Convex
-      await ctx.runMutation("tokenStats:recordHolderCounts", { entries });
+      // Persist each entry individually to avoid cross-batch contention
+      for (const entry of entries) {
+        await ctx.runMutation("tokenStats:recordHolderCount", { entry });
+      }
       i += limit;
     }
 
