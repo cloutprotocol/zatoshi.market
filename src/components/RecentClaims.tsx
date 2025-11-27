@@ -18,9 +18,10 @@ type RecentClaimsProps = {
   collectionSlug: string;
   limit?: number;
   title?: string;
+  cardSize?: 'sm' | 'md';
 };
 
-export function RecentClaims({ collectionSlug, limit = 12, title }: RecentClaimsProps) {
+export function RecentClaims({ collectionSlug, limit = 12, title, cardSize = 'md' }: RecentClaimsProps) {
   const [claims, setClaims] = useState<ClaimedToken[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -137,6 +138,8 @@ export function RecentClaims({ collectionSlug, limit = 12, title }: RecentClaims
     </div>
   );
 
+  const cardWidthClass = cardSize === 'sm' ? 'w-28 sm:w-32 md:w-36' : 'w-40 sm:w-48';
+
   const headerRow = title ? (
     <div className="flex items-center justify-between gap-3 flex-wrap">
       <h2 className="text-2xl font-bold text-gold-100 tracking-tight">{title}</h2>
@@ -186,7 +189,7 @@ export function RecentClaims({ collectionSlug, limit = 12, title }: RecentClaims
             return (
               <div
                 key={claim.inscriptionId}
-                className="flex-shrink-0 w-40 sm:w-48 group"
+                className={`flex-shrink-0 ${cardWidthClass} group`}
               >
                 <div className="relative aspect-square overflow-hidden rounded border border-gold-500/20 bg-black/40 group-hover:border-gold-400/60 transition-all">
                   {!imageLoaded[claim.tokenId] && !imageError[claim.tokenId] && (

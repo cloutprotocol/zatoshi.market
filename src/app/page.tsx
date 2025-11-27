@@ -169,65 +169,69 @@ export default function Home() {
           <LiveInscriptionsFeed />
         </section>
 
-
-
-        {/* ZGODS Claim Card */}
+        {/* ZGODS Claim + Activity */}
         <section className="mb-16">
-          <Link
-            href="/claim/zgods"
-            className="group relative block w-full overflow-hidden rounded-2xl border border-gold-500/20 bg-black/40 p-8 transition-all hover:border-gold-500/40 hover:bg-white/5 md:p-10"
-          >
+          <div className="group relative block w-full overflow-hidden rounded-2xl border border-gold-500/20 bg-black/40 p-6 sm:p-8 transition-all hover:border-gold-500/40 hover:bg-white/5">
             <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-gold-500/10 via-transparent to-transparent opacity-50 transition-opacity group-hover:opacity-100" />
 
-            <div className="flex flex-col items-center gap-8 md:flex-row md:gap-12">
-              <div className="shrink-0">
-                <div className="relative h-40 w-40 overflow-hidden rounded-xl border border-gold-500/30 bg-black/60 shadow-2xl shadow-gold-900/20 transition-transform duration-500 group-hover:scale-105 md:h-48 md:w-48">
-                  <Image
-                    src="/collections/zgods/3vUZmMCg.gif"
-                    alt="ZGODS"
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 768px) 160px, 192px"
-                    priority
-                  />
+            <div className="flex flex-col gap-8">
+              <div className="flex flex-col items-center gap-8 md:flex-row md:gap-10">
+                <div className="shrink-0">
+                  <div className="relative h-32 w-32 overflow-hidden rounded-xl border border-gold-500/30 bg-black/60 shadow-2xl shadow-gold-900/20 transition-transform duration-500 group-hover:scale-105 md:h-40 md:w-40">
+                    <Image
+                      src="/collections/zgods/3vUZmMCg.gif"
+                      alt="ZGODS"
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 128px, 160px"
+                      priority
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-1 flex-col text-center md:text-left gap-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.5em] text-gold-300/60 mb-1">ZGODS DROP</p>
+                    <h3 className="text-3xl font-black tracking-tight text-gold-100 md:text-4xl">
+                      Claim Your <span className="text-gold-500">ZGODS</span>
+                    </h3>
+                  </div>
+                  <p className="text-lg text-gold-300/80 max-w-xl mx-auto md:mx-0">
+                    Claim your allocated ZGODS using the same wallet you used in the pre-sale. Supply is limited—mint yours before they&apos;re gone.
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-center gap-3">
+                    <Link
+                      href="/claim/zgods"
+                      className="inline-flex items-center justify-center rounded-lg bg-gold-500 px-8 py-3 text-sm font-bold uppercase tracking-wider text-black transition-all hover:bg-gold-400 hover:shadow-[0_0_20px_rgba(234,179,8,0.3)]"
+                    >
+                      Claim Now
+                    </Link>
+                    <span className="text-xs uppercase tracking-[0.4em] text-gold-300/60">
+                      Live Drop
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex flex-1 flex-col text-center md:text-left">
-                <h3 className="mb-3 text-3xl font-black tracking-tight text-gold-100 md:text-4xl">
-                  Claim Your <span className="text-gold-500">ZGODS</span>
-                </h3>
-
-                <p className="mb-6 max-w-xl text-lg text-gold-300/80">
-                  Claim your allocated ZGODS using the same wallet you used in the pre-sale.
-                </p>
-
-                <div>
-                  <span className="inline-flex items-center justify-center rounded-lg bg-gold-500 px-8 py-3 text-sm font-bold uppercase tracking-wider text-black transition-all hover:bg-gold-400 hover:shadow-[0_0_20px_rgba(234,179,8,0.3)]">
-                    Claim Now
-                  </span>
-                </div>
+              <div className="border-t border-gold-500/10 pt-6">
+                <RecentClaims collectionSlug="zgods" limit={10} title="Recent Activity" cardSize="sm" />
               </div>
             </div>
-          </Link>
+          </div>
         </section>
 
         {/* Live Mints Grid */}
         <section className="mb-16">
           <SectionHeader title="Live Mints" link="/tokens?filter=live" />
-          <TokenGrid tokens={liveMints} loading={loadingTokens} type="minting" />
+          <LiveMintsList tokens={liveMints} loading={loadingTokens} />
         </section>
 
         {/* Trending Tokens (Combined) */}
         <section className="mb-16">
           <SectionHeader title="Trending Tokens" link="/tokens" />
-          <TokenGrid tokens={trendingTokens} loading={loadingTokens} type="completed" />
+          <TokenGrid tokens={trendingTokens} loading={loadingTokens} />
         </section>
 
-        {/* Recent Claims */}
-        <section className="mb-16">
-          <RecentClaims collectionSlug="zgods" limit={8} title="Recent Activity" />
-        </section>
 
         {/* Footer */}
         <footer className="border-t border-gold-500/10 pt-12 mt-12">
@@ -341,7 +345,7 @@ function LiveInscriptionsFeed() {
   );
 }
 
-function TokenGrid({ tokens, loading, type }: { tokens: any[]; loading: boolean; type: 'minting' | 'completed' }) {
+function TokenGrid({ tokens, loading }: { tokens: any[]; loading: boolean }) {
   if (loading) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -363,15 +367,15 @@ function TokenGrid({ tokens, loading, type }: { tokens: any[]; loading: boolean;
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
       {tokens.map((token) => (
-        <TokenCard key={token.ticker} token={token} type={type} />
+        <TokenCard key={token.ticker} token={token} />
       ))}
     </div>
   );
 }
 
-function TokenCard({ token, type }: { token: any; type: 'minting' | 'completed' }) {
+function TokenCard({ token }: { token: any }) {
   const progress = token.progress || 0;
-  const isMinting = type === 'minting';
+  const isCompleted = progress >= 1;
   const statLabel = token.statLabel;
 
   return (
@@ -380,7 +384,11 @@ function TokenCard({ token, type }: { token: any; type: 'minting' | 'completed' 
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gold-500/20 to-black border border-gold-500/20 flex items-center justify-center text-sm font-bold text-gold-100 group-hover:scale-105 transition-transform duration-300">
           {token.ticker.slice(0, 1).toUpperCase()}
         </div>
-        {isMinting && (
+        {isCompleted ? (
+          <span className="px-2 py-0.5 bg-black/30 border border-gold-500/30 text-gold-200/70 text-[9px] font-bold uppercase tracking-wider rounded">
+            Completed
+          </span>
+        ) : (
           <Link
             href={`/inscribe?tab=zrc20&tick=${token.ticker.toLowerCase()}`}
             className="px-2 py-0.5 bg-gold-500 text-black text-[9px] font-bold uppercase tracking-wider rounded hover:bg-gold-400 transition-colors shadow-lg shadow-gold-500/20"
@@ -400,11 +408,13 @@ function TokenCard({ token, type }: { token: any; type: 'minting' | 'completed' 
       <div className="space-y-1.5">
         <div className="flex justify-between text-[10px] text-gold-300/70 font-medium">
           <span>Progress</span>
-          <span className="text-gold-100">{formatPercent(progress)}</span>
+          <span className={isCompleted ? "text-green-300 font-bold" : "text-gold-100"}>
+            {isCompleted ? "Completed" : formatPercent(progress)}
+          </span>
         </div>
         <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
           <div
-            className={`h-full rounded-full transition-all duration-500 ${isMinting ? 'bg-gradient-to-r from-gold-600 to-gold-400' : 'bg-green-500/80'}`}
+            className={`h-full rounded-full transition-all duration-500 ${isCompleted ? 'bg-green-500/80' : 'bg-gradient-to-r from-gold-600 to-gold-400'}`}
             style={{ width: `${Math.min(progress * 100, 100)}%` }}
           />
         </div>
@@ -415,14 +425,102 @@ function TokenCard({ token, type }: { token: any; type: 'minting' | 'completed' 
         )}
       </div>
 
-      {!isMinting && (
-        <Link
-          href={`/tokens?tick=${token.ticker.toLowerCase()}`}
-          className="absolute inset-0 z-10"
-        >
-          <span className="sr-only">View {token.ticker}</span>
-        </Link>
-      )}
+      <Link
+        href={`/tokens?tick=${token.ticker.toLowerCase()}`}
+        className="absolute inset-0 z-10"
+      >
+        <span className="sr-only">View {token.ticker}</span>
+      </Link>
+    </div>
+  );
+}
+
+function LiveMintsList({ tokens, loading }: { tokens: any[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="border border-gold-500/10 rounded-2xl bg-black/30 divide-y divide-gold-500/10">
+        {[...Array(4)].map((_, idx) => (
+          <div key={idx} className="flex flex-col sm:grid sm:grid-cols-[1.4fr,0.9fr,1fr,0.8fr] gap-4 px-4 py-4 animate-pulse text-gold-400/40">
+            <div className="h-8 bg-white/5 rounded" />
+            <div className="h-8 bg-white/5 rounded" />
+            <div className="h-8 bg-white/5 rounded" />
+            <div className="h-8 bg-white/5 rounded" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (tokens.length === 0) {
+    return (
+      <div className="text-center py-12 text-gold-500/40 border border-dashed border-gold-500/10 rounded-2xl bg-black/30">
+        No live mints right now.
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-gold-500/10 rounded-2xl bg-black/30 overflow-hidden">
+      <div className="hidden sm:grid grid-cols-[1.4fr,0.9fr,1fr,0.8fr] text-[10px] uppercase tracking-[0.4em] text-gold-300/60 px-4 py-3 border-b border-gold-500/10">
+        <span>Token</span>
+        <span>Supply</span>
+        <span>Progress</span>
+        <span>Action</span>
+      </div>
+      <div className="divide-y divide-gold-500/10">
+        {tokens.map((token) => {
+          const progress = Math.min((token.progress || 0) * 100, 100);
+          const completed = progress >= 100;
+          return (
+            <div key={token.ticker} className="flex flex-col sm:grid sm:grid-cols-[1.4fr,0.9fr,1fr,0.8fr] gap-4 px-4 py-4 items-center">
+              <div className="flex items-center gap-3 w-full">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-gold-500/20 to-black border border-gold-500/20 flex items-center justify-center text-base font-bold text-gold-100">
+                  {token.ticker.slice(0, 1).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-lg font-black text-gold-100 truncate">
+                    {token.ticker}
+                  </div>
+                  <div className="text-xs text-gold-400/70 font-mono truncate">
+                    {token.statLabel || 'Live ZRC-20'}
+                  </div>
+                </div>
+              </div>
+              <div className="w-full text-sm text-gold-300/70 font-mono">
+                {formatNumber(Number(token.supply))}
+              </div>
+              <div className="w-full space-y-1">
+                <div className="flex justify-between text-[10px] text-gold-300/70 font-medium">
+                  <span>Progress</span>
+                  <span className={completed ? 'text-green-300 font-bold' : 'text-gold-100'}>
+                    {completed ? 'Completed' : `${progress.toFixed(1)}%`}
+                  </span>
+                </div>
+                <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${completed ? 'bg-green-500/80' : 'bg-gradient-to-r from-gold-600 to-gold-400'}`}
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+              </div>
+              <div className="w-full flex justify-end">
+                {completed ? (
+                  <span className="px-3 py-1 rounded-full border border-gold-500/20 text-xs font-bold uppercase tracking-widest text-gold-300/70">
+                    Completed
+                  </span>
+                ) : (
+                  <Link
+                    href={`/inscribe?tab=zrc20&tick=${token.ticker.toLowerCase()}`}
+                    className="px-3 py-1 rounded-full bg-gold-500 text-black text-xs font-bold uppercase tracking-widest hover:bg-gold-400 transition-colors"
+                  >
+                    Mint
+                  </Link>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
