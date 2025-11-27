@@ -204,10 +204,11 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
 
                             <div className="flex flex-col gap-3 w-full max-w-sm">
                                 <button
-                                    onClick={() => setShowCreate(true)}
-                                    className="w-full px-5 py-3 rounded-2xl bg-gold-500 text-black font-bold tracking-wide text-sm shadow-[0_0_30px_rgba(234,179,8,0.25)] hover:bg-gold-400 transition-colors"
+                                    type="button"
+                                    disabled
+                                    className="w-full px-5 py-3 rounded-2xl bg-black/30 border border-gold-500/10 text-gold-200/30 font-bold tracking-wide text-sm cursor-not-allowed"
                                 >
-                                    List {ticker}
+                                    Listings Paused
                                 </button>
                                 <button
                                     onClick={() => router.refresh()}

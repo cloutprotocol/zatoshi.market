@@ -290,11 +290,18 @@ function LiveInscriptionsFeed() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
         <div className="flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-          <h2 className="text-lg font-bold text-gold-100 tracking-tight">Live Inscriptions</h2>
+          <h2 className="text-sm font-bold text-gold-100 tracking-tight">LIVE INSCRIPTIONS</h2>
         </div>
+
+        <Link
+          href="/inscribe"
+          className="ml-auto flex items-center justify-center px-3 py-1.5 bg-gold-500 text-black rounded-sm text-xs font-bold uppercase tracking-wide hover:bg-gold-400 transition-colors sm:ml-0"
+        >
+          Inscribe
+        </Link>
       </div>
 
       <div className="flex gap-4 overflow-x-auto no-scrollbar pb-4">
