@@ -367,6 +367,7 @@ export default function TokenListPage() {
         const result = await refreshCounts({ ticks });
         if (cancelled || !result) return;
         setTokenStats((prev) => {
+          let hasChanges = false;
           const next = { ...prev } as Record<string, TokenStats>;
           (result as any[]).forEach((value: any) => {
             const t = (value?.tick || '').toLowerCase();
@@ -380,8 +381,9 @@ export default function TokenListPage() {
               integrity: value?.integrity,
               updatedAt: value?.updatedAt ?? Date.now(),
             };
+            hasChanges = true;
           });
-          return next;
+          return hasChanges ? next : prev;
         });
       } catch (err) {
         console.error('Failed to refresh holder counts batch', err);
@@ -425,6 +427,7 @@ export default function TokenListPage() {
         const result = await refreshCounts({ ticks });
         if (cancelled || !result) return;
         setTokenStats((prev) => {
+          let hasChanges = false;
           const next = { ...prev } as Record<string, TokenStats>;
           (result as any[]).forEach((value: any) => {
             const t = (value?.tick || '').toLowerCase();
@@ -438,8 +441,9 @@ export default function TokenListPage() {
               integrity: value?.integrity,
               updatedAt: value?.updatedAt ?? Date.now(),
             };
+            hasChanges = true;
           });
-          return next;
+          return hasChanges ? next : prev;
         });
       } catch (err) {
         console.error('Failed to refresh holder counts batch', err);
@@ -461,8 +465,8 @@ export default function TokenListPage() {
 
   // Seed current page from cached Convex latest counts to render faster
   const paginatedTicks = useMemo(
-    () => sortedTokens.map((e) => e.base.ticker.toLowerCase()),
-    [sortedTokens]
+    () => sortedTokens.slice(0, visibleCount).map((e) => e.base.ticker.toLowerCase()),
+    [sortedTokens, visibleCount]
   );
   const latestCounts = useQuery(api.tokenStats.getLatestHolderCounts, {
     ticks: paginatedTicks,
@@ -470,6 +474,7 @@ export default function TokenListPage() {
   useEffect(() => {
     if (!latestCounts) return;
     setTokenStats((prev) => {
+      let hasChanges = false;
       const next = { ...prev } as Record<string, TokenStats>;
       (latestCounts as any[]).forEach((data: any) => {
         if (!data) return;
@@ -482,9 +487,10 @@ export default function TokenListPage() {
             holders: data.holders,
             updatedAt: data.updatedAt,
           } as TokenStats;
+          hasChanges = true;
         }
       });
-      return next;
+      return hasChanges ? next : prev;
     });
   }, [latestCounts]);
 
@@ -813,13 +819,13 @@ function FiltersBar({
       </div>
 
       {/* Right: Filters & Sort */}
-      <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto no-scrollbar">
-        <div className="flex items-center bg-black/40 rounded border border-gold-500/10 p-0.5">
+      <div className="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto">
+        <div className="flex items-center w-full md:w-auto justify-between md:justify-start bg-black/40 rounded border border-gold-500/10 p-0.5 overflow-x-auto no-scrollbar">
           {STATUS_FILTERS.map((filter) => (
             <button
               key={filter.value}
               onClick={() => onStatusFilterChange(filter.value)}
-              className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all whitespace-nowrap ${statusFilter === filter.value
+              className={`flex-1 md:flex-none px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-sm transition-all whitespace-nowrap ${statusFilter === filter.value
                 ? 'bg-gold-500 text-black shadow-sm'
                 : 'text-gold-500/50 hover:text-gold-300 hover:bg-white/5'
                 }`}
@@ -829,24 +835,24 @@ function FiltersBar({
           ))}
         </div>
 
-        <div className="h-4 w-px bg-gold-500/20 hidden md:block" />
+        <div className="h-px w-full md:h-4 md:w-px bg-gold-500/20 hidden md:block" />
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 bg-black/40 border border-gold-500/10 rounded px-2 py-1">
-            <span className="text-[10px] text-gold-500/50 uppercase font-bold">Holders &gt;</span>
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <div className="flex items-center gap-2 bg-black/40 border border-gold-500/10 rounded px-2 py-1 flex-1 md:flex-none">
+            <span className="text-[10px] text-gold-500/50 uppercase font-bold whitespace-nowrap">Holders &gt;</span>
             <input
               type="number"
               min={0}
               value={minHolders}
               onChange={(event) => onMinHoldersChange(Number(event.target.value))}
-              className="w-12 bg-transparent text-right text-xs text-gold-100 focus:outline-none"
+              className="w-full md:w-12 bg-transparent text-right text-xs text-gold-100 focus:outline-none"
             />
           </div>
 
           <select
             value={sortKey}
             onChange={(event) => onSortKeyChange(event.target.value as SortKey)}
-            className="bg-black/40 border border-gold-500/20 rounded px-2 py-1.5 text-xs text-gold-200 focus:outline-none focus:border-gold-500/40 cursor-pointer"
+            className="flex-1 md:flex-none bg-black/40 border border-gold-500/20 rounded px-2 py-1.5 text-xs text-gold-200 focus:outline-none focus:border-gold-500/40 cursor-pointer"
           >
             {SORT_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -969,124 +975,220 @@ function TokensTable({
   }, [hasMore, loadingMore, onLoadMore]);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gold-500/10 bg-black/40 backdrop-blur-sm">
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-xs md:text-sm">
-          <thead className="bg-black/40 border-b border-gold-500/20 sticky top-0 z-20 backdrop-blur-md">
-            <tr>
-              <th className="px-6 py-4 text-left text-[10px] uppercase tracking-[0.2em] text-gold-400/80 font-bold">Token</th>
-              <th className="px-6 py-4 text-left text-[10px] uppercase tracking-[0.2em] text-gold-400/80 font-bold">Minted</th>
-              <th className="px-6 py-4 text-left text-[10px] uppercase tracking-[0.2em] text-gold-400/80 font-bold">Holders</th>
-              <th className="px-6 py-4 text-center text-[10px] uppercase tracking-[0.2em] text-gold-400/80 font-bold w-1/4">Progress</th>
-              <th className="px-6 py-4 text-left text-[10px] uppercase tracking-[0.2em] text-gold-400/80 font-bold">Status</th>
-              <th className="px-6 py-4 text-right text-[10px] uppercase tracking-[0.2em] text-gold-400/80 font-bold">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gold-500/5">
-            {tokens.map((entry, index) => {
-              const { base } = entry;
-              const isSelected = selectedTick?.toLowerCase() === base.ticker.toLowerCase();
-              return (
-                <React.Fragment key={base.ticker}>
-                  <tr
-                    onClick={() => onSelect(isSelected ? null : base.ticker)}
-                    className={`group cursor-pointer transition-all duration-200 border-b border-gold-500/5 ${isSelected ? 'bg-gold-500/10' : 'bg-black/20 hover:bg-gold-500/5'
-                      }`}
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <div className="font-bold text-gold-100 tracking-wide text-lg">
-                            {base.ticker}
+
+    <div className="space-y-4">
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {tokens.map((entry) => {
+          const { base } = entry;
+          const isSelected = selectedTick?.toLowerCase() === base.ticker.toLowerCase();
+          return (
+            <div
+              key={base.ticker}
+              onClick={() => onSelect(isSelected ? null : base.ticker)}
+              className={`p-4 rounded-lg border transition-all ${isSelected
+                ? 'bg-gold-500/10 border-gold-500/40'
+                : 'bg-black/40 border-gold-500/10 hover:border-gold-500/30'
+                }`}
+            >
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex items-center gap-3">
+                  <div>
+                    <div className="font-bold text-gold-100 text-lg tracking-wide">
+                      {base.ticker}
+                    </div>
+                    <div className="text-[10px] text-gold-500/40 font-mono truncate max-w-[120px]">
+                      {base.deployer ? shortAddress(base.deployer) : '—'}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-gold-200 font-mono text-sm">
+                    {formatPercent(entry.progress)}
+                  </div>
+                  <div className={`text-[9px] uppercase tracking-wider font-bold ${entry.progress >= 1 ? 'text-green-500/70' : 'text-gold-500/50'}`}>
+                    {entry.progress >= 1 ? 'Minted' : 'Live'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4 text-xs">
+                <div>
+                  <div className="text-[9px] uppercase tracking-wider text-gold-500/40 mb-0.5">Minted</div>
+                  <div className="text-gold-200 font-mono">
+                    {formatNumber(entry.mintedSupply)}
+                    <span className="text-gold-500/30 text-[9px] ml-1">/ {formatNumber(entry.maxSupply)}</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-wider text-gold-500/40 mb-0.5">Holders</div>
+                  <div className="text-gold-200 font-mono">{formatNumber(entry.holders)}</div>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="h-1.5 w-full bg-black/50 rounded-full overflow-hidden border border-gold-500/10 mb-4">
+                <div
+                  className={`h-full bg-gradient-to-r from-gold-600 to-gold-400 rounded-full transition-all duration-500 ${entry.progress < 1 ? 'shine-effect' : ''}`}
+                  style={{ width: `${Math.min(entry.progress * 100, 100)}%` }}
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <Link
+                  href={`/inscribe?tab=zrc20&tick=${base.ticker.toLowerCase()}&op=mint`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex-1 py-2 text-center text-xs font-bold border border-gold-500/30 hover:bg-gold-500/10 text-gold-200 uppercase tracking-wider rounded"
+                >
+                  Mint
+                </Link>
+                <Link
+                  href={`/tokens/trade/${base.ticker.toLowerCase()}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex-1 py-2 text-center text-xs font-bold bg-gold-500 text-black hover:bg-gold-400 uppercase tracking-wider rounded shadow-lg shadow-gold-500/10"
+                >
+                  Trade
+                </Link>
+              </div>
+
+              {/* Expanded Detail Panel for Mobile */}
+              {isSelected && (
+                <div className="mt-4 pt-4 border-t border-gold-500/10 animate-in fade-in slide-in-from-top-2">
+                  <TokenDetailPanel
+                    token={base}
+                    stats={tokenStats[base.ticker.toLowerCase()]}
+                    detailState={tokenDetails[base.ticker.toLowerCase()]}
+                    snapshots={snapshots}
+                    onClose={() => onSelect(null)}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block overflow-hidden rounded-lg border border-gold-500/10 bg-black/40 backdrop-blur-sm">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-xs md:text-sm">
+            <thead className="bg-black/40 border-b border-gold-500/20 sticky top-0 z-20 backdrop-blur-md">
+              <tr>
+                <th className="px-6 py-4 text-left text-[10px] uppercase tracking-[0.2em] text-gold-400/80 font-bold">Token</th>
+                <th className="px-6 py-4 text-left text-[10px] uppercase tracking-[0.2em] text-gold-400/80 font-bold">Minted</th>
+                <th className="px-6 py-4 text-left text-[10px] uppercase tracking-[0.2em] text-gold-400/80 font-bold">Holders</th>
+                <th className="px-6 py-4 text-center text-[10px] uppercase tracking-[0.2em] text-gold-400/80 font-bold w-1/4">Progress</th>
+                <th className="px-6 py-4 text-left text-[10px] uppercase tracking-[0.2em] text-gold-400/80 font-bold">Status</th>
+                <th className="px-6 py-4 text-right text-[10px] uppercase tracking-[0.2em] text-gold-400/80 font-bold">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gold-500/5">
+              {tokens.map((entry, index) => {
+                const { base } = entry;
+                const isSelected = selectedTick?.toLowerCase() === base.ticker.toLowerCase();
+                return (
+                  <React.Fragment key={base.ticker}>
+                    <tr
+                      onClick={() => onSelect(isSelected ? null : base.ticker)}
+                      className={`group cursor-pointer transition-all duration-200 border-b border-gold-500/5 ${isSelected ? 'bg-gold-500/10' : 'bg-black/20 hover:bg-gold-500/5'
+                        }`}
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <div className="font-bold text-gold-100 tracking-wide text-lg">
+                              {base.ticker}
+                            </div>
+                            <div className="text-[10px] text-gold-500/40 font-mono truncate max-w-[100px]">
+                              {base.deployer ? shortAddress(base.deployer) : '—'}
+                            </div>
                           </div>
-                          <div className="text-[10px] text-gold-500/40 font-mono truncate max-w-[100px]">
-                            {base.deployer ? shortAddress(base.deployer) : '—'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-mono text-gold-200 text-sm">
+                          {formatNumber(entry.mintedSupply)}
+                        </div>
+                        <div className="text-[10px] text-gold-500/40">
+                          of {formatNumber(entry.maxSupply)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-mono text-gold-200">
+                          {formatNumber(entry.holders)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-2 w-full max-w-md mx-auto">
+                          <div className="flex justify-between text-[10px]">
+                            <span className="text-gold-200 font-mono">{formatPercent(entry.progress)}</span>
+                            <span className="text-gold-500/40 text-[9px] uppercase tracking-wider">
+                              {entry.progress >= 1 ? 'Completed' : 'Minting'}
+                            </span>
                           </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-mono text-gold-200 text-sm">
-                        {formatNumber(entry.mintedSupply)}
-                      </div>
-                      <div className="text-[10px] text-gold-500/40">
-                        of {formatNumber(entry.maxSupply)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-mono text-gold-200">
-                        {formatNumber(entry.holders)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-2 w-full max-w-md mx-auto">
-                        <div className="flex justify-between text-[10px]">
-                          <span className="text-gold-200 font-mono">{formatPercent(entry.progress)}</span>
-                          <span className="text-gold-500/40 text-[9px] uppercase tracking-wider">
-                            {entry.progress >= 1 ? 'Completed' : 'Minting'}
-                          </span>
-                        </div>
-                        <div className="h-2 w-full bg-black/50 rounded-full overflow-hidden border border-gold-500/10 shadow-inner">
-                          <div
-                            className={`h-full bg-gradient-to-r from-gold-600 to-gold-400 rounded-full transition-all duration-500 ${entry.progress < 1 ? 'shine-effect' : ''}`}
-                            style={{ width: `${Math.min(entry.progress * 100, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {entry.integrity ? (
-                        <div className="flex items-center gap-1.5">
-                          <div className={`w-1.5 h-1.5 rounded-full ${entry.integrity.consistent ? 'bg-green-500/50' : 'bg-red-500/50'}`} />
-                          <span className={`text-[10px] font-medium ${entry.integrity.consistent ? 'text-green-500/70' : 'text-red-500/70'}`}>
-                            {entry.integrity.consistent ? 'OK' : 'Check'}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-gold-500/20 text-[10px]">—</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Link
-                          href={`/inscribe?tab=zrc20&tick=${base.ticker.toLowerCase()}&op=mint`}
-                          onClick={(event) => event.stopPropagation()}
-                          className="px-3 py-1.5 text-[10px] font-bold border border-gold-500/30 hover:border-gold-400 hover:bg-gold-500/10 text-gold-200 uppercase tracking-wider rounded transition-all"
-                        >
-                          Mint
-                        </Link>
-                        <Link
-                          href={`/tokens/trade/${base.ticker.toLowerCase()}`}
-                          onClick={(event) => event.stopPropagation()}
-                          className="px-3 py-1.5 text-[10px] font-bold bg-gold-500 hover:bg-gold-400 text-black uppercase tracking-wider rounded transition-all shadow-lg shadow-gold-500/20"
-                        >
-                          Trade
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                  {
-                    isSelected && (
-                      <tr className="bg-black/40 border-b border-gold-500/10">
-                        <td colSpan={6} className="p-0">
-                          <div className="overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
-                            <TokenDetailPanel
-                              token={base}
-                              stats={tokenStats[base.ticker.toLowerCase()]}
-                              detailState={tokenDetails[base.ticker.toLowerCase()]}
-                              snapshots={snapshots}
-                              onClose={() => onSelect(null)}
+                          <div className="h-2 w-full bg-black/50 rounded-full overflow-hidden border border-gold-500/10 shadow-inner">
+                            <div
+                              className={`h-full bg-gradient-to-r from-gold-600 to-gold-400 rounded-full transition-all duration-500 ${entry.progress < 1 ? 'shine-effect' : ''}`}
+                              style={{ width: `${Math.min(entry.progress * 100, 100)}%` }}
                             />
                           </div>
-                        </td>
-                      </tr>
-                    )
-                  }
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {entry.integrity ? (
+                          <div className="flex items-center gap-1.5">
+                            <div className={`w-1.5 h-1.5 rounded-full ${entry.integrity.consistent ? 'bg-green-500/50' : 'bg-red-500/50'}`} />
+                            <span className={`text-[10px] font-medium ${entry.integrity.consistent ? 'text-green-500/70' : 'text-red-500/70'}`}>
+                              {entry.integrity.consistent ? 'OK' : 'Check'}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-gold-500/20 text-[10px]">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Link
+                            href={`/inscribe?tab=zrc20&tick=${base.ticker.toLowerCase()}&op=mint`}
+                            onClick={(event) => event.stopPropagation()}
+                            className="px-3 py-1.5 text-[10px] font-bold border border-gold-500/30 hover:border-gold-400 hover:bg-gold-500/10 text-gold-200 uppercase tracking-wider rounded transition-all"
+                          >
+                            Mint
+                          </Link>
+                          <Link
+                            href={`/tokens/trade/${base.ticker.toLowerCase()}`}
+                            onClick={(event) => event.stopPropagation()}
+                            className="px-3 py-1.5 text-[10px] font-bold bg-gold-500 hover:bg-gold-400 text-black uppercase tracking-wider rounded transition-all shadow-lg shadow-gold-500/20"
+                          >
+                            Trade
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                    {
+                      isSelected && (
+                        <tr className="bg-black/40 border-b border-gold-500/10">
+                          <td colSpan={6} className="p-0">
+                            <div className="overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
+                              <TokenDetailPanel
+                                token={base}
+                                stats={tokenStats[base.ticker.toLowerCase()]}
+                                detailState={tokenDetails[base.ticker.toLowerCase()]}
+                                snapshots={snapshots}
+                                onClose={() => onSelect(null)}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    }
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {
@@ -1101,7 +1203,7 @@ function TokensTable({
         )
       }
 
-      <div className="px-6 py-2 border-t border-gold-500/10 bg-black/20 text-[10px] text-gold-500/30 font-mono text-center">
+      <div className="px-6 py-2 border-t border-gold-500/10 bg-black/20 text-[10px] text-gold-500/30 font-mono text-center rounded-b-lg">
         Showing {tokens.length} of {totalTokens} tokens
       </div>
     </div >
@@ -1136,7 +1238,7 @@ function TokenDetailPanel({
     <section className="mt-10 border border-gold-500/10 bg-black/40 p-6 relative overflow-hidden group rounded-lg">
       {/* Background decoration */}
       <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-        <div className="text-9xl font-black text-gold-500 leading-none select-none">
+        <div className="text-6xl md:text-9xl font-black text-gold-500 leading-none select-none">
           {token.ticker.substring(0, 2)}
         </div>
       </div>
@@ -1146,7 +1248,7 @@ function TokenDetailPanel({
           <p className="text-xs uppercase tracking-[0.4em] text-zinc-500 mb-1">
             Token Detail
           </p>
-          <h2 className="text-3xl font-black text-zinc-100">
+          <h2 className="text-2xl md:text-3xl font-black text-zinc-100">
             {token.ticker}
           </h2>
           <p className="text-sm text-zinc-400">

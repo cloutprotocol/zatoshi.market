@@ -2087,7 +2087,7 @@ function InscribePageContent() {
                           {/* Background decoration */}
                           <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                             <div className="text-9xl font-black text-gold-500 leading-none select-none">
-                              {tokenSummary.tick.substring(0, 2)}
+                              {(tokenSummary.tick || '').substring(0, 2)}
                             </div>
                           </div>
 

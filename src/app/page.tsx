@@ -169,6 +169,8 @@ export default function Home() {
           <LiveInscriptionsFeed />
         </section>
 
+
+
         {/* ZGODS Claim Card */}
         <section className="mb-16">
           <Link
@@ -192,14 +194,6 @@ export default function Home() {
               </div>
 
               <div className="flex flex-1 flex-col text-center md:text-left">
-                <div className="mb-2 flex items-center justify-center gap-2 md:justify-start">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500"></span>
-                  </span>
-                  <span className="font-mono text-xs font-bold uppercase tracking-widest text-gold-400">Claim Live</span>
-                </div>
-
                 <h3 className="mb-3 text-3xl font-black tracking-tight text-gold-100 md:text-4xl">
                   Claim Your <span className="text-gold-500">ZGODS</span>
                 </h3>
