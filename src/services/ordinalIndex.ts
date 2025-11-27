@@ -67,6 +67,7 @@ export interface TokenSummary {
   supply_base_units?: string;
   tick: string;
   transfers_completed?: number;
+  holders_total?: number;
   integrity?: {
     burned_base_units?: string;
     consistent?: boolean;
@@ -83,6 +84,7 @@ export interface TokenIntegrity {
   supply_base_units?: string;
   tick: string;
   total_holders?: number;
+  holders_positive?: number;
 }
 
 export interface ZRC721Collection {

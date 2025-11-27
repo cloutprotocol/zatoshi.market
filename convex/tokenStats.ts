@@ -81,6 +81,7 @@ export const recordHolderCounts = mutation({
 
 type TokenSummary = {
   holders?: number;
+  holders_total?: number;
   transfers_completed?: number;
   tick: string;
 };
@@ -88,6 +89,7 @@ type TokenSummary = {
 type TokenIntegrity = {
   consistent: boolean;
   total_holders?: number;
+  holders_positive?: number;
   supply_base_units?: string;
   sum_overall_base_units?: string;
   sum_available_base_units?: string;

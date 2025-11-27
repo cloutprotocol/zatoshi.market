@@ -80,6 +80,18 @@ const formatBaseUnits = (value?: string, dec = 18) => {
   }
 };
 
+// Convert base units (string) to a whole-number amount using decimals, truncated to integer
+function baseUnitsToWhole(baseUnits?: string, decStr?: string): number {
+  try {
+    const dec = Number(decStr ?? '0');
+    const denom = BigInt(10) ** BigInt(Number.isFinite(dec) ? Math.max(0, dec) : 0);
+    const q = BigInt(baseUnits ?? '0') / denom;
+    return Number(q);
+  } catch {
+    return 0;
+  }
+}
+
 const shortAddress = (address: string) =>
   address.length <= 12
     ? address
@@ -100,29 +112,27 @@ interface EnrichedToken {
 
 
 
-function RefreshTopTokensButton() {
-  const refreshTop = useAction(api.tokenStats.refreshTopTokens);
+function RefreshTopTokensButton({ onRefresh }: { onRefresh: () => void }) {
   const [busy, setBusy] = useState(false);
   return (
     <button
       onClick={async () => {
         setBusy(true);
         try {
-          await refreshTop({ pages: 5, limit: 100 });
+          await onRefresh();
         } finally {
           setBusy(false);
         }
       }}
       disabled={busy}
       className="group relative flex items-center gap-2 px-3 py-1.5 border border-gold-500/20 rounded hover:bg-gold-500/10 transition-all disabled:opacity-50"
-      title="Refresh Top Tokens"
+      title="Refresh Data"
     >
       <div className="relative flex h-2 w-2">
-        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 ${busy ? 'hidden' : ''}`}></span>
-        <span className={`relative inline-flex rounded-full h-2 w-2 ${busy ? 'bg-gold-500 animate-pulse' : 'bg-green-500'}`}></span>
+        <span className={`relative inline-flex rounded-full h-2 w-2 ${busy ? 'bg-gold-500 animate-pulse' : 'bg-gold-500/50'}`}></span>
       </div>
       <span className="text-[10px] uppercase tracking-wider font-bold text-gold-300 group-hover:text-gold-100">
-        {busy ? 'Syncing' : 'Live'}
+        {busy ? 'Syncing' : 'Refresh'}
       </span>
     </button>
   );
@@ -150,72 +160,129 @@ export default function TokenListPage() {
   const hydrationInFlight = useRef<Set<string>>(new Set());
   const refreshCounts = useAction(api.tokenStats.refreshHolderCounts);
 
-  const [visibleCount, setVisibleCount] = useState(50);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Pagination for tokens fetched from indexer
+  const [currentPage, setCurrentPage] = useState(0);
+  const [apiHasMore, setApiHasMore] = useState(true);
+  const [fetchingPage, setFetchingPage] = useState(false);
+
+  // Priority: top tokens by holders from Convex, to surface first
+  const topHolders = useQuery(api.tokenStats.getTopHolders, { limit: 50, minHolders: 0 });
+  const [priorityTokens, setPriorityTokens] = useState<Record<string, OrdinalIndexToken>>({});
 
   const hasLoadedTokens = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchTokens() {
+    const fetchPage = async (page: number) => {
       try {
-        setLoading(true);
-        // Don't clear error here if we have tokens, to avoid flashing
         if (!hasLoadedTokens.current) setError(null);
+        setFetchingPage(true);
+        if (page === 0) setLoading(true);
 
-        // Fetch all tokens (up to limit) to allow client-side filtering/sorting
         const pageSize = 100;
-        const maxPages = 20; // Limit to 2000 tokens for now
-        let page = 0;
-        let apiHasMore = true;
-        const collected: OrdinalIndexToken[] = [];
+        const response = await ordinalIndexAPI.getTokens(page, pageSize);
+        if (page === 0) setTotalFromApi(response.total);
 
-        while (apiHasMore && page < maxPages) {
-          if (cancelled) return;
-          const response = await ordinalIndexAPI.getTokens(page, pageSize);
-          if (page === 0) setTotalFromApi(response.total);
-          collected.push(...response.items);
-          apiHasMore = response.has_more && response.items.length > 0;
-          page += 1;
-        }
-
-        if (!cancelled) {
-          setTokens(collected);
-          if (collected.length > 0) {
-            hasLoadedTokens.current = true;
-          }
-        }
+        if (cancelled) return;
+        setTokens((prev) => (page === 0 ? response.items : [...prev, ...response.items]));
+        setApiHasMore(Boolean(response.has_more && response.items.length > 0));
+        setCurrentPage(page);
+        if (response.items.length > 0) hasLoadedTokens.current = true;
       } catch (err) {
         console.error(err);
-        if (!cancelled) {
-          // Only show error if we have no tokens (initial load failed)
-          // If this is a background refresh, just log it to avoid disrupting the user
-          if (!hasLoadedTokens.current) {
-            setError('Unable to load ZRC-20 tokens. Please try again shortly.');
-          }
+        if (!cancelled && !hasLoadedTokens.current) {
+          setError('Unable to load ZRC-20 tokens. Please try again shortly.');
         }
       } finally {
         if (!cancelled) {
+          setFetchingPage(false);
           setLoading(false);
           lastFetchRef.current = Date.now();
         }
       }
-    }
+    };
 
-    fetchTokens();
-    const interval = setInterval(fetchTokens, 60000);
+    // Initial page
+    fetchPage(0);
     return () => {
       cancelled = true;
-      clearInterval(interval);
     };
-  }, []); // Only fetch on mount and interval, filtering is client-side
+  }, []); // Only fetch on mount
 
-  // Reset visible count when filters change
+  // Load more pages when requested by the table
+  const loadMoreTokens = async () => {
+    if (fetchingPage || !apiHasMore) return;
+    setFetchingPage(true);
+    try {
+      const response = await ordinalIndexAPI.getTokens(currentPage + 1, 100);
+      setTokens((prev) => [...prev, ...response.items]);
+      setApiHasMore(Boolean(response.has_more && response.items.length > 0));
+      setCurrentPage((p) => p + 1);
+    } catch (err) {
+      console.error('Failed to load more tokens', err);
+    } finally {
+      setFetchingPage(false);
+    }
+  };
+
+  // Prefetch summaries for top holder tokens not yet present to surface them early
   useEffect(() => {
-    setVisibleCount(50);
-  }, [searchQuery, statusFilter, minHolders, sortKey, sortDir]);
+    if (!topHolders) return;
+    const existing = new Set<string>([
+      ...tokens.map((t) => t.ticker.toLowerCase()),
+      ...Object.keys(priorityTokens),
+    ]);
+    const missing = topHolders
+      .map((t: any) => (t?.tick || '').toLowerCase())
+      .filter((t: string) => t && !existing.has(t));
+
+    if (!missing.length) return;
+
+    let cancelled = false;
+    (async () => {
+      const limit = 5;
+      for (let i = 0; i < missing.length && !cancelled; i += limit) {
+        const batch = missing.slice(i, i + limit);
+        await Promise.all(
+          batch.map(async (tick) => {
+            try {
+              const summary = await ordinalIndexAPI.getTokenSummary(tick);
+              // Construct minimal token for UI
+              const up = (tick || '').toUpperCase();
+              const max = summary?.max ?? '0';
+              const dec = summary?.dec ?? '0';
+              const lim = summary?.lim ?? '0';
+              const supplyBase = summary?.supply_base_units ?? '0';
+              const mintedWhole = baseUnitsToWhole(supplyBase, dec);
+              const progress = Number(max) > 0 ? mintedWhole / Number(max) : 0;
+              const token: OrdinalIndexToken = {
+                ticker: up,
+                max: max ?? '0',
+                max_base_units: '0',
+                supply: String(mintedWhole),
+                supply_base_units: supplyBase ?? '0',
+                lim: lim ?? '0',
+                dec: dec ?? '0',
+                deployer: '',
+                inscription_id: '',
+                progress,
+              };
+              setPriorityTokens((prev) => ({ ...prev, [tick]: token }));
+            } catch (err) {
+              // Ignore failures; the token may show up via paging later
+              console.warn('Failed to prefetch summary for', tick, err);
+            }
+          })
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [topHolders, tokens, priorityTokens]);
 
 
 
@@ -241,23 +308,34 @@ export default function TokenListPage() {
     }
 
     fetchStatus();
-    const interval = setInterval(fetchStatus, 60000);
+    // Removed setInterval for status fetching
     return () => {
       cancelled = true;
-      clearInterval(interval);
     };
   }, []);
 
 
 
 
+  // Merge priority tokens with paged tokens, dedup by ticker (case-insensitive)
+  const allTokens: OrdinalIndexToken[] = useMemo(() => {
+    const map = new Map<string, OrdinalIndexToken>();
+    Object.values(priorityTokens).forEach((t) => map.set(t.ticker.toLowerCase(), t));
+    tokens.forEach((t) => map.set(t.ticker.toLowerCase(), t));
+    return Array.from(map.values());
+  }, [priorityTokens, tokens]);
+
   const enrichedTokens: EnrichedToken[] = useMemo(() => {
-    return tokens.map((token) => {
+    return allTokens.map((token) => {
       const stats = tokenStats[token.ticker.toLowerCase()];
       const holderCount = stats?.holders;
-      const mintedSupply = Number(token.supply ?? 0);
-      const maxSupply = Number(token.max ?? 0);
-      const limitPerMint = Number(token.lim ?? 0);
+      // Prefer summary-based values when available
+      const mintedSupplyFromSummary = stats?.summary?.supply_base_units
+        ? baseUnitsToWhole(stats.summary.supply_base_units, stats.summary.dec)
+        : undefined;
+      const mintedSupply = mintedSupplyFromSummary ?? Number(token.supply ?? 0);
+      const maxSupply = Number(stats?.summary?.max ?? token.max ?? 0);
+      const limitPerMint = Number(stats?.summary?.lim ?? token.lim ?? 0);
       const progress =
         typeof token.progress === 'number'
           ? token.progress
@@ -275,10 +353,10 @@ export default function TokenListPage() {
         limitPerMint,
         progress,
         summary: stats?.summary,
-        creationIndex: totalFromApi > 0 ? totalFromApi - 1 - tokens.indexOf(token) : 0,
+        creationIndex: totalFromApi > 0 ? totalFromApi - 1 - allTokens.indexOf(token) : 0,
       };
     });
-  }, [tokens, tokenStats]);
+  }, [allTokens, tokenStats, totalFromApi]);
 
   // Client-side filtering/sorting is still applied to the loaded set
   // Ideally, filtering/sorting should be server-side for true infinite scroll
@@ -335,26 +413,17 @@ export default function TokenListPage() {
     return sorted;
   }, [filteredTokens, sortKey, sortDir]);
 
-  const loadMore = () => {
-    if (loadingMore || visibleCount >= sortedTokens.length) return;
-    setLoadingMore(true);
-    // Simulate a small delay for better UX or just update state
-    setTimeout(() => {
-      setVisibleCount((prev) => prev + 50);
-      setLoadingMore(false);
-    }, 300);
-  };
+  // No-op: pagination handled by fetching next API page
 
+  // Hydrate missing token stats (single pass, no continuous polling)
   useEffect(() => {
-    if (!tokens.length) return;
-    const now = Date.now();
+    if (!allTokens.length) return;
 
-    const targets = tokens.filter((token) => {
+    const targets = allTokens.filter((token) => {
       const tick = token.ticker.toLowerCase();
       if (hydrationInFlight.current.has(tick)) return false;
-      const stats = tokenStats[tick];
-      if (!stats) return true;
-      return now - stats.updatedAt > STATS_TTL_MS;
+      // Only fetch if we don't have stats at all
+      return !tokenStats[tick];
     });
 
     if (!targets.length) return;
@@ -403,99 +472,11 @@ export default function TokenListPage() {
     return () => {
       cancelled = true;
     };
-  }, [tokens, tokenStats]);
+  }, [allTokens, tokenStats, refreshCounts]);
 
-  useEffect(() => {
-    if (!sortedTokens.length) return;
-
-    let cancelled = false;
-    const staleThreshold = Date.now() - 2 * 60 * 1000;
-    const targets = sortedTokens
-      .map((entry) => entry.base)
-      .filter((token) => {
-        const tick = token.ticker.toLowerCase();
-        const stats = tokenStats[tick];
-        if (!stats) return true;
-        return stats.updatedAt < staleThreshold;
-      });
-
-    if (!targets.length) return;
-
-    const hydrateBatch = async (batch: OrdinalIndexToken[]) => {
-      try {
-        const ticks = batch.map((t) => t.ticker.toLowerCase());
-        const result = await refreshCounts({ ticks });
-        if (cancelled || !result) return;
-        setTokenStats((prev) => {
-          let hasChanges = false;
-          const next = { ...prev } as Record<string, TokenStats>;
-          (result as any[]).forEach((value: any) => {
-            const t = (value?.tick || '').toLowerCase();
-            if (!t) return;
-            next[t] = {
-              holders: value?.holders ?? prev[t]?.holders,
-              transfersCompleted:
-                (value?.summary?.transfers_completed as number | undefined) ??
-                prev[t]?.transfersCompleted,
-              summary: value?.summary,
-              integrity: value?.integrity,
-              updatedAt: value?.updatedAt ?? Date.now(),
-            };
-            hasChanges = true;
-          });
-          return hasChanges ? next : prev;
-        });
-      } catch (err) {
-        console.error('Failed to refresh holder counts batch', err);
-      }
-    };
-
-    (async () => {
-      const batchSize = 4;
-      for (let i = 0; i < targets.length && !cancelled; i += batchSize) {
-        const slice = targets.slice(i, i + batchSize);
-        await hydrateBatch(slice);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sortedTokens, tokenStats]);
-
-  // Seed current page from cached Convex latest counts to render faster
-  const paginatedTicks = useMemo(
-    () => sortedTokens.slice(0, visibleCount).map((e) => e.base.ticker.toLowerCase()),
-    [sortedTokens, visibleCount]
-  );
-  const latestCounts = useQuery(api.tokenStats.getLatestHolderCounts, {
-    ticks: paginatedTicks,
-  });
-  useEffect(() => {
-    if (!latestCounts) return;
-    setTokenStats((prev) => {
-      let hasChanges = false;
-      const next = { ...prev } as Record<string, TokenStats>;
-      (latestCounts as any[]).forEach((data: any) => {
-        if (!data) return;
-        const t = (data.tick || '').toLowerCase();
-        if (!t) return;
-        const current = prev[t];
-        if (!current || (current.updatedAt ?? 0) < data.updatedAt) {
-          next[t] = {
-            ...(current || { updatedAt: 0 }),
-            holders: data.holders,
-            updatedAt: data.updatedAt,
-          } as TokenStats;
-          hasChanges = true;
-        }
-      });
-      return hasChanges ? next : prev;
-    });
-  }, [latestCounts]);
 
   const selectedToken = selectedTick
-    ? tokens.find(
+    ? allTokens.find(
       (token) => token.ticker.toLowerCase() === selectedTick.toLowerCase()
     )
     : undefined;
@@ -566,7 +547,7 @@ export default function TokenListPage() {
     (sum, entry) => sum + entry.mintedSupply,
     0
   );
-  const totalHolders = tokens.reduce((sum, token) => {
+  const totalHolders = allTokens.reduce((sum, token) => {
     const tick = token.ticker.toLowerCase();
     return sum + (tokenStats[tick]?.holders ?? 0);
   }, 0);
@@ -601,6 +582,9 @@ export default function TokenListPage() {
             onSortDirChange={setSortDir}
             minHolders={minHolders}
             onMinHoldersChange={setMinHolders}
+            onRefresh={() => {
+              window.location.reload();
+            }}
           />
         </section>
 
@@ -620,13 +604,13 @@ export default function TokenListPage() {
           </div>
         ) : (
           <TokensTable
-            tokens={sortedTokens.slice(0, visibleCount)}
+            tokens={sortedTokens}
             totalTokens={sortedTokens.length}
             selectedTick={selectedTick}
             onSelect={setSelectedTick}
-            onLoadMore={loadMore}
-            hasMore={visibleCount < sortedTokens.length}
-            loadingMore={loadingMore}
+            onLoadMore={loadMoreTokens}
+            hasMore={apiHasMore}
+            loadingMore={fetchingPage}
             tokenDetails={tokenDetails}
             tokenStats={tokenStats}
             snapshots={snapshots}
@@ -637,7 +621,7 @@ export default function TokenListPage() {
           status={status}
           zrc20Status={zrc20Status}
           health={health}
-          totalTokens={tokens.length}
+          totalTokens={allTokens.length}
           totalMinted={totalMinted}
           totalHolders={totalHolders}
           liveMints={liveMints}
@@ -773,6 +757,7 @@ interface FiltersBarProps {
   onSortDirChange: (value: 'asc' | 'desc') => void;
   minHolders: number;
   onMinHoldersChange: (value: number) => void;
+  onRefresh: () => void;
 }
 
 function FiltersBar({
@@ -787,6 +772,7 @@ function FiltersBar({
   onSortDirChange,
   minHolders,
   onMinHoldersChange,
+  onRefresh,
 }: FiltersBarProps) {
   return (
     <div className="sticky top-20 z-30 mb-4 flex flex-col md:flex-row items-center gap-3 p-3 border border-gold-500/10 bg-black/80 backdrop-blur-md rounded-lg shadow-xl">
@@ -796,7 +782,7 @@ function FiltersBar({
           ZRC-20
         </h2>
         <div className="h-4 w-px bg-gold-500/20" />
-        <RefreshTopTokensButton />
+        <RefreshTopTokensButton onRefresh={onRefresh} />
         <span className="text-[10px] text-gold-500/40 font-mono hidden md:inline-block">
           {lastRefresh ? new Date(lastRefresh).toLocaleTimeString() : '—'}
         </span>
@@ -952,25 +938,26 @@ function TokensTable({
   snapshots,
 }: TokensTableProps) {
   const observerTarget = useRef<HTMLDivElement>(null);
+  const lastLoadAtRef = useRef<number>(0);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !loadingMore) {
+          const now = Date.now();
+          if (now - lastLoadAtRef.current < 500) return; // throttle
+          lastLoadAtRef.current = now;
           onLoadMore();
         }
       },
       { threshold: 0.1 }
     );
 
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current);
-    }
+    const target = observerTarget.current;
+    if (target) observer.observe(target);
 
     return () => {
-      if (observerTarget.current) {
-        observer.unobserve(observerTarget.current);
-      }
+      if (target) observer.unobserve(target);
     };
   }, [hasMore, loadingMore, onLoadMore]);
 
