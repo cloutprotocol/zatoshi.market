@@ -212,9 +212,9 @@ export default function ZRC721CollectionsPage() {
     startIndex + rowsPerPage
   );
 
-  const selectedDetail =
-    selectedCollection &&
-    detailMap[selectedCollection.toLowerCase()];
+  const selectedDetail = selectedCollection
+    ? detailMap[selectedCollection.toLowerCase()]
+    : undefined;
 
   useEffect(() => {
     if (!selectedCollection) return;
