@@ -179,6 +179,13 @@ function InscribePageContent() {
         if (!cancelled) {
           setTokenSummary(summary);
           setTokenSummaryLoading(false);
+          // Prefill amount with per-mint limit when a token is selected, if empty
+          if (zrcOp === 'mint') {
+            const lim = Number(summary.lim ?? 0);
+            if (lim > 0) {
+              setAmount((prev) => (!prev || Number(prev) === 0) ? String(lim) : prev);
+            }
+          }
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -817,21 +824,41 @@ function InscribePageContent() {
       .trim();
 
     // Make specific errors more user-friendly
-    if (cleaned.includes('Not enough spendable funds')) {
-      const match = cleaned.match(/Need at least (\d+) zats/);
-      if (match) {
-        const needed = parseInt(match[1]);
-        const neededZEC = (needed / 100000000).toFixed(8);
-        return `Insufficient funds: You need at least ${needed.toLocaleString()} zats (${neededZEC} ZEC) to complete this batch. Please add more ZEC to your wallet or reduce the batch count.`;
+    if (cleaned.toLowerCase().includes('not enough spendable funds')) {
+      // Support multiple phrasings from server
+      // Examples:
+      //  - "Not enough spendable funds. Need 120547 zats (incl. 50000 network fee); found 52369 zats."
+      //  - "Not enough spendable funds. Need at least 120547 zats; found 52369 zats."
+      const need = cleaned.match(/Need(?: at least)?\s+(\d+)\s+zats/i);
+      const found = cleaned.match(/found\s+(\d+)\s+zats/i);
+      const fee = cleaned.match(/incl\.?\s*(\d+)\s*network fee/i);
+      if (need || found) {
+        const needed = need ? parseInt(need[1], 10) : undefined;
+        const have = found ? parseInt(found[1], 10) : undefined;
+        const feeZats = fee ? parseInt(fee[1], 10) : undefined;
+        const parts: string[] = [];
+        if (needed !== undefined) parts.push(`need ${needed.toLocaleString()} zats (${(needed / 1e8).toFixed(8)} ZEC)`);
+        if (feeZats !== undefined) parts.push(`including ${feeZats.toLocaleString()} zats network fee (${(feeZats / 1e8).toFixed(8)} ZEC)`);
+        if (have !== undefined) parts.push(`you have ${have.toLocaleString()} zats (${(have / 1e8).toFixed(8)} ZEC)`);
+        let shortfallText = '';
+        if (needed !== undefined && have !== undefined && needed > have) {
+          const short = needed - have;
+          shortfallText = ` Short by ${short.toLocaleString()} zats (${(short / 1e8).toFixed(8)} ZEC).`;
+        }
+        return `Insufficient funds: ${parts.join('; ')}.${shortfallText} Add more ZEC, split a fresh UTXO in UTXO Management, or reduce the amount/batch size and try again.`;
       }
     }
 
-    return cleaned || 'An error occurred';
+    // Fallback to the original message if cleaning produced nothing
+    return cleaned || (errorMsg?.trim() || 'An error occurred');
   };
 
   const friendlyErrorMessage = error ? cleanErrorMessage(error) : null;
   const normalizedErrorMessage = friendlyErrorMessage?.toLowerCase() ?? '';
   const isPendingMintError = normalizedErrorMessage.includes('previous mint is still pending');
+  const isInsufficientFunds =
+    normalizedErrorMessage.includes('not enough spendable funds') ||
+    normalizedErrorMessage.startsWith('insufficient funds');
   const isMempoolConflictError = normalizedErrorMessage.includes('mempool-conflict');
   const isRateLimitError =
     normalizedErrorMessage.includes('unpaid action limit exceeded') ||
@@ -843,6 +870,15 @@ function InscribePageContent() {
   const isPrepError =
     normalizedErrorMessage.includes('finalizecommitandgetrevealpreimageaction') ||
     normalizedErrorMessage.includes('buildunsignedcommitaction');
+
+  // Heuristic: Some indexers return an "empty" summary for unknown tickers
+  // Treat as not deployed if max and lim are zero/undefined and no supply/holders data
+  const isUnknownTokenSummary = !!tokenSummary &&
+    (Number(tokenSummary.max ?? 0) === 0) &&
+    (Number(tokenSummary.lim ?? 0) === 0) &&
+    (Number(tokenSummary.holders ?? 0) === 0) &&
+    (Number(tokenSummary.transfers_completed ?? 0) === 0) &&
+    (!tokenSummary.supply_base_units || tokenSummary.supply_base_units === '0');
 
   const executeBatchMint = async () => {
     if (!wallet?.privateKey || !wallet?.address) return;
@@ -1541,9 +1577,12 @@ function InscribePageContent() {
                         </div>
                         <div>
                           <div className="text-gold-400/60 text-sm mb-1">Inscription ID</div>
-                          <div className="text-gold-300 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded">
+                          <a
+                            href={`/inscription/${result.inscriptionId}`}
+                            className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
+                          >
                             {result.inscriptionId}
-                          </div>
+                          </a>
                         </div>
                         <div className="pt-3">
                           <p className="text-xs text-gold-400/70">Note: New inscriptions may take up to ~5 minutes to appear in the public explorer.</p>
@@ -1756,9 +1795,12 @@ function InscribePageContent() {
                         </div>
                         <div>
                           <div className="text-gold-400/60 text-sm mb-1">Inscription ID</div>
-                          <div className="text-gold-300 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded">
+                          <a
+                            href={`/inscription/${result.inscriptionId}`}
+                            className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
+                          >
                             {result.inscriptionId}
-                          </div>
+                          </a>
                         </div>
                         <div className="pt-3">
                           <p className="text-xs text-gold-400/70">Note: New inscriptions may take up to ~5 minutes to appear in the public explorer.</p>
@@ -1971,9 +2013,12 @@ function InscribePageContent() {
                         </div>
                         <div>
                           <div className="text-gold-400/60 text-sm mb-1">Inscription ID</div>
-                          <div className="text-gold-300 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded">
+                          <a
+                            href={`/inscription/${result.inscriptionId}`}
+                            className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
+                          >
                             {result.inscriptionId}
-                          </div>
+                          </a>
                         </div>
                         <div className="pt-3">
                           <p className="text-xs text-gold-400/70">Note: New inscriptions may take up to ~5 minutes to appear in the public explorer.</p>
@@ -1997,6 +2042,186 @@ function InscribePageContent() {
                       {zrcOp === 'deploy' ? 'Launch a new token on Zcash' : zrcOp === 'mint' ? 'Mint tokens from deployed ZRC-20 contracts' : 'Send ZRC-20 tokens to another address'}
                     </p>
                   </div>
+
+                  {/* Token detail above Operation selector */}
+                  {(zrcOp === 'mint' || zrcOp === 'transfer') && ((tick || '').trim().length > 0) && (
+                    <div className="mt-6">
+                      {(tokenSummary && !isUnknownTokenSummary) ? (() => {
+                        const tickerUpper = (tokenSummary.tick || '').toUpperCase();
+                        const primaryLetter = tickerUpper.charAt(0) || '?';
+                        const backgroundLetters = tickerUpper.slice(0, 2) || primaryLetter;
+                        const decimals = Number(tokenSummary.dec ?? '0') || 0;
+                        const supplyBaseUnits = tokenSummary.supply_base_units ? BigInt(tokenSummary.supply_base_units) : BigInt(0);
+                        const decimalsFactor = BigInt(10) ** BigInt(decimals);
+                        const mintedAmount = Number(supplyBaseUnits / (decimalsFactor || BigInt(1)));
+                        const maxAmount = Number(tokenSummary.max ?? 0);
+                        const progress = maxAmount > 0 ? (mintedAmount / maxAmount) * 100 : 0;
+                        const remaining = Math.max(0, maxAmount - mintedAmount);
+                        const perMintLimit = Number(tokenSummary.lim ?? 0);
+                        const holdersLabel = tokenSummary.holders?.toLocaleString() ?? '—';
+                        const transfersLabel = tokenSummary.transfers_completed?.toLocaleString() ?? '0';
+                        const limitLabel = perMintLimit ? perMintLimit.toLocaleString() : '—';
+
+                        const amountValue = Number(amount || '0');
+                        const amountClean = (amount || '').trim();
+                        const overLim = perMintLimit > 0 && amountValue > perMintLimit;
+                        const overRemain = maxAmount > 0 && amountValue > remaining;
+                        const invalidAmount = amountClean !== '' && !/^\d+$/.test(amountClean);
+
+                        return (
+                          <div className="relative overflow-hidden border border-gold-500/20 bg-black/40 p-6 md:p-8 shadow-[0_0_45px_rgba(234,179,8,0.15)]">
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-6 pointer-events-none">
+                              <span className="text-[160px] leading-none font-black text-gold-500/10 tracking-tight">
+                                {backgroundLetters}
+                              </span>
+                            </div>
+
+                            <div className="relative z-10 space-y-6">
+                              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-14 h-14 bg-gold-500 text-black font-black text-2xl flex items-center justify-center border border-gold-300">
+                                    {primaryLetter}
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] uppercase tracking-[0.5em] text-gold-300/60 mb-1">
+                                      Token Detail
+                                    </p>
+                                    <h2 className="text-3xl font-black text-gold-100">{tickerUpper}</h2>
+                                    <p className="text-xs text-gold-300/70 font-mono">
+                                      {tokenSummary.name || 'ZRC-20 Asset'}
+                                    </p>
+                                  </div>
+                                </div>
+                                {tokenSummary.integrity && (
+                                  <div
+                                    className={`px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest border ${tokenSummary.integrity.consistent
+                                      ? 'border-green-400/40 bg-green-500/10 text-green-300'
+                                      : 'border-red-400/40 bg-red-500/10 text-red-300'
+                                      }`}
+                                  >
+                                    {tokenSummary.integrity.consistent ? 'Healthy' : 'Check Ledger'}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="grid gap-4 sm:grid-cols-3">
+                                <div className="bg-black/30 border border-gold-500/10 p-4">
+                                  <p className="text-[10px] uppercase tracking-[0.3em] text-gold-300/60 mb-1">
+                                    Minted / Max
+                                  </p>
+                                  <div className="text-2xl font-black text-gold-100">
+                                    {mintedAmount.toLocaleString()}
+                                  </div>
+                                  <p className="text-xs text-gold-300/50">
+                                    of {maxAmount ? maxAmount.toLocaleString() : '—'}
+                                  </p>
+                                </div>
+                                <div className="bg-black/30 border border-gold-500/10 p-4">
+                                  <p className="text-[10px] uppercase tracking-[0.3em] text-gold-300/60 mb-1">
+                                    Holders
+                                  </p>
+                                  <div className="text-2xl font-black text-gold-100">{holdersLabel}</div>
+                                  <p className="text-xs text-gold-300/50">{transfersLabel} transfers</p>
+                                </div>
+                                <div className="bg-black/30 border border-gold-500/10 p-4">
+                                  <p className="text-[10px] uppercase tracking-[0.3em] text-gold-300/60 mb-1">
+                                    Limits
+                                  </p>
+                                  <div className="text-2xl font-black text-gold-100">{limitLabel}</div>
+                                  <p className="text-xs text-gold-300/50">
+                                    Decimals: {tokenSummary.dec ?? 0}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="flex justify-between text-xs font-mono text-gold-300/70">
+                                  <span>{progress.toFixed(1)}% Minted</span>
+                                  <span className="uppercase tracking-widest text-[10px]">
+                                    {progress >= 100 ? 'Completed' : 'Minting'}
+                                  </span>
+                                </div>
+                                <div className="h-2 w-full bg-black/40 rounded-full overflow-hidden border border-gold-500/10">
+                                  <div
+                                    className={`h-full bg-gradient-to-r from-gold-600 via-gold-400 to-amber-300 rounded-full transition-all duration-500 ${progress < 100 ? 'shine-effect' : ''
+                                      }`}
+                                    style={{ width: `${Math.min(progress, 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+
+                              {zrcOp === 'mint' && (
+                                <div className="pt-4 border-t border-gold-500/10 space-y-2 text-xs">
+                                  <div className="flex justify-between items-center text-gold-300/70">
+                                    <span>Remaining Supply:</span>
+                                    <span className="font-mono text-gold-100">{remaining.toLocaleString()}</span>
+                                  </div>
+
+                                  {(overLim || overRemain || invalidAmount) && (
+                                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 space-y-1">
+                                      {overLim && (
+                                        <div className="text-red-400 flex items-center gap-2">
+                                          <span className="text-lg leading-none">×</span>
+                                          Exceeds per-mint limit of {perMintLimit.toLocaleString()}
+                                        </div>
+                                      )}
+                                      {overRemain && (
+                                        <div className="text-red-400 flex items-center gap-2">
+                                          <span className="text-lg leading-none">×</span>
+                                          Exceeds remaining supply
+                                        </div>
+                                      )}
+                                      {invalidAmount && (
+                                        <div className="text-red-400 flex items-center gap-2">
+                                          <span className="text-lg leading-none">×</span>
+                                          Amount must be an integer
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })() : tokenSummaryLoading ? (
+                        <div className="p-8 border border-gold-500/10 bg-black/40 text-center rounded-lg">
+                          <div className="text-zinc-600 mb-2">
+                            <svg className="w-8 h-8 mx-auto animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          </div>
+                          <div className="text-sm text-zinc-500">Loading token details...</div>
+                        </div>
+                      ) : ((tokenSummaryError && (tick || '').trim().length > 0) || (tokenSummary && isUnknownTokenSummary)) ? (
+                        <div className="p-6 border border-gold-500/30 bg-black/40 rounded-lg text-center">
+                          <h3 className="text-gold-200 font-bold mb-2">Token not found</h3>
+                          <p className="text-gold-400/80 text-sm mb-4">
+                            The ticker <span className="font-mono uppercase text-gold-200">{(tick || '').toUpperCase()}</span> has not been deployed yet.
+                            You can deploy it now by specifying a max supply and a per‑mint limit.
+                          </p>
+                          <div className="flex items-center justify-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => { setZrcOp('deploy' as any); }}
+                              className="px-4 py-2 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-colors"
+                            >
+                              Deploy This Token
+                            </button>
+                          </div>
+                          <div className="mt-4 text-xs text-gold-400/70 text-left max-w-2xl mx-auto">
+                            <p className="mb-1 font-semibold text-gold-300/90">ZRC‑20 quick guide</p>
+                            <ul className="list-disc pl-5 space-y-1">
+                              <li><span className="font-mono">max</span>: total supply that can ever be minted</li>
+                              <li><span className="font-mono">lim</span>: maximum amount a single inscription can mint</li>
+                              <li>Tickers are up to 4 characters, case‑insensitive</li>
+                              <li>Whole tokens only (no decimals)</li>
+                            </ul>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
 
                   {/* Operation Selector */}
                   <div>
@@ -2025,6 +2250,172 @@ function InscribePageContent() {
                     </div>
                   </div>
 
+                  {/* (moved above) Token detail block retained here but disabled */}
+                  {false && (zrcOp === 'mint' || zrcOp === 'transfer') && ((tick || '').trim().length > 0) && (
+                    <div className="mt-6">
+                      {(tokenSummary && !isUnknownTokenSummary) ? (
+                        <div className="border border-gold-500/10 bg-black/40 p-6 relative overflow-hidden group rounded-lg">
+                          {/* Background decoration */}
+                          <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                            <div className="text-9xl font-black text-gold-500 leading-none select-none">
+                              {(tokenSummary.tick || '').substring(0, 2)}
+                            </div>
+                          </div>
+
+                          {/* Header */}
+                          <div className="flex items-start justify-between gap-4 mb-6 relative z-10">
+                            <div>
+                              <p className="text-xs uppercase tracking-[0.4em] text-zinc-500 mb-1">
+                                Token Detail
+                              </p>
+                              <h2 className="text-3xl font-black text-zinc-100">
+                                {tokenSummary.tick}
+                              </h2>
+                            </div>
+                            {tokenSummary.integrity && (
+                              <div className={`px-3 py-1 border ${tokenSummary.integrity.consistent ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-red-500/30 bg-red-500/10 text-red-400'} text-xs font-bold uppercase tracking-wider rounded`}>
+                                {tokenSummary.integrity.consistent ? 'Healthy' : 'Check Ledger'}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Stats Grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 relative z-10">
+                            <div className="border border-white/5 bg-black/20 p-3 rounded">
+                              <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-1">
+                                Minted / Max
+                              </div>
+                              <div className="text-lg font-mono text-zinc-200">
+                                {(() => {
+                                  const dec = Number(tokenSummary.dec ?? '0') || 0;
+                                  const base = tokenSummary.supply_base_units ? BigInt(tokenSummary.supply_base_units) : BigInt(0);
+                                  const minted = Number(base / BigInt(10 ** dec));
+                                  return minted.toLocaleString();
+                                })()}
+                              </div>
+                              <div className="text-[10px] text-zinc-500">of {Number(tokenSummary.max ?? 0).toLocaleString()}</div>
+                            </div>
+                            <div className="border border-white/5 bg-black/20 p-3 rounded">
+                              <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-1">
+                                Holders
+                              </div>
+                              <div className="text-lg font-mono text-zinc-200">{tokenSummary.holders?.toLocaleString() ?? '—'}</div>
+                              <div className="text-[10px] text-zinc-500">
+                                {tokenSummary.holders_total !== undefined && tokenSummary.holders_total !== tokenSummary.holders && (
+                                  <span className="mr-1">{tokenSummary.holders_total.toLocaleString()} total addresses</span>
+                                )}
+                                {tokenSummary.transfers_completed?.toLocaleString() ?? 0} transfers
+                              </div>
+                            </div>
+                            <div className="border border-white/5 bg-black/20 p-3 rounded">
+                              <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-1">
+                                Limits
+                              </div>
+                              <div className="text-lg font-mono text-zinc-200">{Number(tokenSummary.lim ?? 0).toLocaleString()}</div>
+                              <div className="text-[10px] text-zinc-500">Decimals: {tokenSummary.dec ?? 0}</div>
+                            </div>
+                          </div>
+
+                          {/* Progress Bar */}
+                          <div className="mb-3 relative z-10">
+                            {(() => {
+                              const dec = Number(tokenSummary.dec ?? '0') || 0;
+                              const base = tokenSummary.supply_base_units ? BigInt(tokenSummary.supply_base_units) : BigInt(0);
+                              const minted = Number(base / BigInt(10 ** dec));
+                              const max = Number(tokenSummary.max ?? 0);
+                              const progress = max > 0 ? (minted / max) * 100 : 0;
+                              return (
+                                <div>
+                                  <div className="flex items-center justify-between text-[11px] text-zinc-500 mb-1">
+                                    <span>{progress.toFixed(1)}% Minted</span>
+                                    <span className="tracking-widest">MINTING</span>
+                                  </div>
+                                  <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full bg-gradient-to-r from-gold-600 to-gold-400 rounded-full transition-all duration-500 ${progress < 100 ? 'shine-effect' : ''}`}
+                                      style={{ width: `${Math.min(progress, 100)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+
+                          {/* Validation Messages */}
+                          {zrcOp === 'mint' && (
+                            <div className="mt-4 pt-4 border-t border-white/5 relative z-10">
+                              {(() => {
+                                const lim = Number(tokenSummary.lim ?? 0);
+                                const dec = Number(tokenSummary.dec ?? '0') || 0;
+                                const base = tokenSummary.supply_base_units ? BigInt(tokenSummary.supply_base_units) : BigInt(0);
+                                const minted = Number(base / BigInt(10 ** dec));
+                                const max = Number(tokenSummary.max ?? 0);
+                                const remaining = Math.max(0, max - minted);
+                                const a = Number(amount || '0');
+                                const overLim = lim > 0 && a > lim;
+                                const overRemain = max > 0 && a > remaining;
+
+                                return (
+                                  <div className="space-y-2 text-xs">
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-zinc-500">Remaining Supply:</span>
+                                      <span className="font-mono text-zinc-300">{remaining.toLocaleString()}</span>
+                                    </div>
+
+                                    {(overLim || overRemain || (!/^\d+$/.test((amount || '').trim()) && (amount || '').trim() !== '')) && (
+                                      <div className="bg-red-500/10 border border-red-500/30 rounded p-2 space-y-1 mt-2">
+                                        {overLim && <div className="text-red-400 flex items-center gap-2"><span className="text-lg leading-none">×</span> Exceeds per-mint limit of {lim.toLocaleString()}</div>}
+                                        {overRemain && <div className="text-red-400 flex items-center gap-2"><span className="text-lg leading-none">×</span> Exceeds remaining supply</div>}
+                                        {!/^\d+$/.test((amount || '').trim()) && (amount || '').trim() !== '' && (
+                                          <div className="text-red-400 flex items-center gap-2"><span className="text-lg leading-none">×</span> Amount must be an integer</div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      ) : tokenSummaryLoading ? (
+                        <div className="p-8 border border-gold-500/10 bg-black/40 text-center rounded-lg">
+                          <div className="text-zinc-600 mb-2">
+                            <svg className="w-8 h-8 mx-auto animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          </div>
+                          <div className="text-sm text-zinc-500">Loading token details...</div>
+                        </div>
+                      ) : ((tokenSummaryError && (tick || '').trim().length > 0) || (tokenSummary && isUnknownTokenSummary)) ? (
+                        <div className="p-6 border border-gold-500/30 bg-black/40 rounded-lg text-center">
+                          <h3 className="text-gold-200 font-bold mb-2">Token not found</h3>
+                          <p className="text-gold-400/80 text-sm mb-4">
+                            The ticker <span className="font-mono uppercase text-gold-200">{(tick || '').toUpperCase()}</span> has not been deployed yet.
+                            You can deploy it now by specifying a max supply and a per‑mint limit.
+                          </p>
+                          <div className="flex items-center justify-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => { setZrcOp('deploy' as any); }}
+                              className="px-4 py-2 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-colors"
+                            >
+                              Deploy This Token
+                            </button>
+                          </div>
+                          <div className="mt-4 text-xs text-gold-400/70 text-left max-w-2xl mx-auto">
+                            <p className="mb-1 font-semibold text-gold-300/90">ZRC‑20 quick guide</p>
+                            <ul className="list-disc pl-5 space-y-1">
+                              <li><span className="font-mono">max</span>: total supply that can ever be minted</li>
+                              <li><span className="font-mono">lim</span>: maximum amount a single inscription can mint</li>
+                              <li>Tickers are up to 4 characters, case‑insensitive</li>
+                              <li>Whole tokens only (no decimals)</li>
+                            </ul>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+
                   {/* Ticker Input with Autocomplete */}
                   <div className="relative">
                     <label className="block text-gold-200/80 text-xs sm:text-sm mb-1.5 sm:mb-2">Token Ticker</label>
@@ -2047,7 +2438,7 @@ function InscribePageContent() {
                       {zrcOp !== 'deploy' && tick.length > 0 && !tokenSummary && (
                         <TickerAutocomplete
                           query={tick}
-                          onSelect={(t) => setTick(t)}
+                          onSelect={(t) => { setTick(t); setAmount(''); }}
                         />
                       )}
                     </div>
@@ -2089,11 +2480,16 @@ function InscribePageContent() {
                       </div>
                     </div>
                   )}
+                  {zrcOp === 'deploy' && (
+                    <div className="mt-2 text-[11px] text-gold-300/70">
+                      ZRC‑20: <span className="font-mono">max</span> sets the lifetime supply cap; <span className="font-mono">lim</span> caps how much any single mint inscription can create. Use whole numbers only.
+                    </div>
+                  )}
 
                   {/* Token & Mint Validation - Enhanced Detail Panel */}
-                  {(zrcOp === 'mint' || zrcOp === 'transfer') && (
+                  {false && (zrcOp === 'mint' || zrcOp === 'transfer') && (
                     <div className="mt-6">
-                      {tokenSummary ? (
+                      {(tokenSummary && !isUnknownTokenSummary) ? (
                         <div className="border border-gold-500/10 bg-black/40 p-6 relative overflow-hidden group rounded-lg">
                           {/* Background decoration */}
                           <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
@@ -2239,6 +2635,32 @@ function InscribePageContent() {
                           </div>
                           <div className="text-sm text-zinc-500">Loading token details...</div>
                         </div>
+                      ) : ((tokenSummaryError && (tick || '').trim().length > 0) || (tokenSummary && isUnknownTokenSummary)) ? (
+                        <div className="p-6 border border-gold-500/30 bg-black/40 rounded-lg text-center">
+                          <h3 className="text-gold-200 font-bold mb-2">Token not found</h3>
+                          <p className="text-gold-400/80 text-sm mb-4">
+                            The ticker <span className="font-mono uppercase text-gold-200">{(tick || '').toUpperCase()}</span> has not been deployed yet.
+                            You can deploy it now by specifying a max supply and a per‑mint limit.
+                          </p>
+                          <div className="flex items-center justify-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => { setZrcOp('deploy' as any); }}
+                              className="px-4 py-2 bg-gold-500 text-black font-bold rounded hover:bg-gold-400 transition-colors"
+                            >
+                              Deploy This Token
+                            </button>
+                          </div>
+                          <div className="mt-4 text-xs text-gold-400/70 text-left max-w-2xl mx-auto">
+                            <p className="mb-1 font-semibold text-gold-300/90">ZRC‑20 quick guide</p>
+                            <ul className="list-disc pl-5 space-y-1">
+                              <li><span className="font-mono">max</span>: total supply that can ever be minted</li>
+                              <li><span className="font-mono">lim</span>: maximum amount a single inscription can mint</li>
+                              <li>Tickers are up to 4 characters, case‑insensitive</li>
+                              <li>Whole tokens only (no decimals)</li>
+                            </ul>
+                          </div>
+                        </div>
                       ) : (
                         <div className="p-8 border border-gold-500/10 bg-black/40 text-center rounded-lg">
                           <div className="text-zinc-600 mb-2">
@@ -2247,11 +2669,6 @@ function InscribePageContent() {
                             </svg>
                           </div>
                           <div className="text-sm text-zinc-500">Enter a valid ticker to load token details</div>
-                        </div>
-                      )}
-                      {tokenSummaryError && (
-                        <div className="mt-2 text-xs text-red-400 text-center bg-red-500/10 border border-red-500/20 p-2 rounded">
-                          {tokenSummaryError}
                         </div>
                       )}
                     </div>
@@ -2309,9 +2726,12 @@ function InscribePageContent() {
                         </div>
                         <div>
                           <div className="text-gold-400/60 text-sm mb-1">Inscription ID</div>
-                          <div className="text-gold-300 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded">
+                          <a
+                            href={`/inscription/${result.inscriptionId}`}
+                            className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
+                          >
                             {result.inscriptionId}
-                          </div>
+                          </a>
                         </div>
                         <div className="pt-3">
                           <p className="text-xs text-gold-400/70">Note: New inscriptions may take up to ~5 minutes to appear in the public explorer.</p>
@@ -2869,7 +3289,11 @@ function InscribePageContent() {
                     className={`${isPendingMintError ? 'text-amber-200' : 'text-red-300'
                       } font-bold mb-3 text-base`}
                   >
-                    {isPendingMintError ? 'Heads-up: previous transaction still pending' : '⚠ Transaction Error'}
+                    {isPendingMintError
+                      ? 'Heads-up: previous transaction still pending'
+                      : isInsufficientFunds
+                        ? 'Insufficient Funds'
+                        : '⚠ Transaction Error'}
                   </h3>
                   {isPendingMintError ? (
                     <div className="text-amber-100/90 text-sm space-y-2">
@@ -3087,11 +3511,8 @@ function InscribePageContent() {
               }
             } catch (e: any) {
               const message = e?.message || String(e);
-              if (message.includes('Not enough spendable funds')) {
-                setError('Not enough unlocked ZEC in this wallet to cover the inscription + network fees. Try splitting a fresh UTXO or reduce the batch size.');
-              } else {
-                setError(message);
-              }
+              // Let the central cleaner render a friendly, specific message (with zats/ZEC)
+              setError(message);
             } finally { setLoading(false); }
           }}
           feeOptions={feeTiers}
