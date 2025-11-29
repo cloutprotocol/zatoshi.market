@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import React, { Suspense } from 'react';
 
@@ -615,7 +616,7 @@ function InscribePageContent() {
   // Clear split TXID when leaving UTXO tab
   useEffect(() => {
     if (activeTab !== 'utxo') { if (splitTxid) setSplitTxid(null); if (splitResult) setSplitResult(null); }
-  }, [activeTab]);
+  }, [activeTab, splitTxid, splitResult]);
 
   // Fetch wallet balance on UTXO tab
   useEffect(() => {
@@ -667,7 +668,7 @@ function InscribePageContent() {
       }
     })();
     return () => { cancelled = true; };
-  }, [activeTab, wallet?.address, advancedOpen]);
+  }, [activeTab, wallet?.address, advancedOpen, utxoList.length]);
 
   // Fetch block height and ZEC price
   useEffect(() => {
@@ -1060,7 +1061,7 @@ function InscribePageContent() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [batchStartTime, batchStatus?.status, batchStatus?.total]);
+  }, [batchStartTime, batchStatus]);
 
   const triggerFireworks = (count: number) => {
     console.log('🎆 Triggering fireworks! Count:', count);

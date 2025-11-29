@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getConvexClient } from "@/lib/convexClient";
 import { api } from "../../convex/_generated/api";
@@ -24,7 +24,7 @@ export function InscriptionHistory({ address, limit = 50 }: { address: string; l
 
   const short = useMemo(() => `${address.slice(0, 6)}...${address.slice(-4)}`, [address]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       const convex = getConvexClient();
@@ -34,9 +34,9 @@ export function InscriptionHistory({ address, limit = 50 }: { address: string; l
     } catch (e: any) {
       setError(e?.message || String(e));
     } finally { setLoading(false); }
-  };
+  }, [address, limit]);
 
-  useEffect(() => { load(); }, [address, limit]);
+  useEffect(() => { load(); }, [load]);
 
   return (
     <section className="mt-8">

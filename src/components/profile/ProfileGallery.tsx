@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import type { MintedTokenSummary } from '@/types/profile';
 
 const VERIFIED_COLLECTIONS = new Set(['zgods']);
@@ -41,12 +42,14 @@ export function ProfileGallery({ items, pinnedIds, isOwner, onTogglePin, onSelec
         <div className="relative w-full overflow-hidden rounded-sm border border-gold-500/10 bg-black/30 aspect-square">
           {item.imageUrls[0] ? (
             <>
-              <img
+              <Image
                 src={item.imageUrls[0]}
                 alt={item.name}
-                className={`h-full w-full object-cover transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
-                loading="lazy"
-                onLoad={() => setImageLoaded(true)}
+                fill
+                unoptimized
+                sizes="(max-width: 640px) 100vw, 33vw"
+                className={`object-cover transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+                onLoadingComplete={() => setImageLoaded(true)}
                 onError={() => setImageLoaded(true)}
               />
               {!imageLoaded && <div className="absolute inset-0 animate-pulse bg-gold-500/10" />}
@@ -59,13 +62,13 @@ export function ProfileGallery({ items, pinnedIds, isOwner, onTogglePin, onSelec
           <p className="text-sm uppercase tracking-wide text-gold-500/70 flex items-center gap-2">
             {item.collectionName}
             {VERIFIED_COLLECTIONS.has(item.collectionSlug) && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 src="/verified.png"
                 alt="Verified collection"
-                className="h-4 w-4"
+                width={16}
+                height={16}
+                unoptimized
                 title="Verified collection"
-                loading="lazy"
               />
             )}
           </p>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import { getCollectionConfig } from '@/config/collections';
 import {
   buildImageUrls,
@@ -400,8 +401,7 @@ export function CollectionClient({ slug }: Props) {
           <div className="flex items-center gap-4">
             <div className="h-20 w-20 rounded-2xl border border-gold-500/40 overflow-hidden bg-black/60 flex items-center justify-center">
               {headerImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={headerImage} alt={collection.name} className="h-full w-full object-cover" />
+                <Image src={headerImage} alt={collection.name} width={80} height={80} unoptimized className="h-full w-full object-cover" />
               ) : (
                 <span className="text-2xl text-gold-200">{collection.name.slice(0, 2)}</span>
               )}
@@ -410,7 +410,7 @@ export function CollectionClient({ slug }: Props) {
               <div className="flex items-center gap-2">
                 <h1 className="text-3xl font-bold text-white uppercase tracking-[0.2em]">{collection.name}</h1>
                 {/* Verified icon reused */}
-                <img src="/verified.png" alt="Verified" className="h-5 w-5" />
+                <Image src="/verified.png" alt="Verified" width={20} height={20} unoptimized />
               </div>
               <p className="text-sm text-gold-200/80">
                 {collection.description || 'Official verified collection.'}

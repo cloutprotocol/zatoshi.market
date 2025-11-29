@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Image from 'next/image';
 import { BadgePill } from '@/components/BadgePill';
 import type { UserBadge, UserPointsSummary } from '@/contexts/WalletContext';
 import type { UserProfileDoc } from '@/types/profile';
@@ -99,11 +100,14 @@ export function ProfileHeader({
           <div className="relative h-24 w-24 overflow-hidden rounded-full border-2 border-gold-400/60 bg-black/40">
             {pfpUrl ? (
               <>
-                <img
+                <Image
                   src={pfpUrl}
                   alt={displayName}
-                  className={`h-full w-full object-cover transition-opacity duration-300 ${pfpLoaded ? 'opacity-100' : 'opacity-0'}`}
-                  onLoad={() => setPfpLoaded(true)}
+                  fill
+                  sizes="96px"
+                  unoptimized
+                  className={`object-cover transition-opacity duration-300 ${pfpLoaded ? 'opacity-100' : 'opacity-0'}`}
+                  onLoadingComplete={() => setPfpLoaded(true)}
                   onError={() => setPfpLoaded(true)}
                 />
                 {!pfpLoaded && <div className="absolute inset-0 animate-pulse rounded-full bg-gold-500/10" />}

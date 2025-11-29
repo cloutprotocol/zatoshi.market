@@ -1,23 +1,39 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`src/app` hosts the Next.js app router with route groups, layouts, and global styles. UI building blocks live in `src/components`, while shared config, contexts, hooks, lib helpers, services, and utils are split into similarly named folders for easier ownership. Convex backend actions reside in `convex/` with its deployment metadata in `convex.json`. Static assets (including collection manifests) sit under `public/`, and blockchain automation or auditing helpers live in `scripts/`—notably `scripts/inscribe/` for inscription flows and `scripts/audit/` for claim reconciliation. Long-form specs belong in `docs/`, and experimental wallet tooling is isolated in `sidebar-wallet-standalone/`.
+- `src/app` – Next.js App Router (route groups, layouts, global styles).
+- `src/components` UI building blocks; `src/hooks`, `src/lib`, `src/services`, `src/utils` for shared logic; types in `src/types`.
+- `convex/` backend actions and `convex.json` deployment metadata.
+- `public/` static assets and collection manifests (e.g., `public/collections/<id>/claim`).
+- `scripts/inscribe/` inscription flows; `scripts/audit/` claim reconciliation; sample inputs in `temp/`.
+- Long-form specs in `docs/`; experimental wallet in `sidebar-wallet-standalone/`.
 
 ## Build, Test, and Development Commands
-- `npm run dev` – launches the local Next.js dev server with hot reload.
-- `npm run build` / `npm run start` – compiles production assets and serves them for smoke tests.
-- `npm run lint` – runs ESLint with the Next.js config; treat failures as blockers.
-- `npm run pages:dev|build|deploy` – targets the Cloudflare Pages build pipeline via `@cloudflare/next-on-pages` and `wrangler`.
-- `npm run audit:claims:export` – reproduces the claim audit pipeline; keep sample inputs under `temp/`.
+- `npm run dev` – start local Next.js dev server with hot reload.
+- `npm run build` / `npm run start` – build production assets, then serve for smoke tests.
+- `npm run lint` – ESLint with Next config; fix with `next lint --fix`.
+- `npm run pages:dev|build|deploy` – Cloudflare Pages pipeline via `@cloudflare/next-on-pages` and `wrangler`.
+- `npm run audit:claims:export` – reproduce claim audit pipeline (use `temp/` for samples).
+- In parallel: `npx convex dev` to exercise Convex functions (see `convex/testAction.ts`).
 
 ## Coding Style & Naming Conventions
-Use TypeScript across the app with strict typing—avoid `any`, prefer discriminated unions for protocol state, and colocate types in `src/types`. Components are `PascalCase`, hooks `useCamelCase`, utilities `camelCase`, and environment variables `SCREAMING_SNAKE_CASE`. Keep React files lean: render logic at top, derived helpers below, and tailwind class lists centralized near JSX. Follow Tailwind + CSS Modules already configured, and rely on ESLint + the default Next formatter (`next lint --fix`) before sending code for review.
+- TypeScript with strict typing. Avoid `any`; prefer discriminated unions. Colocate shared types in `src/types`.
+- Components `PascalCase` (e.g., `MintModal.tsx`); hooks `useCamelCase` (e.g., `useWallet`); utilities `camelCase` (e.g., `formatZecAmount`); env vars `SCREAMING_SNAKE_CASE`.
+- Keep React files lean: render logic at top, derived helpers below; centralize Tailwind class lists near JSX. Use Tailwind + CSS Modules.
+- Rely on ESLint + default Next formatter; ensure a clean `npm run lint` before PRs.
 
 ## Testing Guidelines
-There is no Jest suite yet; quality relies on linting, manual flows, and targeted transaction harnesses. For inscription or claim work, replicate the relevant script under `scripts/inscribe/` (e.g., `node scripts/inscribe/test-simple-tx.js`) and document expected outputs in the PR. UI regressions should be caught by loading `npm run dev` and verifying core pages, especially collection detail and mint modals. When touching Convex functions, run `npx convex dev` alongside the Next server to exercise `convex/testAction.ts`.
+- No Jest yet. Quality relies on linting, manual flows, and targeted transaction harnesses.
+- Inscription/claim work: run `node scripts/inscribe/test-simple-tx.js` and document expected outputs in PRs.
+- UI: run `npm run dev` and verify collection detail and mint modals.
+- Convex: run `npx convex dev` alongside the Next server when touching backend actions.
 
 ## Commit & Pull Request Guidelines
-Commits follow a short, imperative summary style (see `git log`: “Fix claim blocking and add lean stats system”). Keep them scoped to one functional change set with working builds. Pull requests must include: concise description, affected routes/modules, testing notes (`npm run build`, scripts executed), linked issues or discussion IDs, and screenshots or terminal captures for UI or blockchain changes. Draft PRs are encouraged for large features.
+- Commits: short, imperative summaries (see `git log`), scoped to one functional change with a working build.
+- PRs must include: concise description, affected routes/modules, testing notes (`npm run build`, scripts executed), linked issues/discussion IDs, and screenshots or terminal captures for UI/blockchain changes.
 
 ## Security & Configuration Tips
-Secrets live in `.env.local`; never commit RPC keys or whitelist CSVs with real customer data. Review `public/collections/*/claim` before pushes to ensure sample data only. RPC-facing scripts should default to Zashi test nodes unless production credentials are explicitly supplied via env vars.
+- Store secrets in `.env.local`. Never commit RPC keys or real customer data/whitelists.
+- Review `public/collections/*/claim` before pushes to ensure only sample data.
+- RPC scripts default to Zashi test nodes; use production credentials only via env vars.
+

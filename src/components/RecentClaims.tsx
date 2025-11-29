@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { getConvexClient } from '@/lib/convexClient';
 import { api } from '../../convex/_generated/api';
 import { getCollectionConfig } from '@/config/collections';
@@ -201,14 +202,15 @@ export function RecentClaims({ collectionSlug, limit = 12, title, cardSize = 'md
                     </div>
                   )}
                   {claim.imageUrls.length > 0 && (
-                    <img
+                    <Image
                       src={imageUrl}
                       alt={claim.name}
-                      loading={isAboveFold ? undefined : 'lazy'}
-                      fetchPriority={isAboveFold ? 'high' : undefined}
+                      fill
+                      unoptimized
+                      priority={isAboveFold}
+                      sizes="(max-width: 640px) 50vw, 200px"
                       onLoad={() => {
                         setImageLoaded((prev) => ({ ...prev, [claim.tokenId]: true }));
-                        // Trigger race loading for lazy-loaded images
                         if (!isAboveFold && !optimalImageUrls[claim.tokenId]) {
                           handleImageLoad(claim.tokenId, claim.imageUrls);
                         }
@@ -220,8 +222,7 @@ export function RecentClaims({ collectionSlug, limit = 12, title, cardSize = 'md
                           setImageError((prev) => ({ ...prev, [claim.tokenId]: true }));
                         }
                       }}
-                      className={`w-full h-full object-cover transition-opacity duration-300 ${imageLoaded[claim.tokenId] ? 'opacity-100' : 'opacity-0'
-                        }`}
+                      className={`object-cover transition-opacity duration-300 ${imageLoaded[claim.tokenId] ? 'opacity-100' : 'opacity-0'}`}
                     />
                   )}
                 </div>

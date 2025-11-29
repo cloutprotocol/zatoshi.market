@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -169,7 +170,7 @@ export function ClaimClient({ collection }: Props) {
     } finally {
       setStatusLoading(false);
     }
-  }, [wallet?.address, collection.claimWhitelistPath, collection.slug]);
+  }, [wallet?.address, collection]);
 
   useEffect(() => {
     loadStatus();
@@ -208,7 +209,7 @@ export function ClaimClient({ collection }: Props) {
     } finally {
       setLoadingClaims(false);
     }
-  }, [collection.imageCid, collection.metaCid, collection.name, collection.slug, wallet?.address]);
+  }, [collection, wallet?.address]);
 
   useEffect(() => {
     refreshClaimedTokens();

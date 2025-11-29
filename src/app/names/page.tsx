@@ -130,6 +130,7 @@ export default function NamesPage() {
   }, [view, q, zcashPage, limit]);
 
   // Auto-ingest recent names if none loaded yet
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -140,6 +141,7 @@ export default function NamesPage() {
     })();
     return () => { cancelled = true; };
   }, [refreshRecent, recent?.items?.length]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const items = useMemo(() => {
     if (view === 'recent') return recent?.items ?? [];

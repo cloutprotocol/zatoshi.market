@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useWallet } from "../../contexts/WalletContext";
@@ -41,9 +41,9 @@ export default function CreateListing({ onCancel, onSuccess }: CreateListingProp
         if (wallet?.address) {
             fetchInscriptions();
         }
-    }, [wallet?.address]);
+    }, [wallet?.address, fetchInscriptions]);
 
-    const fetchInscriptions = async () => {
+    const fetchInscriptions = useCallback(async () => {
         if (!wallet) return;
         setLoadingInscriptions(true);
         setError("");
@@ -122,7 +122,7 @@ export default function CreateListing({ onCancel, onSuccess }: CreateListingProp
         } finally {
             setLoadingInscriptions(false);
         }
-    };
+    }, [wallet]);
 
     const handleCreate = async () => {
         if (!wallet || !selectedInscription || !price) return;
