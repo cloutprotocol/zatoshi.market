@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { zerdinalsAPI, type ZerdinalsToken } from '@/services/zerdinals';
+import { ordinalIndexAPI } from '@/services/ordinalIndex';
 
 // Client-only Dither to avoid SSR/hydration mismatch
 const Dither = dynamic(() => import('@/components/Dither'), { ssr: false, loading: () => null });
 
 export default function ZORETokenPage() {
-  const [tokenData, setTokenData] = useState<ZerdinalsToken | null>(null);
+  const [tokenData, setTokenData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(true);
@@ -18,8 +18,8 @@ export default function ZORETokenPage() {
     async function fetchTokenData() {
       try {
         setLoading(true);
-        const data = await zerdinalsAPI.getZOREToken();
-        setTokenData(data);
+        const data = await ordinalIndexAPI.getTokenSummary('zore');
+        setTokenData(data as any);
       } catch (err) {
         setError('Failed to load token data');
         console.error(err);

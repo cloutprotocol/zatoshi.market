@@ -361,8 +361,16 @@ export async function callZcashRPC(method: string, params: any[] = []) {
   const username = process.env.ZCASH_RPC_USERNAME;
   const password = process.env.ZCASH_RPC_PASSWORD;
   if (username && password) {
-    const auth = Buffer.from(`${username}:${password}`).toString('base64');
-    headers['Authorization'] = `Basic ${auth}`;
+    try {
+      // Prefer Node Buffer if available
+      const B: any = (globalThis as any).Buffer;
+      if (B && typeof B.from === 'function') {
+        const auth = B.from(`${username}:${password}`, 'utf-8').toString('base64');
+        headers['Authorization'] = `Basic ${auth}`;
+      } else if (typeof (globalThis as any).btoa === 'function') {
+        headers['Authorization'] = `Basic ${(globalThis as any).btoa(`${username}:${password}`)}`;
+      }
+    } catch {}
   }
 
   const response = await fetch(url, {

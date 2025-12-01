@@ -1509,12 +1509,12 @@ function InscribePageContent() {
                         </div>
                         <div>
                           <div className="text-gold-400/60 text-sm mb-1">Inscription ID</div>
-                          <a
+                          <Link
                             href={`/inscription/${result.inscriptionId}`}
                             className="text-gold-300 hover:text-gold-400 font-mono text-xs sm:text-sm break-all bg-black/40 p-3 rounded block transition-colors underline"
                           >
                             {result.inscriptionId}
-                          </a>
+                          </Link>
                         </div>
                         <div className="pt-3">
                           <p className="text-xs text-gold-400/70">Note: New inscriptions may take up to ~5 minutes to appear in the public explorer.</p>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useWallet } from '@/contexts/WalletContext';
@@ -18,6 +18,19 @@ export default function Header() {
     setIsWalletOpen(true);
     setDesktopExpanded(true); // Always expand when clicking header button on desktop
   };
+
+  // Global event to open wallet from anywhere
+  useEffect(() => {
+    const onOpen = () => handleWalletClick();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('zatoshi:open-wallet', onOpen as EventListener);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('zatoshi:open-wallet', onOpen as EventListener);
+      }
+    };
+  }, []);
 
   return (
     <>

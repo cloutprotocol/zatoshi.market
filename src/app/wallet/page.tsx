@@ -745,6 +745,11 @@ export default function WalletPage() {
             </div>
           )}
 
+          {/* Sales Inbox */}
+          <div className="mt-6">
+            <SalesInbox />
+          </div>
+
           {/* Disconnect Button */}
           <div className="mt-8 text-center">
             <button
@@ -1075,3 +1080,4 @@ export default function WalletPage() {
     </main>
   );
 }
+import SalesInbox from '@/components/psbt/SalesInbox';

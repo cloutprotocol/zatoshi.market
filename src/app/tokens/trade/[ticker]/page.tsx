@@ -1,17 +1,20 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useEffect, useMemo, useState } from "react";
-import dynamic from "next/dynamic";
+import NextDynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
 import { Doc } from "../../../../../convex/_generated/dataModel";
-import { zerdinalsAPI, ZerdinalsToken } from "@/services/zerdinals";
+import { ordinalIndexAPI, type TokenSummary, type TokenIntegrity } from "@/services/ordinalIndex";
 import ListingCard from "@/components/psbt/ListingCard";
 import CreateListing from "@/components/psbt/CreateListing";
 import FinalizeTrade from "@/components/psbt/FinalizeTrade";
+import { useWallet } from "@/contexts/WalletContext";
 
-const Dither = dynamic(() => import("@/components/Dither"), {
+const Dither = NextDynamic(() => import("@/components/Dither"), {
     ssr: false,
     loading: () => null,
 });
@@ -37,10 +40,11 @@ const formatZec = (value?: number, fractionDigits = 2) => {
 
 export default function TokenTradePage({ params }: { params: { ticker: string } }) {
     const router = useRouter();
+    const { wallet } = useWallet();
     const ticker = decodeURIComponent(params.ticker).toUpperCase();
     const listings = useQuery(api.psbt.listListingsByTicker, { ticker });
 
-    const [tokenInfo, setTokenInfo] = useState<ZerdinalsToken | null>(null);
+    const [tokenInfo, setTokenInfo] = useState<{ tick: string; name?: string; supply?: number; holders?: number; mintedAmount?: number; limit?: number; progress?: number; price?: number; priceChange24h?: number; volume24h?: number; description?: string } | null>(null);
     const [loadingToken, setLoadingToken] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
     const [selectedListing, setSelectedListing] = useState<Doc<"psbtListings"> | null>(null);
@@ -49,21 +53,42 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
         let mounted = true;
         setLoadingToken(true);
 
-        zerdinalsAPI
-            .getToken(ticker)
-            .then((info) => {
+        (async () => {
+            try {
+                const [summary, integrity] = await Promise.all([
+                    ordinalIndexAPI.getTokenSummary(ticker),
+                    ordinalIndexAPI.getTokenIntegrity(ticker),
+                ]);
+
+                const dec = Number(summary?.dec ?? integrity?.dec ?? 0) || 0;
+                const toUnits = (v: any) => {
+                    const n = typeof v === 'string' ? Number(v) : v;
+                    if (!Number.isFinite(n)) return undefined;
+                    return dec > 0 ? n / 10 ** dec : n;
+                };
+
+                // Use overall minted (holders + burned) for progress so fully minted tokens show 100%
+                const limit = toUnits(integrity?.supply_base_units || summary?.supply_base_units);
+                const mintedAmount = toUnits(integrity?.sum_overall_base_units ?? integrity?.sum_available_base_units ?? undefined);
+                const holders = Number(summary?.holders ?? integrity?.total_holders ?? 0) || undefined;
+                const progress = mintedAmount !== undefined && limit ? Math.min(1, Math.max(0, mintedAmount / limit)) : undefined;
+
                 if (mounted) {
-                    setTokenInfo(info);
+                    setTokenInfo({
+                        tick: ticker,
+                        supply: limit,
+                        holders,
+                        mintedAmount,
+                        limit,
+                        progress,
+                    });
                 }
-            })
-            .catch((error) => {
+            } catch (error) {
                 console.error("Failed to fetch token info", error);
-            })
-            .finally(() => {
-                if (mounted) {
-                    setLoadingToken(false);
-                }
-            });
+            } finally {
+                if (mounted) setLoadingToken(false);
+            }
+        })();
 
         return () => {
             mounted = false;
@@ -131,7 +156,7 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
         {
             label: "24H Volume",
             value: volume24h !== undefined ? `${volume24h.toLocaleString()} ZEC` : "--",
-            helper: "Zerdinals feed",
+            helper: "Indexer feed",
         },
         {
             label: "Holders",
@@ -205,10 +230,16 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
                             <div className="flex flex-col gap-3 w-full max-w-sm">
                                 <button
                                     type="button"
-                                    disabled
-                                    className="w-full px-5 py-3 rounded-2xl bg-black/30 border border-gold-500/10 text-gold-200/30 font-bold tracking-wide text-sm cursor-not-allowed"
+                                    onClick={() => {
+                                        if (!wallet?.address) {
+                                            if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('zatoshi:open-wallet'));
+                                            return;
+                                        }
+                                        setShowCreate(true);
+                                    }}
+                                    className="w-full px-5 py-3 rounded-2xl bg-gold-500 text-black font-bold tracking-wide text-sm hover:bg-gold-400 transition-colors shadow-[0_0_25px_rgba(234,179,8,0.25)]"
                                 >
-                                    Listings Paused
+                                    List {ticker}
                                 </button>
                                 <button
                                     onClick={() => router.refresh()}
@@ -245,17 +276,28 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
                             </div>
 
                             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
-                                {statsCards.map((card) => (
-                                    <div key={card.label} className="bg-black/40 border border-gold-500/20 rounded-2xl p-4">
+                            {statsCards.map((card) => {
+                                const isZec = (card.label === 'Floor Price' || card.label === 'Spot Price' || card.label === '24H Volume') && typeof card.value === 'string' && card.value.includes('ZEC');
+                                const numPart = isZec ? String(card.value).replace(/\s*ZEC\s*$/i, '') : card.value;
+                                return (
+                                    <div key={card.label} className="bg-black/40 border border-gold-500/20 rounded-2xl p-4 overflow-hidden">
                                         <p className="text-[10px] uppercase tracking-widest text-gold-300/60 font-bold mb-1">
                                             {card.label}
                                         </p>
-                                        <div className="text-xl font-black text-gold-100">{card.value}</div>
+                                        {isZec ? (
+                                            <div className="text-gold-100">
+                                                <div className="text-xl font-black font-mono tabular-nums break-all leading-tight">{numPart}</div>
+                                                <div className="text-lg font-black">ZEC</div>
+                                            </div>
+                                        ) : (
+                                            <div className="text-xl font-black text-gold-100">{String(card.value)}</div>
+                                        )}
                                         {card.helper && (
                                             <p className="text-[11px] text-gold-300/60 mt-1">{card.helper}</p>
                                         )}
                                     </div>
-                                ))}
+                                );
+                            })}
                             </div>
                         </div>
                     </div>
@@ -273,8 +315,14 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
                         </div>
                         <button
                             type="button"
-                            disabled
-                            className="px-4 py-2 rounded-full border border-gold-500/10 text-xs font-bold uppercase tracking-widest text-gold-200/30 cursor-not-allowed"
+                            onClick={() => {
+                                if (!wallet?.address) {
+                                    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('zatoshi:open-wallet'));
+                                    return;
+                                }
+                                setShowCreate(true);
+                            }}
+                            className="px-4 py-2 rounded-full border border-gold-500/30 text-xs font-bold uppercase tracking-widest text-gold-100 hover:border-gold-400 hover:text-white transition-colors"
                         >
                             + Create Listing
                         </button>
@@ -308,9 +356,10 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
             </div>
 
             {showCreate && (
-                <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="w-full max-w-lg bg-black border border-gold-500/30 rounded-2xl p-6 shadow-[0_0_60px_rgba(234,179,8,0.2)]">
+                <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
+                    <div className="w-full max-w-2xl bg-black/60 border border-gold-500/20 rounded-none p-8 backdrop-blur-md">
                         <CreateListing
+                            ticker={ticker}
                             onCancel={() => setShowCreate(false)}
                             onSuccess={() => setShowCreate(false)}
                         />

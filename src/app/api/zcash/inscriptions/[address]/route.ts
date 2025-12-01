@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+export const runtime = 'nodejs';
 import { callZcashRPC } from '../../rpcHelper';
 
 /**
@@ -31,14 +32,14 @@ export async function GET(
       }
     }
 
-    // Step 1: Fetch UTXOs for this address
+    // Step 1: Fetch confirmed UTXOs for this address
     const utxos = await callZcashRPC('getaddressutxos', [{ addresses: [address] }]);
 
     if (!Array.isArray(utxos)) {
       return NextResponse.json({ inscribedLocations: [], count: 0, inscriptions: [] });
     }
 
-    // Step 2: Check each UTXO for inscriptions by location
+    // Step 2: Check each UTXO for inscriptions by location (confirmed)
     const inscriptions: any[] = [];
     const inscribedLocations: string[] = [];
 
@@ -77,6 +78,34 @@ export async function GET(
         }
       })
     );
+
+    // Step 3: Also peek at mempool for just-created inscriptions (faster UX)
+    try {
+      const mem = await callZcashRPC('getaddressmempool', [{ addresses: [address] }]);
+      const memList: any[] = Array.isArray(mem) ? mem : [];
+      for (const m of memList) {
+        try {
+          const txid = m?.txid || m?.txId || m?.txID;
+          const vout = typeof m?.index === 'number' ? m.index : (typeof m?.outputIndex === 'number' ? m.outputIndex : 0);
+          if (!txid || vout !== 0) continue;
+          const tx = await callZcashRPC('getrawtransaction', [txid, 1]);
+          const vins = tx?.vin || [];
+          const hasOrd = vins.some((vin: any) => {
+            const hex: string = vin?.scriptSig?.hex || '';
+            return typeof hex === 'string' && hex.toLowerCase().includes('6f7264');
+          });
+          if (hasOrd) {
+            const id = `${txid}i0`;
+            const location = `${txid}:0`;
+            if (!inscribedLocations.includes(location)) inscribedLocations.push(location);
+            const exists = inscriptions.some((i) => i.id === id);
+            if (!exists) inscriptions.push({ id, txid, vout: 0, contentType: 'unknown', pending: true });
+          }
+        } catch (e) { /* ignore individual mempool failures */ }
+      }
+    } catch (e) {
+      // getaddressmempool may be disabled; ignore errors
+    }
 
     const result = {
       inscribedLocations,

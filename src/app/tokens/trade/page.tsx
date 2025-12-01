@@ -1,16 +1,19 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
+import NextDynamic from "next/dynamic";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Doc } from "../../../../convex/_generated/dataModel";
 import ListingCard from "@/components/psbt/ListingCard";
 import CreateListing from "@/components/psbt/CreateListing";
 import FinalizeTrade from "@/components/psbt/FinalizeTrade";
+import { useWallet } from "@/contexts/WalletContext";
 
-const Dither = dynamic(() => import("@/components/Dither"), {
+const Dither = NextDynamic(() => import("@/components/Dither"), {
     ssr: false,
     loading: () => null,
 });
@@ -31,6 +34,7 @@ export default function TradePage() {
     const [activeTicker, setActiveTicker] = useState<string | null>(null);
     const [showCreate, setShowCreate] = useState(false);
     const [selectedListing, setSelectedListing] = useState<Doc<"psbtListings"> | null>(null);
+    const { wallet } = useWallet();
 
     const stats = useMemo(() => {
         if (!listings) {
@@ -167,6 +171,9 @@ export default function TradePage() {
                 </section>
 
                 <section className="mb-10 space-y-6">
+                    <div className="text-xs text-gold-300/70 bg-black/30 border border-gold-500/20 rounded-2xl p-3">
+                        Marketplace fees: Buyer pays 1.5%; Seller receives net after 1.5%. Fees are sent to the treasury at checkout.
+                    </div>
                     <div className="flex flex-col lg:flex-row gap-4 lg:items-center">
                         <div className="flex-1 relative">
                             <input
@@ -187,7 +194,13 @@ export default function TradePage() {
                         </div>
                         <div className="flex gap-3">
                             <button
-                                onClick={() => setShowCreate(true)}
+                                onClick={() => {
+                                    if (!wallet?.address) {
+                                        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('zatoshi:open-wallet'));
+                                        return;
+                                    }
+                                    setShowCreate(true);
+                                }}
                                 className="px-5 py-3 rounded-2xl bg-gold-500 text-black font-bold text-sm tracking-wide hover:bg-gold-400 transition-colors shadow-[0_0_25px_rgba(234,179,8,0.25)]"
                             >
                                 List Token
@@ -285,8 +298,8 @@ export default function TradePage() {
             </div>
 
             {showCreate && (
-                <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="w-full max-w-lg bg-black border border-gold-500/30 rounded-2xl p-6 shadow-[0_0_60px_rgba(234,179,8,0.2)]">
+                <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
+                    <div className="w-full max-w-2xl bg-black/60 border border-gold-500/20 rounded-none p-8 backdrop-blur-md">
                         <CreateListing
                             onCancel={() => setShowCreate(false)}
                             onSuccess={() => setShowCreate(false)}

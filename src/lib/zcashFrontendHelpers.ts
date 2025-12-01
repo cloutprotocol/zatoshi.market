@@ -105,14 +105,33 @@ export function zip243Sighash(tx: {
     expiryHeight: number;
     inputs: { txid: string; vout: number; sequence: number; value: number; scriptPubKey: Uint8Array }[];
     outputs: { value: number; scriptPubKey: Uint8Array }[];
-}, inputIndex: number): Uint8Array {
+}, inputIndex: number, hashType: number = 0x01): Uint8Array {
     const i = tx.inputs[inputIndex];
+    const anyoneCanPay = (hashType & 0x80) !== 0;
+    const baseType = hashType & 0x1f; // 1=ALL, 2=NONE, 3=SINGLE
+
+    const zero32 = new Uint8Array(32);
+    const hPrevouts = anyoneCanPay ? zero32 : prevoutsHash(tx.inputs);
+    const hSequence = anyoneCanPay ? zero32 : sequenceHash(tx.inputs);
+    let hOutputs: Uint8Array;
+    if (baseType === 0x02) { // NONE
+        hOutputs = zero32;
+    } else if (baseType === 0x03) { // SINGLE
+        if (inputIndex < tx.outputs.length) {
+            hOutputs = outputsHash([tx.outputs[inputIndex]]);
+        } else {
+            hOutputs = zero32;
+        }
+    } else { // ALL
+        hOutputs = outputsHash(tx.outputs);
+    }
+
     const pre = concatBytes([
         u32le(tx.version), u32le(tx.versionGroupId),
-        prevoutsHash(tx.inputs), sequenceHash(tx.inputs), outputsHash(tx.outputs),
+        hPrevouts, hSequence, hOutputs,
         new Uint8Array(32), new Uint8Array(32), new Uint8Array(32),
         u32le(tx.lockTime), u32le(tx.expiryHeight), u64le(0),
-        u32le(1), // SIGHASH_ALL
+        u32le(hashType),
         reverseBytes(hexToBytes(i.txid)), u32le(i.vout),
         varint(i.scriptPubKey.length), i.scriptPubKey,
         u64le(i.value), u32le(i.sequence)

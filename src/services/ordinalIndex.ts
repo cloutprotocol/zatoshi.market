@@ -236,6 +236,16 @@ class OrdinalIndexAPIService {
     );
   }
 
+  // Address portfolio: balances and/or transfer references for an address
+  async getAddressPortfolio(address: string): Promise<any> {
+    return this.apiCall<any>(`/api/v1/zrc20/address/${address}`);
+  }
+
+  // Staged transfer details (with outpoint/location and usage flag)
+  async getTransfer(transferId: string): Promise<any> {
+    return this.apiCall<any>(`/api/v1/zrc20/transfer/${transferId}`);
+  }
+
   async getZRC721Collections(
     page = 0,
     limit = 50

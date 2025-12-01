@@ -124,8 +124,8 @@ export default function CollectionTradePage({ params }: { params: { slug: string
 
                 {/* Create Listing Modal */}
                 {showCreate && (
-                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-                        <div className="bg-black border border-gold-500/30 rounded-xl p-6 w-full max-w-md relative animate-in zoom-in-95 duration-200 shadow-[0_0_50px_rgba(234,179,8,0.1)]">
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-6">
+                        <div className="bg-black/60 border border-gold-500/20 rounded-none p-8 w-full max-w-2xl relative backdrop-blur-md">
                             <CreateListing
                                 onCancel={() => setShowCreate(false)}
                                 onSuccess={() => {

@@ -186,7 +186,8 @@ export default defineSchema({
 
   // PSBT Listings for the Launchpad
   psbtListings: defineTable({
-    psbtBase64: v.string(), // The PSBT content
+    psbtBase64: v.optional(v.string()), // Optional PSBT; handshake flow doesn't require pre-signed PSBT
+    tokenLocation: v.string(), // "txid:vout" of the seller's token UTXO
     sellerAddress: v.string(), // Seller's wallet address
     price: v.number(), // Price in ZEC (or other unit)
     tokenTicker: v.optional(v.string()), // Ticker of the token being sold (ZRC-20)
@@ -197,12 +198,36 @@ export default defineSchema({
     createdAt: v.number(), // Timestamp
     txid: v.optional(v.string()), // Final transaction ID if completed
     buyerAddress: v.optional(v.string()), // Buyer's address if completed
+    feeZats: v.optional(v.number()), // Settlement tx miner fee (zats)
+    // Maker-ask fields (ZIP-243 SINGLE|ANYONECANPAY)
+    sellerInputTxid: v.optional(v.string()),
+    sellerInputVout: v.optional(v.number()),
+    sellerInputSequence: v.optional(v.number()),
+    sellerInputValue: v.optional(v.number()),
+    sellerScriptSigHex: v.optional(v.string()),
+    sellerPayoutZats: v.optional(v.number()),
+    sellerPayoutScriptHex: v.optional(v.string()),
   })
     .index("by_status", ["status"])
+    .index("by_token_location", ["tokenLocation"]) 
     .index("by_seller", ["sellerAddress"])
     .index("by_ticker", ["tokenTicker"])
     .index("by_collection", ["collectionSlug"])
     .index("by_created_at", ["createdAt"]),
+
+  // Buyer offers for listings (pending until seller signs)
+  psbtOffers: defineTable({
+    listingId: v.id("psbtListings"),
+    sellerAddress: v.string(),
+    buyerAddress: v.string(),
+    // Minimal offer payload: JSON string encoding inputs/outputs needed to assemble final tx
+    offerPayload: v.string(),
+    status: v.string(), // "pending" | "completed" | "cancelled"
+    createdAt: v.number(),
+    txid: v.optional(v.string()),
+  })
+    .index("by_seller", ["sellerAddress"])
+    .index("by_listing", ["listingId"]) ,
 
   // Badge definitions (global, reusable across collections)
   badgeDefinitions: defineTable({
