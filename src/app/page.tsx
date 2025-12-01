@@ -239,12 +239,72 @@ export default function Home() {
           <LiveMintsList tokens={enrichedLiveMints} loading={loadingTokens} />
         </section>
 
+        {/* ZRC-20 Marketplace Hero Banner */}
+        <section className="mb-16 -mx-4 sm:-mx-6">
+          <div className="relative w-full overflow-hidden rounded-none sm:rounded-2xl border-y sm:border border-gold-500/20 bg-black/60 backdrop-blur-xl">
+            {/* Liquid Glass Background Effect */}
+            <div className="absolute inset-0 -z-10">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-gold-500/20 via-transparent to-transparent opacity-60" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-gold-400/15 via-transparent to-transparent opacity-60" />
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-pulse" />
+            </div>
+
+            <div className="relative px-6 sm:px-12 py-10 sm:py-12 md:py-14">
+              <div className="max-w-5xl mx-auto text-center space-y-4">
+                {/* Badge */}
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-gold-500/10 border border-gold-400/30 rounded-full backdrop-blur-sm">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gold-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-gold-500"></span>
+                  </span>
+                  <span className="text-xs sm:text-sm font-bold text-gold-200 uppercase tracking-widest">Now Live</span>
+                </div>
+
+                {/* Title */}
+                <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tight">
+                  <span className="text-white">ZRC-20</span>
+                  <br />
+                  <span className="bg-gradient-to-r from-gold-400 via-gold-300 to-gold-500 bg-clip-text text-transparent">
+                    MARKETPLACE
+                  </span>
+                </h2>
+
+                {/* Subtitle with inline stats */}
+                <p className="text-lg sm:text-xl md:text-2xl text-gold-100/80 font-medium max-w-3xl mx-auto">
+                  Trade <span className="font-black text-gold-400"><StatsValue type="tokens" /></span> tokens. Decentralized, trustless, <span className="font-black text-gold-400">24/7</span> trading on Zcash.
+                </p>
+
+                {/* CTA Button */}
+                <div className="pt-2">
+                  <Link
+                    href="/tokens/trade"
+                    className="group inline-flex items-center justify-center gap-3 px-8 sm:px-12 py-4 sm:py-5 bg-gradient-to-r from-gold-500 to-gold-400 text-black rounded-sm text-base sm:text-lg font-black uppercase tracking-widest transition-all hover:shadow-[0_0_40px_rgba(234,179,8,0.5)] hover:scale-105 active:scale-95"
+                  >
+                    <span>Start Trading</span>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:translate-x-1"
+                    >
+                      <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Trending Tokens (Combined) */}
         <section className="mb-16">
           <SectionHeader title="Trending Tokens" link="/tokens" />
           <TokenGrid tokens={trendingTokens} loading={loadingTokens} />
         </section>
-
 
         {/* Footer */}
         <footer className="border-t border-gold-500/10 pt-12 mt-12">

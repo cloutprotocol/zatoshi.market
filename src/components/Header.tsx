@@ -59,8 +59,12 @@ export default function Header() {
             >
               ZRC-20
             </Link>
-
-
+            <Link
+              href="/tokens/trade"
+              className="px-3 py-1 hover:text-gold-200 transition-colors"
+            >
+              TRADE
+            </Link>
           </div>
 
           {!mounted ? (
@@ -127,8 +131,13 @@ export default function Header() {
                 >
                   ZRC-20
                 </Link>
-
-
+                <Link
+                  href="/tokens/trade"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="block py-3 text-gold-300 uppercase tracking-[0.3em] text-xs hover:text-gold-100"
+                >
+                  TRADE
+                </Link>
               </div>
 
               {/* Wallet Button - Bottom of screen on mobile */}

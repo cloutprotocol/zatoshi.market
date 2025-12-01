@@ -188,9 +188,6 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
                             <span className="text-lg">←</span>
                             Back to tokens
                         </button>
-                        <span className="px-3 py-1 rounded-full border border-gold-500/30 text-[10px] font-bold tracking-[0.5em] text-gold-300/70">
-                            LIVE MARKET
-                        </span>
                     </div>
 
                     <section className="relative overflow-hidden rounded-xl border border-gold-500/10 bg-black/40">

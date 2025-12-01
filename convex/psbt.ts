@@ -85,6 +85,7 @@
 
 import { action, mutation, query } from "./_generated/server";
 import { api } from "./_generated/api";
+import { Doc } from "./_generated/dataModel";
 import { v, ConvexError } from "convex/values";
 import { broadcastTransaction, bytesToHex, hexToBytes, fetchUtxos, callZcashRPC, checkInscriptionAt } from "./zcashHelpers";
 import { TREASURY_ADDRESS } from "./treasury.config";
@@ -863,13 +864,12 @@ export const finalizeAndBroadcast = action({
         const scriptSig = sellerInput.scriptSig;
         const sigLength = scriptSig[0];
         const sighashType = scriptSig[sigLength]; // Last byte of signature
-        console.log(`[PSBT] Seller signature sighash type: 0x${sighashType.toString(16)} (${
-          sighashType === 0x01 ? 'ALL' :
-          sighashType === 0x03 ? 'SINGLE' :
-          sighashType === 0x81 ? 'ALL|ANYONECANPAY' :
-          sighashType === 0x83 ? 'SINGLE|ANYONECANPAY' :
-          'UNKNOWN'
-        })`);
+        console.log(`[PSBT] Seller signature sighash type: 0x${sighashType.toString(16)} (${sighashType === 0x01 ? 'ALL' :
+            sighashType === 0x03 ? 'SINGLE' :
+              sighashType === 0x81 ? 'ALL|ANYONECANPAY' :
+                sighashType === 0x83 ? 'SINGLE|ANYONECANPAY' :
+                  'UNKNOWN'
+          })`);
 
         if (sighashType !== 0x83 && sighashType !== 0x03) {
           console.warn(`[PSBT] WARNING: Expected sighash type 0x83 (SINGLE|ANYONECANPAY) but got 0x${sighashType.toString(16)}`);
@@ -993,7 +993,22 @@ export const finalizeAndBroadcast = action({
     // Broadcast via our RPC
     const txid = await broadcastTransaction(args.hex);
     // Update status via mutation from an action
+    // Update status via mutation from an action
     await ctx.runMutation(api.psbt.updateStatus, { listingId: args.listingId, status: 'completed', txid, buyerAddress: args.buyerAddress, feeZats });
+
+    // Record sale in sales table (for history/volume tracking)
+    if (listing.tokenTicker && listing.tokenAmount) {
+      await ctx.runMutation(api.psbt.recordSale, {
+        inscriptionId: listing.inscriptionId || listing.tokenLocation, // Fallback if no inscriptionId stored
+        sellerAddress: listing.sellerAddress,
+        buyerAddress: args.buyerAddress,
+        priceZec: listing.price,
+        txid,
+        timestamp: Date.now(),
+        status: 'completed',
+      });
+    }
+
     return txid;
   }, 'Unable to finalize trade')
 });
@@ -1191,5 +1206,151 @@ export const listTradeHistory = query({
       .order("desc")
       .take(limit);
     return history;
+  },
+});
+
+// Internal: Record a sale in the sales table
+export const recordSale = mutation({
+  args: {
+    inscriptionId: v.string(),
+    sellerAddress: v.string(),
+    buyerAddress: v.string(),
+    priceZec: v.number(),
+    txid: v.string(),
+    timestamp: v.number(),
+    status: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("sales", args);
+  },
+});
+
+// Get global marketplace stats (total volume, recent trades)
+export const getGlobalStats = query({
+  args: {},
+  handler: async (ctx) => {
+    type MarketSummary = {
+      ticker: string;
+      floor: number | null;
+      activeListings: number;
+      volumeAllTime: number;
+      volume24h: number;
+      trades24h: number;
+      tradeCount: number;
+      lastTradeAt: number | null;
+    };
+
+    const [activeListings, completedListings] = await Promise.all([
+      ctx.db
+        .query("psbtListings")
+        .withIndex("by_status", (q) => q.eq("status", "active"))
+        .collect(),
+      ctx.db
+        .query("psbtListings")
+        .withIndex("by_status", (q) => q.eq("status", "completed"))
+        .order("desc")
+        .collect(),
+    ]);
+
+    const marketMap = new Map<string, MarketSummary>();
+    const ensureSummary = (ticker: string): MarketSummary => {
+      const existing = marketMap.get(ticker);
+      if (existing) return existing;
+      const created: MarketSummary = {
+        ticker,
+        floor: null,
+        activeListings: 0,
+        volumeAllTime: 0,
+        volume24h: 0,
+        trades24h: 0,
+        tradeCount: 0,
+        lastTradeAt: null,
+      };
+      marketMap.set(ticker, created);
+      return created;
+    };
+
+    const perTokenPrice = (listing: Doc<'psbtListings'>): number | null => {
+      if (!listing.tokenAmount || listing.tokenAmount <= 0) {
+        return null;
+      }
+      return listing.price / listing.tokenAmount;
+    };
+
+    activeListings.forEach((listing) => {
+      const ticker = listing.tokenTicker?.toUpperCase();
+      if (!ticker) return;
+      const summary = ensureSummary(ticker);
+      summary.activeListings += 1;
+      const pricePerToken = perTokenPrice(listing);
+      if (pricePerToken !== null) {
+        if (summary.floor === null || pricePerToken < summary.floor) {
+          summary.floor = pricePerToken;
+        }
+      }
+    });
+
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+    const cutoff24h = Date.now() - ONE_DAY;
+    const RECENT_LIMIT = 25;
+    const recentTrades: {
+      id: string;
+      ticker: string;
+      price: number;
+      tokenAmount: number | null;
+      sellerAddress: string;
+      buyerAddress?: string;
+      createdAt: number;
+      txid?: string;
+    }[] = [];
+
+    let totalVolume = 0;
+
+    completedListings.forEach((listing) => {
+      const ticker = listing.tokenTicker?.toUpperCase();
+      if (!ticker) return;
+      const summary = ensureSummary(ticker);
+      const price = listing.price || 0;
+      totalVolume += price;
+      summary.volumeAllTime += price;
+      summary.tradeCount += 1;
+      summary.lastTradeAt = summary.lastTradeAt ? Math.max(summary.lastTradeAt, listing.createdAt) : listing.createdAt;
+      if (listing.createdAt >= cutoff24h) {
+        summary.volume24h += price;
+        summary.trades24h += 1;
+      }
+      if (recentTrades.length < RECENT_LIMIT) {
+        recentTrades.push({
+          id: listing._id,
+          ticker,
+          price,
+          tokenAmount: listing.tokenAmount ?? null,
+          sellerAddress: listing.sellerAddress,
+          buyerAddress: listing.buyerAddress,
+          createdAt: listing.createdAt,
+          txid: listing.txid,
+        });
+      }
+    });
+
+    const marketSummaries = Array.from(marketMap.values()).sort((a, b) => {
+      if (b.volume24h !== a.volume24h) return b.volume24h - a.volume24h;
+      return b.volumeAllTime - a.volumeAllTime;
+    });
+
+    const globalFloor = marketSummaries.reduce<number | null>((floor, summary) => {
+      if (summary.floor === null) return floor;
+      if (floor === null) return summary.floor;
+      return Math.min(floor, summary.floor);
+    }, null);
+
+    return {
+      activeListings: activeListings.length,
+      uniqueTickers: marketSummaries.length,
+      globalFloor,
+      totalVolume,
+      recentTrades,
+      marketSummaries,
+    };
   },
 });
