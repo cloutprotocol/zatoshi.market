@@ -73,6 +73,11 @@ function formatBigIntWithCommas(bi: bigint): string {
     return bi.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
+function inscriptionIdentifier(ins: any): string {
+    if (!ins) return '';
+    return String(ins.id || ins.inscription_id || ins.location || '');
+}
+
 function deriveAmountFields(raw: any, decimals?: number): { base?: string; human?: string } {
     if (raw == null) return {};
     const rawStr = String(raw).trim();
@@ -124,6 +129,15 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
     const getBranchId = useAction(api.zcash.getBranchId);
     const mintInscription = useAction(api.inscriptionsActions.mintInscriptionAction);
     const createMintJobAndRun = useAction(api.jobsActions.createMintJobAndRun);
+    const activeListings = useQuery(
+        api.psbt.listActiveListingsBySeller as any,
+        wallet?.address
+            ? {
+                sellerAddress: wallet.address,
+                ticker: ticker ? ticker.toUpperCase() : undefined,
+            }
+            : "skip"
+    );
 
     const [inscriptions, setInscriptions] = useState<any[]>([]);
     const [loadingInscriptions, setLoadingInscriptions] = useState(false);
@@ -143,6 +157,10 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
     const [verifyPending, setVerifyPending] = useState(false);
     const [verifyAttempts, setVerifyAttempts] = useState(0);
     const [verifyNote, setVerifyNote] = useState<string>("");
+    const [refreshingVerification, setRefreshingVerification] = useState(false);
+    const [verifyNonce, setVerifyNonce] = useState(0);
+    const [transferFormOpen, setTransferFormOpen] = useState(false);
+    const [recentTransferInfo, setRecentTransferInfo] = useState<{ id: string; amount: string; ticker: string } | null>(null);
 
     const fetchInscriptions = useCallback(async () => {
         if (!wallet) return;
@@ -475,7 +493,19 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
             cancelled = true;
             if (timer) clearTimeout(timer);
         };
-    }, [selectedInscription, wallet, wallet?.address, tokenDecimals, verifyAttempts]);
+    }, [selectedInscription, wallet, wallet?.address, tokenDecimals, verifyAttempts, verifyNonce]);
+
+    const handleRefreshVerification = useCallback(() => {
+        if (!wallet || !selectedInscription) return;
+        if (refreshingVerification) return;
+        setRefreshingVerification(true);
+        setVerifyPending(true);
+        setVerifyNote('Refreshing…');
+        setVerifyAttempts(0);
+        setVerifyNonce((n) => n + 1);
+        // Small delay to prevent rapid-fire clicks
+        setTimeout(() => setRefreshingVerification(false), 400);
+    }, [wallet, selectedInscription, refreshingVerification]);
 
     const handleCreateTransfer = async () => {
         if (!wallet || !ticker) return;
@@ -500,6 +530,7 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
             } catch {}
         }
         setCreatingTransfer(true);
+        setTransferFormOpen(false);
         setError("");
         try {
             // IMPORTANT: Inscribe human units for amt, matching indexer example
@@ -517,9 +548,19 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
             const jobId: string | undefined = jobRes?.jobId;
             setMintJobId(jobId || null);
             // Fallback: if action returned inscription directly (unlikely), adopt it
-            const revealTxid: string | undefined = (jobRes?.revealTxid || jobRes?.txid);
-            const inscriptionId: string | undefined = jobRes?.inscriptionId || (revealTxid ? `${revealTxid}i0` : undefined);
-            if (!revealTxid || !inscriptionId) throw new Error('Failed to create transfer inscription');
+            let revealTxid: string | undefined = (jobRes?.revealTxid || jobRes?.txid);
+            let inscriptionId: string | undefined = jobRes?.inscriptionId || (revealTxid ? `${revealTxid}i0` : undefined);
+            if (!revealTxid && inscriptionId && typeof inscriptionId === 'string' && inscriptionId.includes('i')) {
+                revealTxid = inscriptionId.slice(0, inscriptionId.indexOf('i'));
+            }
+            if (!inscriptionId) {
+                if (revealTxid) inscriptionId = `${revealTxid}i0`;
+            }
+            if (!revealTxid || !inscriptionId) {
+                setVerifyPending(true);
+                setVerifyNote('Transfer inscription submitted. Awaiting job confirmation…');
+                return;
+            }
 
             // Poll indexer briefly until transfer shows up as unused and matches
             let ok = false;
@@ -546,6 +587,8 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                         };
                         setInscriptions(prev => [item, ...prev]);
                         setSelectedInscription(item);
+                        setRecentTransferInfo({ id: inscriptionId, amount: humanAmt, ticker: tickU });
+                        setTransferFormOpen(true);
                         ok = true;
                         break;
                     }
@@ -565,6 +608,8 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                 };
                 setInscriptions(prev => [item, ...prev]);
                 setSelectedInscription(item);
+                setRecentTransferInfo({ id: inscriptionId, amount: humanAmt, ticker: ticker.toUpperCase() });
+                setTransferFormOpen(true);
             }
         } catch (e: any) {
             setError(e?.message || 'Failed to create transfer inscription');
@@ -594,7 +639,7 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
     const verificationState = useMemo<VerificationFeedback | null>(() => {
         if (!selectedInscription) return null;
         if (verifyPending) {
-            const helperBase = 'We have your transfer, but the indexer still needs to confirm the ticker and amount before we allow listing. We keep retrying automatically.';
+            const helperBase = 'Indexer syncing ticker/amount. We retry automatically.';
             const helper = verifyNote && verifyNote !== 'Pending indexer'
                 ? `${verifyNote} — ${helperBase}`
                 : helperBase;
@@ -736,15 +781,127 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
             }
         } catch (e: any) {
             console.error(e);
-            setError(e.message || "Failed to create listing");
+            const message = e?.message || "Failed to create listing";
+            if (typeof message === 'string' && message.toLowerCase().includes('already has an active listing')) {
+                setError('This transfer already has an active listing. Cancel it or wait for it to complete before creating a new one.');
+            } else {
+                setError(message);
+            }
         } finally {
             setLoading(false);
         }
     };
 
+    const listedLocations = useMemo(() => {
+        if (!Array.isArray(activeListings)) return new Set<string>();
+        const set = new Set<string>();
+        for (const listing of activeListings) {
+            if (listing?.tokenLocation) {
+                set.add(String(listing.tokenLocation));
+            }
+        }
+        return set;
+    }, [activeListings]);
+
+    useEffect(() => {
+        if (!selectedInscription) return;
+        const loc = String((selectedInscription as any).location || '');
+        if (loc && listedLocations.has(loc)) {
+            setSelectedInscription(null);
+        }
+    }, [listedLocations, selectedInscription]);
+
+    useEffect(() => {
+        if (!recentTransferInfo) return;
+        const selectedId = inscriptionIdentifier(selectedInscription);
+        if (!selectedInscription || selectedId !== recentTransferInfo.id || !verifyPending) {
+            setRecentTransferInfo(null);
+        }
+    }, [selectedInscription, verifyPending, recentTransferInfo]);
+
+    useEffect(() => {
+        if (verified) setTransferFormOpen(false);
+    }, [verified]);
+
     const hasAvailable = useMemo(() => {
         try { return !!availableBalance && BigInt(availableBalance) > 0n; } catch { return false; }
     }, [availableBalance]);
+    const showTransferBuilder = Boolean(ticker && hasAvailable);
+
+    useEffect(() => {
+        if (!loadingInscriptions && inscriptions.length === 0 && showTransferBuilder) {
+            setTransferFormOpen(true);
+        }
+    }, [loadingInscriptions, inscriptions.length, showTransferBuilder]);
+
+    const recentTransferPending = useMemo(() => {
+        if (!recentTransferInfo) return false;
+        const selectedId = inscriptionIdentifier(selectedInscription);
+        return Boolean(selectedId && selectedId === recentTransferInfo.id && verifyPending);
+    }, [recentTransferInfo, selectedInscription, verifyPending]);
+
+    const transferBuilderContent = (() => {
+        if (!showTransferBuilder) return null;
+        if (creatingTransfer) {
+            return (
+                <div className="space-y-2 text-xs text-gold-200">
+                    <div className="text-sm font-semibold text-gold-100">Creating transfer inscription…</div>
+                    <p className="text-gold-300/80">Broadcasting your transfer. This can take a few seconds.</p>
+                </div>
+            );
+        }
+        if (recentTransferPending && recentTransferInfo) return null;
+        return (
+            <>
+                <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-gold-300/70">
+                    <span>Available balance</span>
+                    <span className="font-mono text-sm text-gold-50">{availableHuman ?? '—'} {ticker?.toUpperCase()}</span>
+                </div>
+                <div className="space-y-1 text-[11px] text-gold-300/60 font-mono">
+                    <div>Raw amount: {availableBalance ?? '—'}</div>
+                    <div>Precision: {tokenDecimals} decimals</div>
+                </div>
+                <div className="space-y-1">
+                    <label className="block text-xs text-gold-300/70">Create transfer amount</label>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9.]*"
+                            value={transferAmt}
+                            onChange={(e) => setTransferAmt(formatHumanInput(e.target.value, tokenDecimals))}
+                            className="flex-1 bg-black/60 border border-gold-500/20 rounded-none p-3 text-gold-100 focus:outline-none focus:border-gold-400"
+                            placeholder="e.g. 1000"
+                        />
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleCreateTransfer}
+                                disabled={creatingTransfer || !wallet || !hasAvailable}
+                                className="px-5 py-3 bg-gold-500 hover:bg-gold-400 text-black font-bold rounded-none disabled:opacity-50"
+                            >
+                                Create Transfer
+                            </button>
+                            {hasAvailable && (
+                                <button
+                                    type="button"
+                                    onClick={() => setTransferAmt(availableHuman || '')}
+                                    className="px-3 py-2 text-xs text-gold-300/80 hover:text-gold-100"
+                                >
+                                    Use Max
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </>
+        );
+    })();
+
+    const transferBuilder = showTransferBuilder && transferBuilderContent ? (
+        <div className="space-y-3 border border-gold-500/15 bg-black/40 p-4 min-h-[150px]">
+            {transferBuilderContent}
+        </div>
+    ) : null;
 
     // Live job status for newly created transfer inscription (tooling-compatible)
     const job = useQuery(api.jobs.getJob as any, mintJobId ? { jobId: mintJobId as any } : "skip");
@@ -772,6 +929,8 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
             };
             setInscriptions((prev) => [optimistic, ...prev]);
             setSelectedInscription(optimistic);
+            setRecentTransferInfo({ id: inscriptionId, amount: normalized, ticker: (ticker || '').toUpperCase() });
+            setTransferFormOpen(true);
             setCreatingTransfer(false);
             setMintJobId(null);
         }
@@ -804,51 +963,11 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                         ) : inscriptions.length === 0 ? (
                             <div className="space-y-3">
                               <div className="text-gold-300/80">No transferable {ticker || ''} inscriptions found.</div>
-                              {ticker && (
-                                <div className="p-5 bg-black/40 backdrop-blur-md border border-gold-500/20 rounded-none">
-                                  <div className="flex items-baseline justify-between">
-                                    <div className="text-xs uppercase tracking-wider text-gold-300/70">Your Balance</div>
-                                    <div className="text-2xl font-black text-gold-100">{availableHuman ?? '—'} <span className="text-gold-300/70 text-sm ml-1">{ticker.toUpperCase()}</span></div>
-                                  </div>
-                                  <div className="mt-1 text-[11px] text-gold-300/70 font-mono">Raw amount: {availableBalance ?? '—'}</div>
-                                  <div className="text-[10px] text-gold-300/60">Precision: {tokenDecimals} decimals</div>
-                                  <div className="mt-2 text-xs text-gold-300/70">Create a transfer from the amount you wish to sell.</div>
-                                </div>
-                              )}
-                              {ticker && (
-                                <div className="space-y-2">
-                                  <label className="block text-xs text-gold-300/70">Create Transfer Amount ({tokenDecimals} decimals)</label>
-                                  <div className="flex items-center gap-3">
-                                    <input
-                                      type="text"
-                                      inputMode="numeric"
-                                      pattern="[0-9.]*"
-                                      value={transferAmt}
-                                      onChange={(e) => setTransferAmt(formatHumanInput(e.target.value, tokenDecimals))}
-                                      className="flex-1 bg-black/40 backdrop-blur-md border border-gold-500/20 rounded-none p-3 text-gold-100 focus:outline-none focus:border-gold-400"
-                                      placeholder="e.g. 1000"
-                                    />
-                                    <button
-                                      onClick={handleCreateTransfer}
-                                      disabled={creatingTransfer || !wallet || !hasAvailable}
-                                      className="px-5 py-3 bg-gold-500 hover:bg-gold-400 text-black font-bold rounded-none disabled:opacity-50"
-                                    >
-                                      {creatingTransfer ? 'Creating…' : 'Create Transfer'}
-                                    </button>
-                                    {hasAvailable && (
-                                      <button
-                                        type="button"
-                                      onClick={() => setTransferAmt(availableHuman || '')}
-                                      className="px-2 py-2 text-xs text-gold-300/80 hover:text-gold-100"
-                                      >Use Max</button>
-                                    )}
-                                  </div>
-                                  {/* Removed raw units preview for simplicity */}
-                                </div>
-                              )}
+                              {transferBuilder}
                             </div>
                         ) : (
-                            <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto p-2 border border-gold-500/20 rounded-none bg-black/40 backdrop-blur-md">
+                            <>
+                            <div className="flex gap-2 overflow-x-auto no-scrollbar py-2 px-1 border border-gold-500/20 rounded-none bg-black/40 backdrop-blur-md flex-nowrap">
                                 {inscriptions.map((ins: any, idx: number) => {
                                     const candidateId = ins.id || ins.inscription_id || '';
                                     const matchesId = Boolean(
@@ -862,17 +981,23 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                                     const key = candidateId || ins.location || `optimistic-${idx}`;
                                     const shortId = (ins.id || ins.inscription_id || ins.location || '').toString();
 
+                                    const locationKey = String(ins.location || '');
+                                    const isListed = locationKey && listedLocations.has(locationKey);
                                     return (
                                         <button
                                             type="button"
                                             key={key}
-                                            onClick={() => setSelectedInscription(ins)}
+                                            onClick={() => {
+                                                if (isListed) return;
+                                                setSelectedInscription(ins);
+                                            }}
                                             aria-pressed={isSelected}
-                                            className={`w-full text-left p-3 rounded-none border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/60 ${
+                                            disabled={isListed}
+                                            className={`relative flex-none w-[200px] text-left p-3 rounded-none border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/60 ${
                                                 isSelected
                                                     ? "border-gold-400/80 bg-gold-400/10 shadow-[0_0_25px_rgba(234,179,8,0.25)] ring-1 ring-gold-400/70"
                                                     : "border-gold-500/10 hover:border-gold-500/40 hover:bg-gold-500/5"
-                                            }`}
+                                            } ${isListed ? 'opacity-40 cursor-not-allowed' : ''}`}
                                         >
                                             <div className="flex items-center justify-between mb-1">
                                                 <div className="text-xs text-gold-300/60">
@@ -902,10 +1027,27 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                                             <div className="mt-1 text-[11px] text-gold-300/50 font-mono truncate">
                                                 {shortId ? `${shortId.slice(0, 14)}…` : 'Unknown id'}
                                             </div>
+                                            {isListed && (
+                                                <span className="absolute top-2 right-2 text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 bg-black/70 border border-gold-500/30 text-gold-200">Listed</span>
+                                            )}
                                         </button>
                                     );
                                 })}
                             </div>
+                            {showTransferBuilder && (
+                                <div className="mt-4 space-y-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setTransferFormOpen((open) => !open)}
+                                        className="flex items-center justify-between w-full text-left px-3 py-2 text-xs uppercase tracking-wide border border-gold-500/20 text-gold-200 hover:border-gold-400"
+                                    >
+                                        <span>Need another transfer?</span>
+                                        <span>{transferFormOpen ? '−' : '+'}</span>
+                                    </button>
+                                    {transferFormOpen && transferBuilder}
+                                </div>
+                            )}
+                            </>
                         )}
                     </div>
 
@@ -936,14 +1078,26 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                                 <span className="text-gold-200">{formatTransferAmount(selectedInscription)}</span>
                             </div>
                             {verificationState && (
-                                <div className="mt-3">
-                                    <span
-                                        className={`inline-flex items-center gap-2 px-2 py-1 rounded-none text-[11px] font-semibold uppercase tracking-wide ${VERIFICATION_BADGE_STYLES[verificationState.tone]}`}
-                                    >
-                                        {verificationState.label}
-                                    </span>
+                                <div className="mt-3 space-y-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span
+                                            className={`inline-flex items-center gap-2 px-2 py-1 rounded-none text-[11px] font-semibold uppercase tracking-wide ${VERIFICATION_BADGE_STYLES[verificationState.tone]}`}
+                                        >
+                                            {verificationState.label}
+                                        </span>
+                                        {verificationState.tone !== 'success' && (
+                                            <button
+                                                type="button"
+                                                onClick={handleRefreshVerification}
+                                                disabled={refreshingVerification || verifying}
+                                                className="text-[10px] uppercase tracking-wide px-2 py-0.5 border border-gold-500/30 text-gold-200 hover:border-gold-400 hover:text-gold-100 disabled:opacity-50"
+                                            >
+                                                {refreshingVerification ? 'Refreshing…' : 'Refresh'}
+                                            </button>
+                                        )}
+                                    </div>
                                     {verificationState.helper && (
-                                        <p className={`mt-2 text-xs leading-relaxed ${VERIFICATION_HELPER_STYLES[verificationState.tone]}`}>
+                                        <p className={`text-xs leading-snug ${VERIFICATION_HELPER_STYLES[verificationState.tone]}`}>
                                             {verificationState.helper}
                                         </p>
                                     )}

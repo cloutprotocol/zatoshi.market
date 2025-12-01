@@ -10,7 +10,8 @@ import { sendZEC } from '@/services/transaction';
 import { getCollectionConfig } from '@/config/collections';
 import { buildImageUrls, buildTokenName, fetchCollectionMetadata } from '@/lib/collectionAssets';
 import QRCode from 'qrcode';
-import { calculateZRC20Balances, formatZRC20Amount, type ZRC20Token } from '@/utils/zrc20';
+import { calculateZRC20Balances, formatZRC20Amount, formatBaseUnits, type ZRC20Token } from '@/utils/zrc20';
+import { ordinalIndexAPI } from '@/services/ordinalIndex';
 
 const zrc721MetadataCache = new Map<string, { name: string; imageUrls: string[]; collectionName: string }>();
 
@@ -62,7 +63,7 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
   }>>({});
   const [zrcImageLoaded, setZrcImageLoaded] = useState<Record<string, boolean>>({});
   const [zrcImageError, setZrcImageError] = useState<Record<string, boolean>>({});
-  const [inscriptionFilter, setInscriptionFilter] = useState<'all' | 'zrc721'>('all');
+  const [inscriptionFilter, setInscriptionFilter] = useState<'all' | 'zrc721' | 'zrc20'>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasFetchedFresh, setHasFetchedFresh] = useState(false);
   const [justCopied, setJustCopied] = useState(false);
@@ -133,9 +134,9 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
       setZrcImageError({});
 
       // Calculate ZRC-20 balances from inscriptions
-      const tokens = calculateZRC20Balances(inscriptionList, contents);
-      setZrc20Tokens(tokens);
-      console.log(`💰 Found ${tokens.length} ZRC-20 tokens`);
+      // const tokens = calculateZRC20Balances(inscriptionList, contents);
+      // setZrc20Tokens(tokens);
+      // console.log(`💰 Found ${tokens.length} ZRC-20 tokens`);
 
       // Load ZRC-721 assets
       const zrcAssets: Record<string, {
@@ -207,6 +208,34 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
     }
   }, [wallet?.address]);
 
+  const fetchPortfolio = useCallback(async (forceRefresh: boolean = false) => {
+    if (!wallet?.address) return;
+    try {
+      // Fetch portfolio from indexer
+      const portfolio = await ordinalIndexAPI.getAddressPortfolio(wallet.address);
+
+      // Transform API response to ZRC20Token format
+      // API returns { balances: [{ tick, overall, available }], ... }
+      if (portfolio?.balances) {
+        const tokens: ZRC20Token[] = portfolio.balances.map((b: any) => ({
+          tick: b.tick.toUpperCase(),
+          balance: b.overall, // Use overall balance (available + transferable)
+          transferableCount: 0, // API doesn't return count yet, default to 0
+          mintCount: 0, // API doesn't return count yet, default to 0
+          totalInscriptions: 0
+        }));
+
+        // Sort by ticker
+        tokens.sort((a, b) => a.tick.localeCompare(b.tick));
+        setZrc20Tokens(tokens);
+      }
+    } catch (error) {
+      console.error('Failed to fetch ZRC-20 portfolio:', error);
+      // Fallback to calculation from inscriptions if API fails? 
+      // For now, we'll just log the error and keep existing state or empty
+    }
+  }, [wallet?.address]);
+
   const handleRefresh = async () => {
     if (isRefreshing || !wallet?.address) return;
     setIsRefreshing(true);
@@ -214,7 +243,8 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
       await Promise.all([
         fetchBalance(true), // Force refresh to bypass cache
         fetchPrice(),
-        fetchInscriptions(true) // Force refresh to bypass cache
+        fetchInscriptions(true), // Force refresh to bypass cache
+        fetchPortfolio(true)
       ]);
     } finally {
       setTimeout(() => setIsRefreshing(false), 1000);
@@ -249,15 +279,17 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
         // First load: bypass caches to get fresh data
         fetchBalance(true);
         fetchInscriptions(true);
+        fetchPortfolio(true);
         setHasFetchedFresh(true);
       } else {
         // Subsequent loads: use cached data
         fetchBalance();
         fetchInscriptions();
+        fetchPortfolio();
       }
       fetchPrice();
     }
-  }, [wallet?.address, isOpen, hasFetchedFresh, fetchBalance, fetchPrice, fetchInscriptions]);
+  }, [wallet?.address, isOpen, hasFetchedFresh, fetchBalance, fetchPrice, fetchInscriptions, fetchPortfolio]);
 
   const handleCreateWallet = async () => {
     setLoading(true);
@@ -646,20 +678,50 @@ export default function WalletDrawer({ isOpen, onClose, desktopExpanded, setDesk
                   <div className="flex gap-2 text-[11px]">
                     <button
                       onClick={() => setInscriptionFilter('all')}
-                      className={`px-3 py-1 rounded border text-xs transition ${inscriptionFilter === 'all' ? 'border-gold-500 text-gold-100 bg-gold-500/10' : 'border-gold-500/20 text-gold-300/70'}`}
+                      className={`px-3 py-1 rounded border text-xs transition whitespace-nowrap ${inscriptionFilter === 'all' ? 'border-gold-500 text-gold-100 bg-gold-500/10' : 'border-gold-500/20 text-gold-300/70'}`}
                     >
                       All
                     </button>
                     <button
+                      onClick={() => setInscriptionFilter('zrc20')}
+                      className={`px-3 py-1 rounded border text-xs transition whitespace-nowrap ${inscriptionFilter === 'zrc20' ? 'border-gold-500 text-gold-100 bg-gold-500/10' : 'border-gold-500/20 text-gold-300/70'}`}
+                    >
+                      ZRC-20
+                    </button>
+                    <button
                       onClick={() => setInscriptionFilter('zrc721')}
-                      className={`px-3 py-1 rounded border text-xs transition ${inscriptionFilter === 'zrc721' ? 'border-gold-500 text-gold-100 bg-gold-500/10' : 'border-gold-500/20 text-gold-300/70'}`}
+                      className={`px-3 py-1 rounded border text-xs transition whitespace-nowrap ${inscriptionFilter === 'zrc721' ? 'border-gold-500 text-gold-100 bg-gold-500/10' : 'border-gold-500/20 text-gold-300/70'}`}
                     >
                       ZRC-721
                     </button>
                   </div>
                 </div>
                 <div>
-                  {loadingInscriptions ? (
+                  {inscriptionFilter === 'zrc20' ? (
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                      {zrc20Tokens.length === 0 ? (
+                        <div className="p-8 text-center text-gold-200/60 text-sm">
+                          No tokens found
+                        </div>
+                      ) : (
+                        zrc20Tokens.map((token) => (
+                          <div
+                            key={token.tick}
+                            className="bg-black/40 border border-gold-500/20 rounded p-3 flex justify-between items-center hover:border-gold-500/40 transition-all cursor-pointer"
+                            onClick={() => { window.location.href = `/tokens/trade/${token.tick.toLowerCase()}`; }}
+                          >
+                            <div>
+                              <div className="font-bold text-gold-100">{token.tick}</div>
+                              <div className="text-[10px] text-gold-200/50 uppercase tracking-wider">ZRC-20</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="font-mono text-gold-300">{formatBaseUnits(token.balance)}</div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  ) : loadingInscriptions ? (
                     <div className="grid grid-cols-3 lg:grid-cols-2 gap-2">
                       {[1, 2, 3].map((i) => (
                         <div key={i} className="bg-black/40 border border-gold-500/20 rounded p-2">

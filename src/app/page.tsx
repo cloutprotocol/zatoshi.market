@@ -319,40 +319,54 @@ function LiveInscriptionsFeed() {
       </div>
 
       <div className="flex gap-4 overflow-x-auto no-scrollbar pb-4">
-        {inscriptions.map((insc) => (
-          <div key={insc._id} className="shrink-0 w-64 bg-black/40 border border-gold-500/10 rounded-xl p-4 hover:bg-white/5 transition-colors">
-            <div className="flex items-center justify-between mb-2">
-              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${insc.type === 'zrc20' ? 'bg-blue-500/20 text-blue-300' :
-                insc.type === 'text' ? 'bg-gold-500/20 text-gold-300' :
-                  'bg-purple-500/20 text-purple-300'
-                }`}>
-                {insc.type === 'zrc20' ? 'MINT' : insc.type.toUpperCase()}
-              </span>
-              <span className="text-[10px] font-mono text-gold-500/50">
-                {new Date(insc.createdAt).toLocaleTimeString()}
-              </span>
-            </div>
+        {inscriptions.map((insc) => {
+          const isZrc20 = insc.type === 'zrc20';
+          const op = (insc.zrc20Op || '').toLowerCase();
+          const badge = (() => {
+            if (!isZrc20) {
+              if (insc.type === 'text') return { label: 'TEXT', style: 'bg-gold-500/20 text-gold-300' };
+              return { label: insc.type?.toUpperCase?.() || 'INSCRIPTION', style: 'bg-purple-500/20 text-purple-300' };
+            }
+            if (op === 'transfer') return { label: 'ZRC20-TRANSFER', style: 'bg-purple-500/20 text-purple-200' };
+            if (op === 'deploy') return { label: 'ZRC20-DEPLOY', style: 'bg-rose-500/20 text-rose-200' };
+            return { label: 'ZRC20-MINT', style: 'bg-blue-500/20 text-blue-300' };
+          })();
 
-            <div className="mb-2">
-              {insc.type === 'zrc20' ? (
-                <div className="font-bold text-gold-100">
-                  {insc.zrc20Amount} <span className="text-gold-400">{insc.zrc20Tick}</span>
-                </div>
-              ) : (
-                <div className="font-mono text-xs text-gold-200 truncate">
-                  {insc.contentPreview || 'Binary Data'}
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 text-[10px] text-gold-500/40 font-mono">
-              <div className="h-4 w-4 rounded-full bg-gradient-to-br from-gold-500/20 to-black border border-gold-500/20 flex items-center justify-center text-[8px]">
-                {insc.address.slice(0, 2)}
+          return (
+            <div key={insc._id} className="shrink-0 w-64 bg-black/40 border border-gold-500/10 rounded-xl p-4 hover:bg-white/5 transition-colors">
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${badge.style}`}>
+                  {badge.label}
+                </span>
+                <span className="text-[10px] font-mono text-gold-500/50">
+                  {new Date(insc.createdAt).toLocaleTimeString()}
+                </span>
               </div>
-              <span>{insc.address.slice(0, 6)}...{insc.address.slice(-4)}</span>
+
+              <div className="mb-2">
+                {isZrc20 ? (
+                  <div className="font-bold text-gold-100">
+                    {insc.zrc20Amount || '—'} <span className="text-gold-400">{insc.zrc20Tick}</span>
+                  </div>
+                ) : (
+                  <div className="font-mono text-xs text-gold-200 truncate">
+                    {insc.contentPreview || 'Binary Data'}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 text-[10px] text-gold-500/40 font-mono">
+                <div className="h-4 w-4 rounded-full bg-gradient-to-br from-gold-500/20 to-black border border-gold-500/20 flex items-center justify-center text-[8px]">
+                  {(insc.address || '').slice(0, 2)}
+                </div>
+                <span>
+                  {(insc.address || '').slice(0, 6)}...
+                  {(insc.address || '').slice(-4)}
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

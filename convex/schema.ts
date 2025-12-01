@@ -212,6 +212,7 @@ export default defineSchema({
   })
     .index("by_status", ["status"])
     .index("by_token_location", ["tokenLocation"]) 
+    .index("by_token_location_status", ["tokenLocation", "status"]) 
     .index("by_seller", ["sellerAddress"])
     .index("by_ticker", ["tokenTicker"])
     .index("by_collection", ["collectionSlug"])

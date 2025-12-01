@@ -116,7 +116,7 @@ export default function TradePage() {
                 />
             </div>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6">
+            <div className="max-w-8xl mx-auto px-4 sm:px-6">
                 <section className="mb-12">
                     <p className="text-sm font-bold uppercase tracking-[0.3em] text-gold-500/60 mb-4">
                         ZRC-20 PSBT MARKET
@@ -171,9 +171,6 @@ export default function TradePage() {
                 </section>
 
                 <section className="mb-10 space-y-6">
-                    <div className="text-xs text-gold-300/70 bg-black/30 border border-gold-500/20 rounded-2xl p-3">
-                        Marketplace fees: Buyer pays 1.5%; Seller receives net after 1.5%. Fees are sent to the treasury at checkout.
-                    </div>
                     <div className="flex flex-col lg:flex-row gap-4 lg:items-center">
                         <div className="flex-1 relative">
                             <input

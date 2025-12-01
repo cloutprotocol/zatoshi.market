@@ -10,39 +10,31 @@ export default function Toaster() {
         <div
           key={t.id}
           className={[
-            "rounded-2xl border backdrop-blur-sm shadow-lg",
-            "bg-black/70 border-gold-500/30",
+            "border backdrop-blur-sm shadow-lg",
+            "bg-black/80 border-gold-500/20",
             "text-gold-100",
           ].join(" ")}
         >
-          <div className="p-3.5">
+          <div className="p-3">
             {t.title && (
-              <div className="text-sm font-bold tracking-wide">
+              <div className="text-sm font-bold tracking-wide font-mono uppercase">
                 {t.title}
               </div>
             )}
             {t.description && (
-              <div className="mt-1 text-xs text-gold-300/80 leading-relaxed">
+              <div className="mt-1 text-xs text-gold-300/80 leading-relaxed font-mono">
                 {t.description}
               </div>
             )}
             <div className="mt-2 flex items-center justify-end">
               <button
                 onClick={() => dismiss(t.id)}
-                className="text-[11px] uppercase tracking-wider text-gold-300/70 hover:text-gold-100 transition-colors"
+                className="text-[10px] uppercase tracking-widest text-gold-500 hover:text-gold-300 transition-colors font-bold"
               >
                 Dismiss
               </button>
             </div>
           </div>
-          <div
-            className={[
-              "h-0.5 rounded-b-2xl",
-              t.variant === "success" ? "bg-emerald-400/60" :
-              t.variant === "error" ? "bg-red-400/70" :
-              "bg-gold-400/60",
-            ].join(" ")}
-          />
         </div>
       ))}
     </div>

@@ -108,3 +108,30 @@ export function formatZRC20Amount(amount: string): string {
   const num = BigInt(amount);
   return num.toLocaleString();
 }
+
+export function formatBaseUnits(value?: string, dec = 18): string {
+  if (!value) return '0';
+  try {
+    const divisor = BigInt(10) ** BigInt(dec);
+    const val = BigInt(value);
+
+    // Get integer part
+    const integerPart = val / divisor;
+
+    // Get fractional part
+    const remainder = val % divisor;
+
+    if (remainder === BigInt(0)) {
+      return integerPart.toLocaleString();
+    }
+
+    // Format fractional part
+    let fraction = remainder.toString().padStart(dec, '0');
+    // Remove trailing zeros
+    fraction = fraction.replace(/0+$/, '');
+
+    return `${integerPart.toLocaleString()}.${fraction}`;
+  } catch {
+    return '0';
+  }
+}

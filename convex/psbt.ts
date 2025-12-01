@@ -37,7 +37,7 @@ function humanToBaseUnits(human: string, decimals: number): bigint {
   if (!/^[0-9]+(\.[0-9]+)?$/.test(trimmed)) throw new Error('Invalid human amount');
   const [intPart, fracPart = ''] = trimmed.split('.');
   const frac = (fracPart + '0'.repeat(decimals)).slice(0, decimals);
-  return BigInt(intPart || '0') * 10n ** BigInt(decimals) + BigInt(frac || '0');
+  return BigInt(intPart || '0') * BigInt(10) ** BigInt(decimals) + BigInt(frac || '0');
 }
 
 function parseAmountToBase(raw: any, decimals?: number): bigint | null {
@@ -175,7 +175,7 @@ async function assertValidZrc20Transfer(args: ZrcTransferValidationArgs): Promis
 async function buildBuyerTemplate(listing: any, buyerAddress: string) {
   let expectedBase: string | undefined = listing.tokenAmountBase;
   if (!expectedBase && typeof listing.tokenAmount === 'number' && typeof listing.tokenDecimals === 'number') {
-    try { expectedBase = humanToBaseUnits(String(listing.tokenAmount), listing.tokenDecimals).toString(); } catch {}
+    try { expectedBase = humanToBaseUnits(String(listing.tokenAmount), listing.tokenDecimals).toString(); } catch { }
   }
 
   let transferInfo: ZrcTransferValidationResult | null = null;
@@ -201,7 +201,7 @@ async function buildBuyerTemplate(listing: any, buyerAddress: string) {
       const utxos = await fetchUtxos(listing.sellerAddress);
       const tokenUtxo = utxos.find((u) => u.txid === txid && u.vout === vout);
       if (tokenUtxo) tokenValueZats = Number(tokenUtxo.value);
-    } catch {}
+    } catch { }
   }
   if (tokenValueZats === null) {
     try {
@@ -210,20 +210,20 @@ async function buildBuyerTemplate(listing: any, buyerAddress: string) {
       const out = vouts.find((o: any) => o?.n === vout) ?? vouts[vout];
       const val = typeof out?.valueZat === 'number' ? out.valueZat
         : typeof out?.satoshis === 'number' ? out.satoshis
-        : typeof out?.value === 'number' ? Math.round(out.value * 1e8)
-        : null;
+          : typeof out?.value === 'number' ? Math.round(out.value * 1e8)
+            : null;
       if (val !== null) tokenValueZats = val;
-    } catch {}
+    } catch { }
   }
   if (tokenValueZats === null) {
     try {
       const utxo: any = await callZcashRPC('gettxout', [txid, vout, true]);
       const val = typeof utxo?.valueZat === 'number' ? utxo.valueZat
         : typeof utxo?.satoshis === 'number' ? utxo.satoshis
-        : typeof utxo?.value === 'number' ? Math.round(utxo.value * 1e8)
-        : null;
+          : typeof utxo?.value === 'number' ? Math.round(utxo.value * 1e8)
+            : null;
       if (val !== null) tokenValueZats = val;
-    } catch {}
+    } catch { }
   }
   if (tokenValueZats === null) throw new Error('Token UTXO not found or already spent');
 
@@ -250,151 +250,188 @@ async function buildBuyerTemplate(listing: any, buyerAddress: string) {
 // Create a new PSBT listing
 // Create a new PSBT listing
 export const createListing = mutation({
-    args: {
-        psbtBase64: v.optional(v.string()),
-        tokenLocation: v.string(),
-        sellerAddress: v.string(),
-        price: v.number(),
-        // ZRC-20 (optional)
-        tokenTicker: v.optional(v.string()),
-        tokenAmount: v.optional(v.number()),
-        tokenAmountBase: v.optional(v.string()),
-        tokenDecimals: v.optional(v.number()),
-        // NFT (optional)
-        collectionSlug: v.optional(v.string()),
-        tokenId: v.optional(v.number()),
-        // Maker-ask fields (optional to maintain backward compat)
-        sellerInputTxid: v.optional(v.string()),
-        sellerInputVout: v.optional(v.number()),
-        sellerInputSequence: v.optional(v.number()),
-        sellerScriptSigHex: v.optional(v.string()),
-        sellerPayoutZats: v.optional(v.number()),
-        sellerPayoutScriptHex: v.optional(v.string()),
-        tokenValueZats: v.optional(v.number()), // From validateZrc20Transfer action
-    },
-    handler: async (ctx, args) => {
-        // IMPORTANT: For ZRC-20 listings, frontend must call validateZrc20Transfer action first
-        // and pass the returned tokenValueZats here (mutations cannot use fetch for validation)
-        const sellerInputValue = args.tokenValueZats;
+  args: {
+    psbtBase64: v.optional(v.string()),
+    tokenLocation: v.string(),
+    sellerAddress: v.string(),
+    price: v.number(),
+    // ZRC-20 (optional)
+    tokenTicker: v.optional(v.string()),
+    tokenAmount: v.optional(v.number()),
+    tokenAmountBase: v.optional(v.string()),
+    tokenDecimals: v.optional(v.number()),
+    // NFT (optional)
+    collectionSlug: v.optional(v.string()),
+    tokenId: v.optional(v.number()),
+    // Maker-ask fields (optional to maintain backward compat)
+    sellerInputTxid: v.optional(v.string()),
+    sellerInputVout: v.optional(v.number()),
+    sellerInputSequence: v.optional(v.number()),
+    sellerScriptSigHex: v.optional(v.string()),
+    sellerPayoutZats: v.optional(v.number()),
+    sellerPayoutScriptHex: v.optional(v.string()),
+    tokenValueZats: v.optional(v.number()), // From validateZrc20Transfer action
+  },
+  handler: async (ctx, args) => {
+    // IMPORTANT: For ZRC-20 listings, frontend must call validateZrc20Transfer action first
+    // and pass the returned tokenValueZats here (mutations cannot use fetch for validation)
+    const sellerInputValue = args.tokenValueZats;
 
-        const listingId = await ctx.db.insert("psbtListings", {
-            psbtBase64: args.psbtBase64,
-            tokenLocation: args.tokenLocation,
-            sellerAddress: args.sellerAddress,
-            price: args.price,
-            tokenTicker: args.tokenTicker,
-            tokenAmount: args.tokenAmount,
-            tokenAmountBase: args.tokenAmountBase ?? (transferInfo ? transferInfo.amtBase.toString() : undefined),
-            tokenDecimals: args.tokenDecimals,
-            collectionSlug: args.collectionSlug,
-            tokenId: args.tokenId,
-            status: "active",
-            createdAt: Date.now(),
-            // Maker-ask fields
-            sellerInputTxid: args.sellerInputTxid,
-            sellerInputVout: args.sellerInputVout,
-            sellerInputSequence: args.sellerInputSequence,
-            sellerScriptSigHex: args.sellerScriptSigHex,
-            sellerPayoutZats: args.sellerPayoutZats,
-            sellerPayoutScriptHex: args.sellerPayoutScriptHex,
-            sellerInputValue,
-        });
-        return listingId;
-    },
+    // Prevent duplicate listings for the same token UTXO
+    const existingActive = await ctx.db
+      .query("psbtListings")
+      .withIndex("by_token_location_status", (q) =>
+        q.eq("tokenLocation", args.tokenLocation).eq("status", "active")
+      )
+      .first();
+    if (existingActive) {
+      throw new Error('This transfer already has an active listing. Cancel the previous listing or wait for it to complete.');
+    }
+
+    const listingId = await ctx.db.insert("psbtListings", {
+      psbtBase64: args.psbtBase64,
+      tokenLocation: args.tokenLocation,
+      sellerAddress: args.sellerAddress,
+      price: args.price,
+      tokenTicker: args.tokenTicker,
+      tokenAmount: args.tokenAmount,
+      tokenAmountBase: args.tokenAmountBase,
+      tokenDecimals: args.tokenDecimals,
+      collectionSlug: args.collectionSlug,
+      tokenId: args.tokenId,
+      status: "active",
+      createdAt: Date.now(),
+      // Maker-ask fields
+      sellerInputTxid: args.sellerInputTxid,
+      sellerInputVout: args.sellerInputVout,
+      sellerInputSequence: args.sellerInputSequence,
+      sellerScriptSigHex: args.sellerScriptSigHex,
+      sellerPayoutZats: args.sellerPayoutZats,
+      sellerPayoutScriptHex: args.sellerPayoutScriptHex,
+      sellerInputValue,
+    });
+    return listingId;
+  },
 });
 
 // List all active listings
 export const listListings = query({
-    args: {
-        limit: v.optional(v.number()),
-    },
-    handler: async (ctx, args) => {
-        const limit = args.limit || 20;
-        const listings = await ctx.db
-            .query("psbtListings")
-            .withIndex("by_status", (q) => q.eq("status", "active"))
-            .order("desc")
-            .take(limit);
-        return listings;
-    },
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 20;
+    const listings = await ctx.db
+      .query("psbtListings")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .order("desc")
+      .take(limit);
+    return listings;
+  },
 });
 
 // List active listings by ticker
 export const listListingsByTicker = query({
-    args: {
-        ticker: v.string(),
-        limit: v.optional(v.number()),
-    },
-    handler: async (ctx, args) => {
-        const limit = args.limit || 50;
-        // Note: We need a compound index for status + ticker to be efficient, 
-        // or we filter in memory if volume is low. 
-        // Schema has .index("by_ticker", ["tokenTicker"]) and .index("by_status", ["status"]).
-        // A compound index ["tokenTicker", "status"] would be better.
-        // For now, let's use by_ticker and filter by status.
+  args: {
+    ticker: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 50;
+    // Note: We need a compound index for status + ticker to be efficient, 
+    // or we filter in memory if volume is low. 
+    // Schema has .index("by_ticker", ["tokenTicker"]) and .index("by_status", ["status"]).
+    // A compound index ["tokenTicker", "status"] would be better.
+    // For now, let's use by_ticker and filter by status.
 
-        const listings = await ctx.db
-            .query("psbtListings")
-            .withIndex("by_ticker", (q) => q.eq("tokenTicker", args.ticker))
-            .filter((q) => q.eq(q.field("status"), "active"))
-            .order("desc")
-            .take(limit);
+    const listings = await ctx.db
+      .query("psbtListings")
+      .withIndex("by_ticker", (q) => q.eq("tokenTicker", args.ticker))
+      .filter((q) => q.eq(q.field("status"), "active"))
+      .order("desc")
+      .take(limit);
 
-        return listings;
-    },
+    return listings;
+  },
+});
+
+// List active listings for a seller (optionally by ticker)
+export const listActiveListingsBySeller = query({
+  args: {
+    sellerAddress: v.string(),
+    ticker: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 200;
+    const rows = await ctx.db
+      .query("psbtListings")
+      .withIndex("by_seller", (q) => q.eq("sellerAddress", args.sellerAddress))
+      .order("desc")
+      .take(limit);
+    const tickerUpper = args.ticker?.toUpperCase();
+    return rows.filter((row) => {
+      if (row.status !== 'active') return false;
+      if (tickerUpper) {
+        const rowTicker = (row.tokenTicker || '').toUpperCase();
+        if (rowTicker !== tickerUpper) return false;
+      }
+      return true;
+    });
+  },
 });
 
 // List active listings by collection
 export const listListingsByCollection = query({
-    args: {
-        slug: v.string(),
-        limit: v.optional(v.number()),
-    },
-    handler: async (ctx, args) => {
-        const limit = args.limit || 50;
-        const listings = await ctx.db
-            .query("psbtListings")
-            .withIndex("by_collection", (q) => q.eq("collectionSlug", args.slug))
-            .filter((q) => q.eq(q.field("status"), "active"))
-            .order("desc")
-            .take(limit);
+  args: {
+    slug: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 50;
+    const listings = await ctx.db
+      .query("psbtListings")
+      .withIndex("by_collection", (q) => q.eq("collectionSlug", args.slug))
+      .filter((q) => q.eq(q.field("status"), "active"))
+      .order("desc")
+      .take(limit);
 
-        return listings;
-    },
+    return listings;
+  },
 });
 
 // Get a specific listing by ID
 export const getListing = query({
-    args: { listingId: v.id("psbtListings") },
-    handler: async (ctx, args) => {
-        return await ctx.db.get(args.listingId);
-    },
+  args: { listingId: v.id("psbtListings") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.listingId);
+  },
 });
 
 // Update listing status (e.g., after purchase or cancellation)
 export const updateStatus = mutation({
-    args: {
-        listingId: v.id("psbtListings"),
-        status: v.string(), // "completed" | "cancelled"
-        txid: v.optional(v.string()),
-        buyerAddress: v.optional(v.string()),
-        feeZats: v.optional(v.number()),
-    },
-    handler: async (ctx, args) => {
-        const { listingId, status, txid, buyerAddress } = args;
+  args: {
+    listingId: v.id("psbtListings"),
+    status: v.string(), // "completed" | "cancelled"
+    txid: v.optional(v.string()),
+    buyerAddress: v.optional(v.string()),
+    feeZats: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { listingId, status, txid, buyerAddress } = args;
 
-        // Validate status transition
-        const listing = await ctx.db.get(listingId);
-        if (!listing) throw new Error("Listing not found");
-        if (listing.status !== "active") throw new Error("Listing is not active");
+    // Validate status transition
+    const listing = await ctx.db.get(listingId);
+    if (!listing) throw new Error("Listing not found");
+    if (listing.status !== "active") throw new Error("Listing is not active");
 
-        await ctx.db.patch(listingId, {
-            status,
-            txid,
-            buyerAddress,
-            feeZats: args.feeZats,
-        });
-    },
+    await ctx.db.patch(listingId, {
+      status,
+      txid,
+      buyerAddress,
+      feeZats: args.feeZats,
+    });
+  },
 });
 
 // Helper: decode raw transparent tx outputs (value + scriptPubKey)
@@ -500,8 +537,14 @@ export const finalizeAndBroadcast = action({
     }
 
     // Re-validate ZRC-20 transfer just-in-time prior to parsing and broadcasting
-    if ((listing as any).tokenTicker && typeof (listing as any).tokenAmount === 'number') {
-      await assertValidZrc20Transfer(listing);
+    if (listing.tokenTicker && typeof listing.tokenAmount === 'number') {
+      await assertValidZrc20Transfer({
+        sellerAddress: listing.sellerAddress,
+        tokenLocation: listing.tokenLocation,
+        tokenTicker: listing.tokenTicker,
+        expectedAmountBase: listing.tokenAmountBase,
+        tokenDecimals: listing.tokenDecimals,
+      });
     }
 
     // Parse inputs/outputs
@@ -554,31 +597,31 @@ export const finalizeAndBroadcast = action({
       for (const inp of inputs) {
         let tx: any = cache.get(inp.txid);
         if (!tx) {
-          try { tx = await callZcashRPC('getrawtransaction', [inp.txid, 1]); cache.set(inp.txid, tx); } catch {}
+          try { tx = await callZcashRPC('getrawtransaction', [inp.txid, 1]); cache.set(inp.txid, tx); } catch { }
         }
         let valZ: number | null = null;
         try {
           const vouts: any[] = Array.isArray(tx?.vout) ? tx.vout : [];
           const out = vouts.find((o: any) => o?.n === inp.vout) ?? vouts[inp.vout];
           valZ = typeof out?.valueZat === 'number' ? out.valueZat
-               : typeof out?.satoshis === 'number' ? out.satoshis
-               : typeof out?.value === 'number' ? Math.round(out.value * 1e8)
-               : null;
-        } catch {}
+            : typeof out?.satoshis === 'number' ? out.satoshis
+              : typeof out?.value === 'number' ? Math.round(out.value * 1e8)
+                : null;
+        } catch { }
         if (valZ === null) {
           try {
             const utxo: any = await callZcashRPC('gettxout', [inp.txid, inp.vout, true]);
             valZ = typeof utxo?.valueZat === 'number' ? utxo.valueZat
-                 : typeof utxo?.satoshis === 'number' ? utxo.satoshis
-                 : typeof utxo?.value === 'number' ? Math.round(utxo.value * 1e8)
-                 : null;
-          } catch {}
+              : typeof utxo?.satoshis === 'number' ? utxo.satoshis
+                : typeof utxo?.value === 'number' ? Math.round(utxo.value * 1e8)
+                  : null;
+          } catch { }
         }
         if (valZ) totalIn += valZ;
       }
-    } catch {}
+    } catch { }
     let totalOut = 0;
-    try { for (const o of outs) totalOut += o.value; } catch {}
+    try { for (const o of outs) totalOut += o.value; } catch { }
     const feeZats = totalIn > 0 && totalOut > 0 ? (totalIn - totalOut) : undefined;
 
     // Broadcast via our RPC
@@ -710,4 +753,77 @@ export const cancelListing = mutation({
     }
     await ctx.db.patch(args.listingId, { status: 'cancelled' });
   }
+});
+
+// Get market stats for a ticker (spot price, 24h volume)
+export const getMarketStats = query({
+  args: { ticker: v.string() },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+
+    const completedListings = await ctx.db
+      .query("psbtListings")
+      .withIndex("by_ticker", (q) => q.eq("tokenTicker", args.ticker))
+      .filter((q) => q.eq(q.field("status"), "completed"))
+      .order("desc")
+      .collect();
+
+    if (completedListings.length === 0) {
+      return {
+        spotPrice: null,
+        volume24h: 0,
+        priceChange24h: 0,
+      };
+    }
+
+    const latest = completedListings[0];
+    const spotPrice = latest.tokenAmount ? latest.price / latest.tokenAmount : 0;
+
+    let volume24h = 0;
+    let price24hAgo: number | null = null;
+
+    for (const listing of completedListings) {
+      if (listing.createdAt >= oneDayAgo) {
+        volume24h += listing.price;
+      } else {
+        // Found the first trade older than 24h
+        if (price24hAgo === null && listing.tokenAmount) {
+          price24hAgo = listing.price / listing.tokenAmount;
+        }
+        // Since we are sorted by time desc, we can stop processing volume
+        // But we might need to search further for price24hAgo if this one has invalid amount
+        if (price24hAgo !== null) break;
+      }
+    }
+
+    let priceChange24h = 0;
+    if (price24hAgo) {
+      priceChange24h = ((spotPrice - price24hAgo) / price24hAgo) * 100;
+    }
+
+    return {
+      spotPrice,
+      volume24h,
+      priceChange24h,
+    };
+  },
+});
+
+// List completed trades (history) for a ticker
+export const listTradeHistory = query({
+  args: {
+    ticker: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 50;
+    const history = await ctx.db
+      .query("psbtListings")
+      .withIndex("by_ticker", (q) => q.eq("tokenTicker", args.ticker))
+      .filter((q) => q.eq(q.field("status"), "completed"))
+      .order("desc")
+      .take(limit);
+    return history;
+  },
 });
