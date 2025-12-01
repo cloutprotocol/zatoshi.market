@@ -7,7 +7,7 @@ import bs58check from "bs58check";
 
 const MARKETPLACE_FEES = {
   BUYER_BPS: 0,
-  SELLER_BPS: 200,
+  SELLER_BPS: 250,
 } as const;
 
 function computeFeeBreakdown(priceZats: number) {
@@ -238,11 +238,14 @@ async function buildBuyerTemplate(listing: any, buyerAddress: string) {
   if (tokenValueZats === null) throw new Error('Token UTXO not found or already spent');
 
   const priceZats = Math.round(listing.price * 1e8);
-  const { sellerFeeZats, sellerPayoutZats: computedPayout } = computeFeeBreakdown(priceZats);
-  if (typeof listing.sellerPayoutZats === 'number' && listing.sellerPayoutZats !== computedPayout) {
-    throw new Error('Listing payout mismatch for stored price');
+  const { sellerPayoutZats: computedPayout } = computeFeeBreakdown(priceZats);
+  let sellerPayoutZats = typeof listing.sellerPayoutZats === 'number' ? listing.sellerPayoutZats : computedPayout;
+  if (!Number.isFinite(sellerPayoutZats) || sellerPayoutZats <= 0) sellerPayoutZats = computedPayout;
+  let sellerFeeZats = priceZats - sellerPayoutZats;
+  if (sellerFeeZats < 0) {
+    sellerFeeZats = 0;
+    sellerPayoutZats = priceZats;
   }
-  const sellerPayoutZats = listing.sellerPayoutZats ?? computedPayout;
   const buyerScriptHex = bytesToHex(buildP2PKHScript(pkhFromT1(buyerAddress)));
   const sellerScriptHex = listing.sellerPayoutScriptHex ?? bytesToHex(buildP2PKHScript(pkhFromT1(listing.sellerAddress)));
   const treasuryScriptHex = bytesToHex(buildP2PKHScript(pkhFromT1(TREASURY_ADDRESS)));

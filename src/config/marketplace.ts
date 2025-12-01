@@ -1,7 +1,7 @@
 // Marketplace fee policy (basis points: 1% = 100 bps)
 export const MARKETPLACE_FEES = {
   BUYER_BPS: 0,    // 0% buyer fee
-  SELLER_BPS: 200, // 2.0% seller fee
+  SELLER_BPS: 250, // 2.5% seller fee
 } as const;
 
 export type FeeBreakdown = {
