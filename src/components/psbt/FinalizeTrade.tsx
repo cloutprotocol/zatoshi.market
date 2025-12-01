@@ -223,7 +223,7 @@ export default function FinalizeTrade({ listing, onCancel, zecPrice }: FinalizeT
 
       // Success celebration!
       triggerFireworks();
-      toastSuccess('🎉 Purchase Complete!', `${listing.tokenAmount} ${listing.tokenTicker} is yours! Tx: ${txidFinal.slice(0, 12)}…`);
+      toastSuccess('Purchase Complete', `${listing.tokenAmount} ${listing.tokenTicker} purchased. Tx: ${txidFinal.slice(0, 12)}…`);
       setSuccess(true);
 
       // Close modal after a brief delay to let user see the success state
@@ -247,7 +247,7 @@ export default function FinalizeTrade({ listing, onCancel, zecPrice }: FinalizeT
       )}
       {success && (
         <div className="bg-green-900/40 border border-green-800/60 text-green-200 p-3 rounded mb-4 text-sm">
-          🎉 Purchase completed successfully! Your {listing.tokenTicker} will appear in your wallet shortly.
+          Purchase completed successfully. Your {listing.tokenTicker} will appear in your wallet shortly.
         </div>
       )}
 
