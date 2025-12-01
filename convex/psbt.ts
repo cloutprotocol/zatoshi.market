@@ -5,6 +5,18 @@ import { broadcastTransaction, bytesToHex, hexToBytes, fetchUtxos, callZcashRPC,
 import { TREASURY_ADDRESS } from "./treasury.config";
 import bs58check from "bs58check";
 
+const MARKETPLACE_FEES = {
+  BUYER_BPS: 0,
+  SELLER_BPS: 250,
+} as const;
+
+function computeFeeBreakdown(priceZats: number) {
+  const sellerFeeZats = Math.floor((priceZats * MARKETPLACE_FEES.SELLER_BPS) / 10_000);
+  const buyerFeeZats = Math.ceil((priceZats * MARKETPLACE_FEES.BUYER_BPS) / 10_000);
+  const sellerPayoutZats = priceZats - sellerFeeZats;
+  return { sellerFeeZats, buyerFeeZats, sellerPayoutZats };
+}
+
 // -----------------------------
 // Ordinal Index validation utils
 // -----------------------------
@@ -20,59 +32,219 @@ async function ordinalIndexFetch(path: string) {
   return await r.json();
 }
 
-function parseAmountLike(v: any): number | null {
-  if (typeof v === 'number') return v;
-  if (typeof v === 'string') {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
+function humanToBaseUnits(human: string, decimals: number): bigint {
+  const trimmed = human.trim();
+  if (!/^[0-9]+(\.[0-9]+)?$/.test(trimmed)) throw new Error('Invalid human amount');
+  const [intPart, fracPart = ''] = trimmed.split('.');
+  const frac = (fracPart + '0'.repeat(decimals)).slice(0, decimals);
+  return BigInt(intPart || '0') * 10n ** BigInt(decimals) + BigInt(frac || '0');
 }
 
-async function assertValidZrc20Transfer(listing: any) {
-  // Only validate ZRC-20 flow (tokenTicker/tokenAmount present)
-  if (!listing?.tokenTicker || !(typeof listing?.tokenAmount === 'number' && listing.tokenAmount > 0)) return;
-  const location = String(listing.tokenLocation || '');
+function parseAmountToBase(raw: any, decimals?: number): bigint | null {
+  if (raw == null) return null;
+  const str = String(raw).trim();
+  if (!str) return null;
+  if (str.includes('.')) {
+    if (typeof decimals !== 'number' || !Number.isFinite(decimals)) return null;
+    try { return humanToBaseUnits(str, decimals); } catch { return null; }
+  }
+  try {
+    return BigInt(str);
+  } catch {
+    return null;
+  }
+}
+
+type ZrcTransferValidationArgs = {
+  sellerAddress: string;
+  tokenLocation: string;
+  tokenTicker: string;
+  expectedAmountBase?: string | number | bigint;
+  tokenDecimals?: number;
+};
+
+type ZrcTransferValidationResult = {
+  txid: string;
+  vout: number;
+  tokenValueZats: number;
+  inscriptionId: string;
+  tick: string;
+  amtBase: bigint;
+  senderAddress: string;
+};
+
+// Export as action so it can use fetch() to query the indexer
+export const validateZrc20Transfer = action({
+  args: {
+    sellerAddress: v.string(),
+    tokenLocation: v.string(),
+    tokenTicker: v.string(),
+    expectedAmountBase: v.optional(v.union(v.string(), v.number())),
+    tokenDecimals: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const result = await assertValidZrc20Transfer(args);
+    // Convert bigint to string for JSON serialization
+    return {
+      ...result,
+      amtBase: result.amtBase.toString(),
+    };
+  },
+});
+
+async function assertValidZrc20Transfer(args: ZrcTransferValidationArgs): Promise<ZrcTransferValidationResult> {
+  const location = String(args.tokenLocation || '');
   if (!location.includes(':')) throw new Error('Invalid token location');
   const [txid, voutStr] = location.split(':');
-  const vout = parseInt(voutStr || '0', 10) || 0;
+  const vout = parseInt(voutStr || '0', 10);
+  if (!Number.isFinite(vout) || vout < 0) throw new Error('Invalid token location');
 
-  // 1) Ensure seller controls the token UTXO (matches seller address script)
-  try {
-    const tx: any = await callZcashRPC('getrawtransaction', [txid, 1]);
-    const vouts: any[] = Array.isArray(tx?.vout) ? tx.vout : [];
-    const out = vouts.find((o: any) => o?.n === vout) ?? vouts[vout];
-    if (!out) throw new Error('Output not found');
-    const expected = buildP2PKHScript(pkhFromT1(listing.sellerAddress));
-    const scriptHex: string = String(out?.scriptPubKey?.hex || '').toLowerCase();
-    if (!scriptHex) throw new Error('Missing scriptPubKey');
-    if (bytesToHex(expected).toLowerCase() !== scriptHex) {
-      throw new Error('Seller does not own the token UTXO');
-    }
-  } catch (e: any) {
-    throw new Error(`Ownership check failed: ${e?.message || String(e)}`);
-  }
-
-  // 2) Validate transfer against indexer (id is txid + 'i0' convention for inscriptions)
-  const transferId = `${txid}i0`;
+  const inscriptionId = `${txid}i0`;
   let tf: any;
   try {
-    tf = await ordinalIndexFetch(`/api/v1/zrc20/transfer/${transferId}`);
+    tf = await ordinalIndexFetch(`/api/v1/zrc20/transfer/${inscriptionId}`);
   } catch (e: any) {
     throw new Error(`Cannot validate transfer via indexer: ${e?.message || String(e)}`);
   }
+  if (!tf) throw new Error('Transfer not found in indexer');
 
-  const tick = (tf?.tick || tf?.ticker || '').toString().toUpperCase();
-  const amt = parseAmountLike(tf?.amt ?? tf?.amount);
+  const tick = (tf?.transfer?.tick || tf?.tick || tf?.ticker || '').toString().toUpperCase();
   const used = Boolean(tf?.used || tf?.revealed || tf?.consumed);
-  const sender = (tf?.sender || tf?.from || tf?.address || tf?.owner || '').toString();
+  const sender = (tf?.transfer?.sender || tf?.sender || tf?.from || tf?.address || tf?.owner || '').toString();
   const outpoint = (tf?.outpoint || tf?.location || tf?.output || '').toString();
-
   if (used) throw new Error('Transfer already used');
-  if (!tick || tick !== String(listing.tokenTicker).toUpperCase()) throw new Error('Transfer ticker mismatch');
-  if (amt === null) throw new Error('Transfer amount missing');
-  if (sender && sender.toLowerCase() !== String(listing.sellerAddress).toLowerCase()) throw new Error('Transfer sender mismatch');
+  if (!tick || tick !== String(args.tokenTicker).toUpperCase()) throw new Error('Transfer ticker mismatch');
+  if (sender && sender.toLowerCase() !== String(args.sellerAddress).toLowerCase()) throw new Error('Transfer sender mismatch');
   if (outpoint && outpoint !== location) throw new Error('Transfer outpoint mismatch');
+
+  const amountRaw = tf?.transfer?.amt ?? tf?.amt ?? tf?.amount ?? tf?.amount_base_units ?? tf?.value ?? tf?.value_base_units;
+  const amtBase = parseAmountToBase(amountRaw, args.tokenDecimals);
+  if (amtBase === null) throw new Error('Transfer amount missing');
+
+  if (args.expectedAmountBase != null) {
+    let expectedBase: bigint;
+    try {
+      expectedBase = typeof args.expectedAmountBase === 'bigint'
+        ? args.expectedAmountBase
+        : BigInt(String(args.expectedAmountBase));
+    } catch {
+      throw new Error('Invalid expected transfer amount');
+    }
+    if (expectedBase !== amtBase) throw new Error('Transfer amount mismatch');
+  }
+
+  let rawTx: any;
+  try {
+    rawTx = await callZcashRPC('getrawtransaction', [txid, 1]);
+  } catch (e: any) {
+    throw new Error(`Ownership check failed: ${e?.message || String(e)}`);
+  }
+  const vouts: any[] = Array.isArray(rawTx?.vout) ? rawTx.vout : [];
+  const out = vouts.find((o: any) => o?.n === vout) ?? vouts[vout];
+  if (!out) throw new Error('Output not found');
+
+  const expectedScriptHex = bytesToHex(buildP2PKHScript(pkhFromT1(args.sellerAddress))).toLowerCase();
+  const scriptHex: string = String(out?.scriptPubKey?.hex || '').toLowerCase();
+  if (!scriptHex) throw new Error('Missing scriptPubKey');
+  if (scriptHex !== expectedScriptHex) throw new Error('Seller does not own the token UTXO');
+
+  let tokenValueZats: number | null = null;
+  if (typeof out?.valueZat === 'number') tokenValueZats = out.valueZat;
+  else if (typeof out?.satoshis === 'number') tokenValueZats = out.satoshis;
+  else if (typeof out?.value === 'number') tokenValueZats = Math.round(out.value * 1e8);
+  if (tokenValueZats === null) throw new Error('Unable to determine token UTXO value');
+
+  try {
+    const utxo: any = await callZcashRPC('gettxout', [txid, vout, true]);
+    if (!utxo) throw new Error('Token UTXO already spent');
+  } catch (e: any) {
+    throw new Error(e?.message || 'Token UTXO already spent');
+  }
+
+  return {
+    txid,
+    vout,
+    tokenValueZats,
+    inscriptionId: String(tf?.id || tf?.inscription_id || inscriptionId),
+    tick,
+    amtBase,
+    senderAddress: sender,
+  };
+}
+
+async function buildBuyerTemplate(listing: any, buyerAddress: string) {
+  let expectedBase: string | undefined = listing.tokenAmountBase;
+  if (!expectedBase && typeof listing.tokenAmount === 'number' && typeof listing.tokenDecimals === 'number') {
+    try { expectedBase = humanToBaseUnits(String(listing.tokenAmount), listing.tokenDecimals).toString(); } catch {}
+  }
+
+  let transferInfo: ZrcTransferValidationResult | null = null;
+  if (listing.tokenTicker) {
+    transferInfo = await assertValidZrc20Transfer({
+      sellerAddress: listing.sellerAddress,
+      tokenLocation: listing.tokenLocation,
+      tokenTicker: listing.tokenTicker,
+      expectedAmountBase: expectedBase,
+      tokenDecimals: listing.tokenDecimals,
+    });
+  }
+
+  let tokenValueZats: number | null = transferInfo ? Number(transferInfo.tokenValueZats) : null;
+  if (tokenValueZats === null && typeof listing.sellerInputValue === 'number') {
+    tokenValueZats = listing.sellerInputValue;
+  }
+
+  const [txid, voutStr] = listing.tokenLocation.split(':');
+  const vout = parseInt(voutStr, 10);
+  if (tokenValueZats === null) {
+    try {
+      const utxos = await fetchUtxos(listing.sellerAddress);
+      const tokenUtxo = utxos.find((u) => u.txid === txid && u.vout === vout);
+      if (tokenUtxo) tokenValueZats = Number(tokenUtxo.value);
+    } catch {}
+  }
+  if (tokenValueZats === null) {
+    try {
+      const tx: any = await callZcashRPC('getrawtransaction', [txid, 1]);
+      const vouts: any[] = Array.isArray(tx?.vout) ? tx.vout : [];
+      const out = vouts.find((o: any) => o?.n === vout) ?? vouts[vout];
+      const val = typeof out?.valueZat === 'number' ? out.valueZat
+        : typeof out?.satoshis === 'number' ? out.satoshis
+        : typeof out?.value === 'number' ? Math.round(out.value * 1e8)
+        : null;
+      if (val !== null) tokenValueZats = val;
+    } catch {}
+  }
+  if (tokenValueZats === null) {
+    try {
+      const utxo: any = await callZcashRPC('gettxout', [txid, vout, true]);
+      const val = typeof utxo?.valueZat === 'number' ? utxo.valueZat
+        : typeof utxo?.satoshis === 'number' ? utxo.satoshis
+        : typeof utxo?.value === 'number' ? Math.round(utxo.value * 1e8)
+        : null;
+      if (val !== null) tokenValueZats = val;
+    } catch {}
+  }
+  if (tokenValueZats === null) throw new Error('Token UTXO not found or already spent');
+
+  const priceZats = Math.round(listing.price * 1e8);
+  const { sellerFeeZats, sellerPayoutZats: computedPayout } = computeFeeBreakdown(priceZats);
+  if (typeof listing.sellerPayoutZats === 'number' && listing.sellerPayoutZats !== computedPayout) {
+    throw new Error('Listing payout mismatch for stored price');
+  }
+  const sellerPayoutZats = listing.sellerPayoutZats ?? computedPayout;
+  const buyerScriptHex = bytesToHex(buildP2PKHScript(pkhFromT1(buyerAddress)));
+  const sellerScriptHex = listing.sellerPayoutScriptHex ?? bytesToHex(buildP2PKHScript(pkhFromT1(listing.sellerAddress)));
+  const treasuryScriptHex = bytesToHex(buildP2PKHScript(pkhFromT1(TREASURY_ADDRESS)));
+
+  return {
+    tokenValueZats,
+    outputs: [
+      { index: 0, kind: 'token', valueZats: tokenValueZats, scriptHex: buyerScriptHex },
+      { index: 1, kind: 'sellerPayout', valueZats: sellerPayoutZats, scriptHex: sellerScriptHex },
+      { index: 2, kind: 'treasury', valueZats: sellerFeeZats, scriptHex: treasuryScriptHex },
+    ],
+  };
 }
 
 // Create a new PSBT listing
@@ -86,6 +258,8 @@ export const createListing = mutation({
         // ZRC-20 (optional)
         tokenTicker: v.optional(v.string()),
         tokenAmount: v.optional(v.number()),
+        tokenAmountBase: v.optional(v.string()),
+        tokenDecimals: v.optional(v.number()),
         // NFT (optional)
         collectionSlug: v.optional(v.string()),
         tokenId: v.optional(v.number()),
@@ -96,46 +270,12 @@ export const createListing = mutation({
         sellerScriptSigHex: v.optional(v.string()),
         sellerPayoutZats: v.optional(v.number()),
         sellerPayoutScriptHex: v.optional(v.string()),
+        tokenValueZats: v.optional(v.number()), // From validateZrc20Transfer action
     },
     handler: async (ctx, args) => {
-        // Validate ZRC-20 transfer listings using indexer (fail-safe)
-        if (args.tokenTicker && typeof args.tokenAmount === 'number') {
-            await assertValidZrc20Transfer({
-                tokenLocation: args.tokenLocation,
-                sellerAddress: args.sellerAddress,
-                tokenTicker: args.tokenTicker,
-                tokenAmount: args.tokenAmount,
-            });
-        }
-        // Optionally cache seller input value
-        let sellerInputValue: number | undefined = undefined;
-        try {
-            const location = args.tokenLocation;
-            const [txid, voutStr] = location.split(':');
-            const vout = parseInt(voutStr, 10);
-            if (txid && Number.isFinite(vout)) {
-                try {
-                    const tx: any = await callZcashRPC('getrawtransaction', [txid, 1]);
-                    const vouts: any[] = Array.isArray(tx?.vout) ? tx.vout : [];
-                    const out = vouts.find((o: any) => o?.n === vout) ?? vouts[vout];
-                    const valZ = typeof out?.valueZat === 'number' ? out.valueZat
-                                : typeof out?.satoshis === 'number' ? out.satoshis
-                                : typeof out?.value === 'number' ? Math.round(out.value * 1e8)
-                                : null;
-                    if (valZ !== null) sellerInputValue = valZ;
-                } catch {}
-                if (sellerInputValue === undefined) {
-                    try {
-                        const utxo: any = await callZcashRPC('gettxout', [txid, vout, true]);
-                        const valZ = typeof utxo?.valueZat === 'number' ? utxo.valueZat
-                                    : typeof utxo?.satoshis === 'number' ? utxo.satoshis
-                                    : typeof utxo?.value === 'number' ? Math.round(utxo.value * 1e8)
-                                    : null;
-                        if (valZ !== null) sellerInputValue = valZ;
-                    } catch {}
-                }
-            }
-        } catch {}
+        // IMPORTANT: For ZRC-20 listings, frontend must call validateZrc20Transfer action first
+        // and pass the returned tokenValueZats here (mutations cannot use fetch for validation)
+        const sellerInputValue = args.tokenValueZats;
 
         const listingId = await ctx.db.insert("psbtListings", {
             psbtBase64: args.psbtBase64,
@@ -144,6 +284,8 @@ export const createListing = mutation({
             price: args.price,
             tokenTicker: args.tokenTicker,
             tokenAmount: args.tokenAmount,
+            tokenAmountBase: args.tokenAmountBase ?? (transferInfo ? transferInfo.amtBase.toString() : undefined),
+            tokenDecimals: args.tokenDecimals,
             collectionSlug: args.collectionSlug,
             tokenId: args.tokenId,
             status: "active",
@@ -299,6 +441,10 @@ function decodeOutputs(hex: string): { value: number; script: Uint8Array }[] {
   return outs;
 }
 
+function scriptsEqual(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((byte, idx) => byte === b[idx]);
+}
+
 function decodeInputs(hex: string): { txid: string; vout: number; scriptSig: Uint8Array; sequence: number }[] {
   const bytes = hexToBytes(hex);
   const dv = new DataView(bytes.buffer);
@@ -361,30 +507,16 @@ export const finalizeAndBroadcast = action({
     // Parse inputs/outputs
     const inputs = decodeInputs(args.hex);
     const outs = decodeOutputs(args.hex);
-    if (outs.length < 3) throw new Error('Invalid transaction: missing required outputs');
+    const template = await buildBuyerTemplate(listing, args.buyerAddress);
+    if (outs.length < template.outputs.length) throw new Error('Invalid transaction: missing required outputs');
 
-    // Validate output ordering and amounts
-    const priceZats = Math.round(listing.price * 1e8);
-    const sellerFeeZats = Math.floor(priceZats * 0.025);
-    const expectedSellerPayout = priceZats - sellerFeeZats;
-    const expectedBuyerScript = buildP2PKHScript(pkhFromT1(args.buyerAddress));
-    const expectedSellerScript = listing.sellerPayoutScriptHex
-      ? hexToBytes(listing.sellerPayoutScriptHex)
-      : buildP2PKHScript(pkhFromT1(listing.sellerAddress));
-    const expectedTreasuryScript = buildP2PKHScript(pkhFromT1(TREASURY_ADDRESS));
-
-    // Output 0: token → buyer
-    if (!(outs[0].script.length === expectedBuyerScript.length && outs[0].script.every((b, i) => b === expectedBuyerScript[i]))) {
-      throw new Error('Output 0 must transfer the token to the buyer');
-    }
-    // Output 1: seller payout
-    if (outs[1].value !== expectedSellerPayout || !(outs[1].script.length === expectedSellerScript.length && outs[1].script.every((b, i) => b === expectedSellerScript[i]))) {
-      throw new Error('Output 1 (seller payout) does not match listing');
-    }
-    // Output 2: treasury
-    if (outs[2].value !== sellerFeeZats || !(outs[2].script.length === expectedTreasuryScript.length && outs[2].script.every((b, i) => b === expectedTreasuryScript[i]))) {
-      throw new Error('Output 2 (treasury) missing or incorrect');
-    }
+    template.outputs.forEach((expected, idx) => {
+      const actual = outs[idx];
+      const expectedScript = hexToBytes(expected.scriptHex);
+      if (actual.value !== expected.valueZats || !scriptsEqual(actual.script, expectedScript)) {
+        throw new Error(`Output ${idx} does not match marketplace template`);
+      }
+    });
 
     // Validate seller input presence and scriptSig equals stored maker-ask
     const [itxid, ivoutStr] = String(listing.tokenLocation).split(':');
@@ -466,64 +598,14 @@ export const prepareBuyerTemplate = action({
     if (!listing) throw new Error('Listing not found');
     if (listing.status !== 'active') throw new Error('Listing not active');
 
-    // Re-validate ZRC-20 transfer at time of purchase preparation
-    if ((listing as any).tokenTicker && typeof (listing as any).tokenAmount === 'number') {
-      await assertValidZrc20Transfer(listing);
-    }
-
-    // Fetch token input value from seller's UTXOs (fallback to direct RPC)
-    const [txid, voutStr] = listing.tokenLocation.split(':');
-    const vout = parseInt(voutStr, 10);
-    let tokenValueZats: number | null = null;
-    // Use cached value if available
-    if (typeof (listing as any).sellerInputValue === 'number') tokenValueZats = (listing as any).sellerInputValue as number;
-    try {
-      const utxos = await fetchUtxos(listing.sellerAddress);
-      const tokenUtxo = utxos.find(u => u.txid === txid && u.vout === vout);
-      if (tokenUtxo) tokenValueZats = Number(tokenUtxo.value);
-    } catch {}
-    if (tokenValueZats === null) {
-      try {
-        const tx: any = await callZcashRPC('getrawtransaction', [txid, 1]);
-        const vouts: any[] = Array.isArray(tx?.vout) ? tx.vout : [];
-        const out = vouts.find((o: any) => o?.n === vout) ?? vouts[vout];
-        const valZ = typeof out?.valueZat === 'number' ? out.valueZat
-                    : typeof out?.satoshis === 'number' ? out.satoshis
-                    : typeof out?.value === 'number' ? Math.round(out.value * 1e8)
-                    : null;
-        if (valZ !== null) tokenValueZats = valZ;
-      } catch {}
-    }
-    if (tokenValueZats === null) {
-      try {
-        const utxo: any = await callZcashRPC('gettxout', [txid, vout, true]);
-        const valZ = typeof utxo?.valueZat === 'number' ? utxo.valueZat
-                    : typeof utxo?.satoshis === 'number' ? utxo.satoshis
-                    : typeof utxo?.value === 'number' ? Math.round(utxo.value * 1e8)
-                    : null;
-        if (valZ !== null) tokenValueZats = valZ;
-      } catch {}
-    }
-    if (tokenValueZats === null) throw new Error('Token UTXO not found or already spent');
-
-    const priceZats = Math.round(listing.price * 1e8);
-    const sellerFeeZats = Math.floor(priceZats * 0.025);
-    const sellerPayoutZats = priceZats - sellerFeeZats;
-
-    const buyerScript = buildP2PKHScript(pkhFromT1(args.buyerAddress));
-    const sellerScript = buildP2PKHScript(pkhFromT1(listing.sellerAddress));
-    const treasuryScript = buildP2PKHScript(pkhFromT1(TREASURY_ADDRESS));
+    const template = await buildBuyerTemplate(listing, args.buyerAddress);
 
     return {
       listingId: args.listingId,
       buyerAddress: args.buyerAddress,
       tokenLocation: listing.tokenLocation,
-      tokenValueZats,
-      outputs: [
-        { index: 0, kind: 'token', valueZats: tokenValueZats, scriptHex: bytesToHex(buyerScript) },
-        { index: 1, kind: 'sellerPayout', valueZats: sellerPayoutZats, scriptHex: bytesToHex(sellerScript) },
-        { index: 2, kind: 'treasury', valueZats: sellerFeeZats, scriptHex: bytesToHex(treasuryScript) },
-      ],
+      tokenValueZats: template.tokenValueZats,
+      outputs: template.outputs,
       constraints: {
         input0: listing.tokenLocation,
         buyerChangeIndexMin: 3,
@@ -544,69 +626,29 @@ export const submitBuyerOffer = action({
     const listing = await ctx.runQuery(api.psbt.getListing, { listingId: args.listingId });
     if (!listing) throw new Error('Listing not found');
     if (listing.status !== 'active') throw new Error('Listing not active');
-    if ((listing as any).tokenTicker && typeof (listing as any).tokenAmount === 'number') {
-      await assertValidZrc20Transfer(listing);
-    }
-    // Build canonical template inline to avoid cross-calling actions from a mutation
-    const [txid, voutStr] = listing.tokenLocation.split(':');
-    const vout = parseInt(voutStr, 10);
-    let tokenValueZats2: number | null = null;
-    try {
-      const utxos = await fetchUtxos(listing.sellerAddress);
-      const tokenUtxo = utxos.find(u => u.txid === txid && u.vout === vout);
-      if (tokenUtxo) tokenValueZats2 = Number(tokenUtxo.value);
-    } catch {}
-    if (tokenValueZats2 === null) {
-      try {
-        const tx: any = await callZcashRPC('getrawtransaction', [txid, 1]);
-        const vouts: any[] = Array.isArray(tx?.vout) ? tx.vout : [];
-        const out = vouts.find((o: any) => o?.n === vout) ?? vouts[vout];
-        const valZ = typeof out?.valueZat === 'number' ? out.valueZat
-                    : typeof out?.satoshis === 'number' ? out.satoshis
-                    : typeof out?.value === 'number' ? Math.round(out.value * 1e8)
-                    : null;
-        if (valZ !== null) tokenValueZats2 = valZ;
-      } catch {}
-    }
-    if (tokenValueZats2 === null) {
-      try {
-        const utxo: any = await callZcashRPC('gettxout', [txid, vout, true]);
-        const valZ = typeof utxo?.valueZat === 'number' ? utxo.valueZat
-                    : typeof utxo?.satoshis === 'number' ? utxo.satoshis
-                    : typeof utxo?.value === 'number' ? Math.round(utxo.value * 1e8)
-                    : null;
-        if (valZ !== null) tokenValueZats2 = valZ;
-      } catch {}
-    }
-    if (tokenValueZats2 === null) throw new Error('Token UTXO not found or already spent');
-    const priceZats = Math.round(listing.price * 1e8);
-    const sellerFeeZats = Math.floor(priceZats * 0.025);
-    const sellerPayoutZats = priceZats - sellerFeeZats;
-    const buyerScriptHex = bytesToHex(buildP2PKHScript(pkhFromT1(args.buyerAddress)));
-    const sellerScriptHex = bytesToHex(buildP2PKHScript(pkhFromT1(listing.sellerAddress)));
-    const treasuryScriptHex = bytesToHex(buildP2PKHScript(pkhFromT1(TREASURY_ADDRESS)));
+    const template = await buildBuyerTemplate(listing, args.buyerAddress);
     let payload: any;
     try { payload = JSON.parse(args.offerPayload); } catch { throw new Error('Invalid offer payload'); }
+    if ((payload?.buyerAddress || '').toString().toLowerCase() !== args.buyerAddress.toLowerCase()) {
+      throw new Error('Buyer address mismatch');
+    }
     const [ptxid, pvoutStr] = (payload.sellerInput?.txid && typeof payload.sellerInput?.vout === 'number')
       ? [payload.sellerInput.txid, String(payload.sellerInput.vout)] : [null, null];
     if (!ptxid || `${ptxid}:${pvoutStr}` !== listing.tokenLocation) {
       throw new Error('Offer seller input does not match listing token');
     }
-    if (!Array.isArray(payload.outputs) || payload.outputs.length < 3) {
+    if (!Array.isArray(payload.outputs) || payload.outputs.length < template.outputs.length) {
       throw new Error('Offer outputs missing');
     }
-    // Check first 3 outputs match template
-    const o0 = payload.outputs[0];
-    const o1 = payload.outputs[1];
-    const o2 = payload.outputs[2];
-    if (!o0 || o0.value !== tokenValueZats2 || (o0.scriptHex || '').toLowerCase() !== buyerScriptHex.toLowerCase()) {
-      throw new Error('Offer output 0 mismatch');
-    }
-    if (!o1 || o1.value !== sellerPayoutZats || (o1.scriptHex || '').toLowerCase() !== sellerScriptHex.toLowerCase()) {
-      throw new Error('Offer output 1 (seller payout) mismatch');
-    }
-    if (!o2 || o2.value !== sellerFeeZats || (o2.scriptHex || '').toLowerCase() !== treasuryScriptHex.toLowerCase()) {
-      throw new Error('Offer output 2 (treasury) mismatch');
+    for (let i = 0; i < template.outputs.length; i++) {
+      const expected = template.outputs[i];
+      const provided = payload.outputs[i];
+      if (!provided) throw new Error(`Offer output ${i} missing`);
+      const providedValue = Number(provided.value);
+      const providedScript = String(provided.scriptHex || '').toLowerCase();
+      if (providedValue !== expected.valueZats || providedScript !== expected.scriptHex.toLowerCase()) {
+        throw new Error(`Offer output ${i} mismatch`);
+      }
     }
     const offerId = await ctx.runMutation(api.psbt.insertOffer, {
       listingId: args.listingId,

@@ -14,6 +14,7 @@ import {
   addressToPkh,
   zip243Sighash,
   bytesToHex,
+  decodeTransparentOutputs,
 } from "@/lib/zcashFrontendHelpers";
 import * as secp from "@noble/secp256k1";
 import { useToast } from "@/contexts/ToastContext";
@@ -46,6 +47,17 @@ export default function SalesInbox() {
 
       const consensusBranchId = await getBranchId({});
 
+      // Fetch seller prevout details to build correct sighash preimage
+      const sellerTx = await fetch(`/api/zcash/tx/${payload.sellerInput.txid}`);
+      if (!sellerTx.ok) throw new Error('Failed to fetch seller token UTXO');
+      const { raw } = await sellerTx.json();
+      const outs = decodeTransparentOutputs(raw);
+      const sellerOut = outs[payload.sellerInput.vout];
+      if (!sellerOut) throw new Error('Seller token output missing');
+      const sellerScript = buildP2PKHScript(addressToPkh(wallet.address));
+      const scriptMatches = sellerOut.script.length === sellerScript.length && sellerOut.script.every((b, idx) => b === sellerScript[idx]);
+      if (!scriptMatches) throw new Error('Seller input does not belong to your address');
+
       // Build seller scriptSig for input 0 (SIGHASH_SINGLE|ANYONECANPAY)
       const sellerPriv = wifToPriv(wallet.privateKey);
       const sellerPub = secp.getPublicKey(sellerPriv, true);
@@ -53,9 +65,9 @@ export default function SalesInbox() {
         {
           txid: payload.sellerInput.txid,
           vout: payload.sellerInput.vout,
-          value: 0, // not needed for seller input sighash (we sign SINGLE for index 0)
+          value: sellerOut.value,
           sequence: payload.sellerInput.sequence,
-          scriptPubKey: buildP2PKHScript(addressToPkh(wallet.address)),
+          scriptPubKey: sellerScript,
         },
         ...payload.buyerInputs.map((bi) => ({
           txid: bi.txid,
@@ -77,7 +89,7 @@ export default function SalesInbox() {
         outputs,
       } as any;
 
-      const sighash = zip243Sighash(txData, 0);
+      const sighash = zip243Sighash(txData, 0, 0x83);
       const sig: any = await secp.sign(sighash, sellerPriv);
       const sig64 = sig.toCompactRawBytes ? sig.toCompactRawBytes() : sig;
       const der = signatureToDER(sig64);

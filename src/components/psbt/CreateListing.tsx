@@ -12,11 +12,11 @@ import {
     addressToPkh,
     wifToPriv,
     bytesToHex,
-    hexToBytes,
     concatBytes,
     pushData,
     signatureToDER,
     zip243Sighash,
+    decodeTransparentOutputs,
 } from "../../lib/zcashFrontendHelpers";
 import * as secp from "@noble/secp256k1";
 // import { calcFees } from "@/config/marketplace";
@@ -27,9 +27,100 @@ interface CreateListingProps {
     ticker?: string; // optional filter: only show transfers for this ticker
 }
 
+const VERIFY_MAX_ATTEMPTS = 12;
+
+function humanToBaseUnits(human: string, decimals: number): bigint {
+    const s = human.trim();
+    if (!/^[0-9]+(\.[0-9]+)?$/.test(s)) throw new Error('invalid');
+    const [intPart, fracPart = ''] = s.split('.');
+    const frac = (fracPart + '0'.repeat(decimals)).slice(0, decimals);
+    return BigInt(intPart || '0') * BigInt(10) ** BigInt(decimals) + BigInt(frac || '0');
+}
+
+function formatIntWithSep(x: string): string {
+    return x.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function baseToHuman(base: string, decimals: number): string {
+    try {
+        const bi = BigInt(base);
+        const d = BigInt(decimals);
+        const scale = 10n ** d;
+        const integer = bi / scale;
+        const frac = bi % scale;
+        if (frac === 0n) return formatIntWithSep(integer.toString());
+        const fracStr = frac.toString().padStart(decimals, '0').replace(/0+$/,'');
+        return `${formatIntWithSep(integer.toString())}.${fracStr}`;
+    } catch { return base; }
+}
+
+function normalizeHumanInput(s: string): string {
+    return s.replace(/,/g, '').trim();
+}
+
+function formatHumanInput(value: string, decimals: number): string {
+    let raw = value.replace(/,/g, '').replace(/[^0-9.]/g, '');
+    const parts = raw.split('.');
+    if (parts.length > 2) raw = parts[0] + '.' + parts.slice(1).join('');
+    let [intPart = '', fracPart = ''] = raw.split('.');
+    if (intPart.length > 1) intPart = intPart.replace(/^0+(?=\d)/, '');
+    if (fracPart) fracPart = fracPart.slice(0, decimals);
+    const withCommas = formatIntWithSep(intPart || '0');
+    return fracPart || value.endsWith('.') ? `${withCommas}${value.includes('.') ? '.' : ''}${fracPart}` : (intPart ? withCommas : '');
+}
+
+function formatBigIntWithCommas(bi: bigint): string {
+    return bi.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function deriveAmountFields(raw: any, decimals?: number): { base?: string; human?: string } {
+    if (raw == null) return {};
+    const rawStr = String(raw).trim();
+    if (!rawStr) return {};
+    if (typeof decimals !== 'number' || !Number.isFinite(decimals)) {
+        return { human: rawStr };
+    }
+    try {
+        const base = rawStr.includes('.') ? humanToBaseUnits(rawStr, decimals) : BigInt(rawStr.replace(/,/g, ''));
+        const baseStr = base.toString();
+        return { base: baseStr, human: baseToHuman(baseStr, decimals) };
+    } catch {
+        return { human: rawStr };
+    }
+}
+
+const pendingError = (message: string) => {
+    const err: any = new Error(message);
+    err.pending = true;
+    return err;
+};
+
+type VerificationTone = "info" | "pending" | "success" | "error";
+
+interface VerificationFeedback {
+    label: string;
+    tone: VerificationTone;
+    helper?: string;
+}
+
+const VERIFICATION_BADGE_STYLES: Record<VerificationTone, string> = {
+    info: "bg-gold-500/10 border border-gold-500/30 text-gold-100",
+    pending: "bg-amber-500/10 border border-amber-400/40 text-amber-200",
+    success: "bg-green-900/20 border border-green-700/50 text-green-300",
+    error: "bg-red-900/25 border border-red-800/60 text-red-300",
+};
+
+const VERIFICATION_HELPER_STYLES: Record<VerificationTone, string> = {
+    info: "text-gold-200/80",
+    pending: "text-amber-200/80",
+    success: "text-green-200/80",
+    error: "text-red-200/80",
+};
+
 export default function CreateListing({ onCancel, onSuccess, ticker }: CreateListingProps) {
     const { wallet } = useWallet();
     const createListing = useMutation(api.psbt.createListing);
+    const validateTransfer = useAction(api.psbt.validateZrc20Transfer);
     const getBranchId = useAction(api.zcash.getBranchId);
     const mintInscription = useAction(api.inscriptionsActions.mintInscriptionAction);
     const createMintJobAndRun = useAction(api.jobsActions.createMintJobAndRun);
@@ -59,16 +150,98 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
         setError("");
 
         try {
+            const loadWalletTransfers = async (opts?: { ticker?: string; decimals?: number }) => {
+                const upperTicker = opts?.ticker ? opts.ticker.toUpperCase() : undefined;
+                const decimalsHint = typeof opts?.decimals === 'number' ? opts?.decimals : tokenDecimals;
+                const data = await zcashRPC.getInscriptions(wallet.address, true);
+                const validTransfers: any[] = [];
+                for (let idx = 0; idx < data.inscriptions.length; idx++) {
+                    const ins = data.inscriptions[idx];
+                    const id = ins.id || ins.inscription_id || '';
+                    let location = ins.location || ins.output || ins.outpoint || '';
+                    if (!location && id && typeof id === 'string' && id.endsWith('i0')) {
+                        location = `${id.slice(0, -2)}:0`;
+                    }
+                    if (!location || !location.includes(':')) continue;
+                    if (upperTicker && !ins.zrc20) continue;
+
+                    if (ins.zrc20 && ins.zrc20.tick) {
+                        const tickUpper = String(ins.zrc20.tick).toUpperCase();
+                        if (upperTicker && tickUpper !== upperTicker) continue;
+                        validTransfers.push({
+                            id,
+                            location,
+                            zrc20: {
+                                tick: tickUpper,
+                                decimals: typeof ins.zrc20.decimals === 'number' ? ins.zrc20.decimals : decimalsHint,
+                                amtBase: ins.zrc20.amtBase ? String(ins.zrc20.amtBase) : undefined,
+                                amtHuman: ins.zrc20.amtHuman ? String(ins.zrc20.amtHuman) : undefined,
+                            },
+                        });
+                        continue;
+                    }
+
+                    let txt: string | null = null;
+                    if (typeof ins.content === 'string' && ins.content.length > 0) {
+                        txt = ins.content;
+                    } else if (id) {
+                        try {
+                            const res = await fetch(`/api/zcash/inscription-content/${id}`);
+                            if (res.ok) txt = await res.text();
+                        } catch {}
+                    }
+                    if (!txt) continue;
+                    try {
+                        const json = JSON.parse(txt.trim());
+                        const isZrc20Transfer = json.p === 'zrc-20' && json.op === 'transfer' && json.tick && json.amt;
+                        if (!isZrc20Transfer) continue;
+                        const tickUpper = String(json.tick).toUpperCase();
+                        if (upperTicker && tickUpper !== upperTicker) continue;
+                        const amtFields = deriveAmountFields(json.amt, decimalsHint);
+                        validTransfers.push({
+                            id,
+                            location,
+                            zrc20: {
+                                tick: tickUpper,
+                                decimals: decimalsHint,
+                                amtBase: amtFields.base,
+                                amtHuman: amtFields.human ?? String(json.amt),
+                            },
+                        });
+                    } catch {}
+                }
+                return validTransfers;
+            };
+
+            const mergeTransfers = (primary: any[], secondary: any[]) => {
+                const merged: any[] = [];
+                const seen = new Set<string>();
+                const push = (item: any) => {
+                    const key = String(item.location || item.id || item.inscription_id || '') || `${item.id}-${item.location}`;
+                    if (!key || seen.has(key)) return;
+                    seen.add(key);
+                    merged.push(item);
+                };
+                primary.forEach(push);
+                secondary.forEach(push);
+                return merged;
+            };
+
             // Prefer indexer when ticker provided
             if (ticker) {
                 const portfolio = await ordinalIndexAPI.getAddressPortfolio(wallet.address);
                 // Fetch token summary to learn decimals (fallback 18)
+                let summaryDecimals: number | null = null;
                 try {
                     const summary = await ordinalIndexAPI.getTokenSummary(ticker);
                     const decRaw: any = (summary as any)?.dec;
-                    const decNum = typeof decRaw === 'number' ? decRaw : (typeof decRaw === 'string' ? Number(decRaw) : 18);
-                    if (Number.isFinite(decNum) && decNum >= 0 && decNum <= 30) setTokenDecimals(decNum);
+                    const decNum = typeof decRaw === 'number' ? decRaw : (typeof decRaw === 'string' ? Number(decRaw) : null);
+                    if (typeof decNum === 'number' && Number.isFinite(decNum) && decNum >= 0 && decNum <= 30) {
+                        summaryDecimals = decNum;
+                        setTokenDecimals(decNum);
+                    }
                 } catch {}
+                const decimalsToUse = summaryDecimals ?? tokenDecimals;
                 // Expect portfolio has a list of transfers with IDs or a holdings map
                 const transfers: any[] = Array.isArray(portfolio?.transfers) ? portfolio.transfers : [];
                 // Try to compute available balance for this ticker from portfolio (best-effort)
@@ -99,85 +272,33 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                         if (tf?.used) continue;
                         const outpoint = tf?.outpoint || tf?.location || tf?.output;
                         if (!outpoint || !outpoint.includes(':')) continue;
+                        const amountRaw = t.amt ?? t.amount ?? tf?.amt ?? tf?.amount;
+                        const amtFields = deriveAmountFields(amountRaw, decimalsToUse);
                         hydrated.push({
                             id: t.id || tf?.id,
                             location: outpoint,
-                            zrc20: { tick: (t.tick || t.ticker || ticker).toUpperCase(), amt: t.amt || t.amount || tf?.amt },
+                            zrc20: {
+                                tick: String(t.tick || t.ticker || ticker).toUpperCase(),
+                                decimals: decimalsToUse,
+                                amtBase: amtFields.base,
+                                amtHuman: amtFields.human ?? (amountRaw != null ? String(amountRaw) : undefined),
+                            },
                         });
                     } catch {}
                 }
-                if (hydrated.length > 0) {
-                  setInscriptions(hydrated);
-                } else {
-                  // Fallback to wallet scan if indexer returns nothing
-                  console.log('[CreateListing] Indexer returned 0 transfers, falling back to wallet scan');
-                  const data = await zcashRPC.getInscriptions(wallet.address, true);
-                  const validTransfers: any[] = [];
-                  for (let idx = 0; idx < data.inscriptions.length; idx++) {
-                    const ins = data.inscriptions[idx];
-                    // Derive id + location
-                    const id = ins.id || ins.inscription_id || '';
-                    let location = ins.location || ins.output || ins.outpoint || '';
-                    if (!location && id && typeof id === 'string' && id.endsWith('i0')) {
-                      location = `${id.slice(0, -2)}:0`;
-                    }
-                    // Fetch content if missing
-                    let contentText: string | null = null;
-                    if (typeof ins.content === 'string' && ins.content.length > 0) {
-                      contentText = ins.content;
-                    } else if (id) {
-                      try {
-                        const res = await fetch(`/api/zcash/inscription-content/${id}`);
-                        if (res.ok) contentText = await res.text();
-                      } catch {}
-                    }
-                    if (!contentText) continue;
-                    try {
-                      const json = JSON.parse(contentText.trim());
-                      const isZrc20Transfer = json.p === 'zrc-20' && json.op === 'transfer' && json.tick && json.amt;
-                      const matchesTicker = String(json.tick || '').toUpperCase() === ticker.toUpperCase();
-                      if (isZrc20Transfer && matchesTicker && location && location.includes(':')) {
-                        validTransfers.push({ id, location, zrc20: { tick: json.tick, amt: json.amt } });
-                      }
-                    } catch {}
-                  }
-                  setInscriptions(validTransfers);
-                  if (validTransfers.length === 0) setError(`No transferable ${ticker} inscriptions found for this address.`);
+                let walletTransfers: any[] = [];
+                try {
+                    walletTransfers = await loadWalletTransfers({ ticker: ticker.toUpperCase(), decimals: decimalsToUse });
+                } catch (err) {
+                    console.warn('[CreateListing] Wallet scan failed', err);
                 }
+                const merged = mergeTransfers(hydrated, walletTransfers);
+                setInscriptions(merged);
+                if (merged.length === 0) setError(`No transferable ${ticker} inscriptions found for this address.`);
             } else {
-                // Fallback: scan wallet inscriptions client-side
-                const data = await zcashRPC.getInscriptions(wallet.address, true);
-                console.log(`[CreateListing] Found ${data.inscriptions.length} total inscriptions`);
-                const validTransfers: any[] = [];
-                for (let idx = 0; idx < data.inscriptions.length; idx++) {
-                    const ins = data.inscriptions[idx];
-                    // Be tolerant: fetch content if missing
-                    let txt: string | null = null;
-                    if (typeof ins.content === 'string' && ins.content.length > 0) {
-                      txt = ins.content;
-                    } else if (ins.id || ins.inscription_id) {
-                      try {
-                        const res = await fetch(`/api/zcash/inscription-content/${ins.id || ins.inscription_id}`);
-                        if (res.ok) txt = await res.text();
-                      } catch {}
-                    }
-                    if (!txt) continue;
-                    try {
-                        const json = JSON.parse(txt.trim());
-                        const isZrc20Transfer = json.p === 'zrc-20' && json.op === 'transfer' && json.tick && json.amt;
-                        if (!isZrc20Transfer) continue;
-                        // Derive location if missing
-                        const id = ins.id || ins.inscription_id || '';
-                        let location = ins.location || ins.output || ins.outpoint || '';
-                        if (!location && id && typeof id === 'string' && id.endsWith('i0')) {
-                          location = `${id.slice(0, -2)}:0`;
-                        }
-                        if (!location || !location.includes(':')) continue;
-                        validTransfers.push({ id, location, zrc20: { tick: json.tick, amt: json.amt } });
-                    } catch {}
-                }
-                setInscriptions(validTransfers);
-                if (validTransfers.length === 0) setError('No valid ZRC-20 transfer inscriptions found.');
+                const walletTransfers = await loadWalletTransfers();
+                setInscriptions(walletTransfers);
+                if (walletTransfers.length === 0) setError('No valid ZRC-20 transfer inscriptions found.');
             }
         } catch (e: any) {
             console.error("[CreateListing] Failed to fetch inscriptions:", e);
@@ -185,7 +306,7 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
         } finally {
             setLoadingInscriptions(false);
         }
-    }, [wallet, ticker]);
+    }, [wallet, ticker, tokenDecimals]);
 
     useEffect(() => {
         if (wallet?.address) {
@@ -195,13 +316,32 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
 
     // Verify selected transfer via indexer and ownership before enabling listing
     useEffect(() => {
-        let timer: any;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        let cancelled = false;
+        const ensureOwnership = async () => {
+            const loc: string = String((selectedInscription as any).location || '');
+            const [txid, voutStr] = loc.split(':');
+            const vout = parseInt(voutStr, 10);
+            const r = await fetch(`/api/zcash/tx/${txid}`).catch(() => ({ ok: false } as Response));
+            if (!r || !r.ok) throw pendingError('Pending transaction fetch');
+            const { raw } = await r.json();
+            const outs = decodeTransparentOutputs(raw);
+            const out = outs[vout];
+            const sellerScript = buildP2PKHScript(addressToPkh(wallet.address));
+            const same = out && out.script && out.script.length === sellerScript.length && out.script.every((b, i) => b === sellerScript[i]);
+            if (!same) throw new Error('You do not control the token UTXO');
+        };
+
         const verify = async () => {
-            setVerified(false);
-            setVerifyPending(false);
-            setVerifyNote("");
-            if (!wallet || !selectedInscription) return;
+            if (!wallet || !selectedInscription) {
+                setVerified(false);
+                setVerifyPending(false);
+                setVerifyNote('');
+                if (verifyAttempts !== 0) setVerifyAttempts(0);
+                return;
+            }
             setVerifying(true);
+            let shouldRetry = false;
             try {
                 const loc: string = String((selectedInscription as any).location || '');
                 if (!loc.includes(':')) throw new Error('Invalid UTXO location');
@@ -211,85 +351,131 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                   ? (selectedInscription as any).id
                   : `${txid}i0`;
 
-                const tf = await ordinalIndexAPI.getTransfer(id);
+                const wantTick = String((selectedInscription as any).zrc20?.tick || '').toUpperCase();
+                const decimalsForInscription = (selectedInscription as any).zrc20?.decimals ?? tokenDecimals;
+                const wantAmtBase = (() => {
+                    const baseStr = (selectedInscription as any).zrc20?.amtBase;
+                    if (baseStr) {
+                        try { return BigInt(baseStr); } catch { return null; }
+                    }
+                    const humanStr = (selectedInscription as any).zrc20?.amtHuman;
+                    if (humanStr && typeof decimalsForInscription === 'number' && Number.isFinite(decimalsForInscription)) {
+                        try { return humanToBaseUnits(String(humanStr).replace(/,/g, ''), decimalsForInscription); } catch { return null; }
+                    }
+                    return null;
+                })();
+
+                const hasIndexerMetadata = Boolean((selectedInscription as any).source === 'indexer' && wantAmtBase);
+                if (hasIndexerMetadata) {
+                    await ensureOwnership();
+                    setVerified(true);
+                    setVerifyPending(false);
+                    setVerifyNote('Verified from indexer snapshot');
+                    setVerifying(false);
+                    return;
+                }
+
+                const tf = await ordinalIndexAPI.getTransfer(id).catch(() => { throw pendingError('Pending indexer'); });
+                // CRITICAL SECURITY: The indexer is the ONLY source of truth for transfer validation
+                // Wallet RPC only discovers UTXOs - it cannot validate ZRC-20 protocol compliance
+                // The indexer validates: protocol format, not used/consumed, correct ticker/amount, sender balance
+                if (!tf) throw pendingError('Pending indexer');
                 const used = Boolean(tf?.used || tf?.revealed || tf?.consumed);
                 if (used) throw new Error('Transfer already used');
 
-                // Flexible field extraction for tick/amount/outpoint
-                const tick = String(tf?.tick || tf?.ticker || tf?.symbol || '').toUpperCase();
-                let amtRaw: any = (tf as any)?.amt;
-                const amtKeys = ['amount_base_units','amount','value_base_units','value','base_units'];
-                for (const k of amtKeys) {
-                    if (amtRaw == null && (tf as any)?.[k] != null) amtRaw = (tf as any)[k];
+                const tickFields = [
+                    tf?.transfer?.tick,  // Primary field from indexer
+                    tf?.tick,
+                    tf?.ticker,
+                    tf?.symbol,
+                    tf?.token?.tick,
+                    tf?.token?.ticker,
+                    tf?.token?.symbol,
+                    tf?.zrc20?.tick,
+                    tf?.metadata?.tick,
+                ];
+                const indexedTick = tickFields.map((t) => (typeof t === 'string' ? t.toUpperCase() : '')).find((t) => Boolean(t));
+                const resolvedTick = indexedTick || wantTick;
+                if (!resolvedTick) throw pendingError('Awaiting token metadata');
+                if (!wantTick) throw new Error('Ticker missing from transfer');
+                if (indexedTick && indexedTick !== wantTick) throw new Error('Ticker mismatch');
+
+                // CRITICAL: Only accept transfers validated by the indexer
+                // The indexer is the source of truth - wallet scan is just for discovery
+                const amountCandidates: any[] = [
+                    (tf as any)?.transfer?.amt,  // Primary field from indexer
+                    (tf as any)?.amt,
+                    (tf as any)?.amount_base_units,
+                    (tf as any)?.amount,
+                    (tf as any)?.value_base_units,
+                    (tf as any)?.value,
+                    (tf as any)?.base_units,
+                    (tf as any)?.qty,
+                    (tf as any)?.quantity,
+                    (tf as any)?.token?.amt,
+                    (tf as any)?.token?.amount,
+                    (tf as any)?.token?.amount_base_units,
+                    (tf as any)?.zrc20?.amt,
+                    (tf as any)?.zrc20?.amtBase,
+                    (tf as any)?.metadata?.amt,
+                    (tf as any)?.metadata?.amount,
+                ];
+                const amountRaw: any = amountCandidates.find((v) => v !== undefined && v !== null);
+
+                // SECURITY: Never fall back to wallet data - indexer must validate the transfer
+                if (amountRaw == null) {
+                    throw pendingError('Transfer amount not found in indexer response');
                 }
-                // Fallback: read from inscription content
-                if (amtRaw == null || !tick) {
-                    try {
-                        const resp = await fetch(`/api/zcash/inscription-content/${id}`);
-                        if (resp.ok) {
-                            const txt = await resp.text();
-                            const j = JSON.parse(txt);
-                            if (!tick && j?.tick) {
-                                (tick as any) = String(j.tick).toUpperCase();
-                            }
-                            if (amtRaw == null && (j?.amt || j?.amount)) amtRaw = j.amt || j.amount;
-                        }
-                    } catch {}
+
+                const tfAmtFields = deriveAmountFields(amountRaw, decimalsForInscription);
+                const tfAmtBase = tfAmtFields.base ? (() => { try { return BigInt(tfAmtFields.base as string); } catch { return null; } })() : null;
+
+                if (tfAmtBase == null) {
+                    throw pendingError('Transfer amount not fully indexed');
                 }
-                const wantTick = String((selectedInscription as any).zrc20?.tick || '').toUpperCase();
-                const wantAmtBase = (() => { try { return humanToBaseUnits(String((selectedInscription as any).zrc20?.amt || '0'), tokenDecimals); } catch { return null; }})();
-                if (!tick || amtRaw == null) {
-                    setVerifyPending(true);
-                    setVerifyNote('Pending indexer');
-                    return;
+
+                // Verify amount matches if we have it from inscription data
+                if (wantAmtBase != null && tfAmtBase !== wantAmtBase) {
+                    throw new Error('Amount mismatch between indexer and inscription');
                 }
-                if (tick !== wantTick) throw new Error('Ticker mismatch');
-                let tfAmtBase: bigint | null = null;
-                try {
-                    const s = String(amtRaw);
-                    tfAmtBase = s.includes('.') ? humanToBaseUnits(s, tokenDecimals) : BigInt(s);
-                } catch { tfAmtBase = null; }
-                if (wantAmtBase == null || tfAmtBase == null) {
-                    setVerifyPending(true);
-                    setVerifyNote('Pending indexer');
-                    return;
-                }
-                if (tfAmtBase !== wantAmtBase) throw new Error('Amount mismatch');
-                const sender = (tf?.sender || tf?.from || tf?.address || tf?.owner || '').toString();
+
+                const sender = (tf?.transfer?.sender || tf?.sender || tf?.from || tf?.address || tf?.owner || '').toString();
                 if (sender && sender.toLowerCase() !== wallet.address.toLowerCase()) throw new Error('Sender does not match your address');
                 const outpoint = (tf?.outpoint || tf?.location || tf?.output || '').toString();
                 if (outpoint && outpoint !== loc) throw new Error('Transfer outpoint mismatch');
 
-                // Ownership proof: token outpoint must pay to seller address
-                const r = await fetch(`/api/zcash/tx/${txid}`);
-                if (!r.ok) {
-                    setVerifyPending(true);
-                    setVerifyNote('Pending indexer');
-                    return;
-                }
-                const { raw } = await r.json();
-                const outs = decodeOutputs(raw);
-                const out = outs[vout];
-                const sellerScript = buildP2PKHScript(addressToPkh(wallet.address));
-                const same = out && out.script && out.script.length === sellerScript.length && out.script.every((b, i) => b === sellerScript[i]);
-                if (!same) throw new Error('You do not control the token UTXO');
+                await ensureOwnership();
 
                 setVerified(true);
+                setVerifyPending(false);
                 setVerifyNote('Verified by indexer');
             } catch (e: any) {
+                const isPending = Boolean(e?.pending);
                 setVerified(false);
-                setVerifyPending(true);
-                setVerifyNote('Pending indexer');
+                if (isPending) {
+                    setVerifyPending(true);
+                    setVerifyNote(e?.message || 'Pending indexer');
+                    shouldRetry = verifyAttempts < VERIFY_MAX_ATTEMPTS;
+                } else {
+                    setVerifyPending(false);
+                    setVerifyNote(e?.message || 'Verification failed');
+                }
             } finally {
                 setVerifying(false);
-                if (!verified && verifyPending && verifyAttempts < 12) {
+                if (cancelled) return;
+                if (shouldRetry) {
                     timer = setTimeout(() => setVerifyAttempts((n) => n + 1), 1500);
+                } else if (verifyAttempts !== 0) {
+                    setVerifyAttempts(0);
                 }
             }
         };
         verify();
-        return () => { if (timer) clearTimeout(timer); };
-    }, [selectedInscription, wallet?.address, tokenDecimals, verifyAttempts]);
+        return () => {
+            cancelled = true;
+            if (timer) clearTimeout(timer);
+        };
+    }, [selectedInscription, wallet, wallet?.address, tokenDecimals, verifyAttempts]);
 
     const handleCreateTransfer = async () => {
         if (!wallet || !ticker) return;
@@ -348,7 +534,16 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                     const wantBase = amtBase;
                     const amtOk = tfBase === wantBase;
                     if (!used && tickU === ticker.toUpperCase() && amtOk) {
-                        const item = { id: inscriptionId, location: outpoint, zrc20: { tick: tickU, amt: humanAmt } };
+                        const item = {
+                            id: inscriptionId,
+                            location: outpoint,
+                            zrc20: {
+                                tick: tickU,
+                                decimals: tokenDecimals,
+                                amtBase: wantBase.toString(),
+                                amtHuman: humanAmt,
+                            },
+                        };
                         setInscriptions(prev => [item, ...prev]);
                         setSelectedInscription(item);
                         ok = true;
@@ -358,7 +553,16 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                 await new Promise(r => setTimeout(r, 1500));
             }
             if (!ok) {
-                const item = { id: inscriptionId, location: `${revealTxid}:0`, zrc20: { tick: ticker.toUpperCase(), amt: humanAmt } };
+                const item = {
+                    id: inscriptionId,
+                    location: `${revealTxid}:0`,
+                    zrc20: {
+                        tick: ticker.toUpperCase(),
+                        decimals: tokenDecimals,
+                        amtBase: amtBase.toString(),
+                        amtHuman: humanAmt,
+                    },
+                };
                 setInscriptions(prev => [item, ...prev]);
                 setSelectedInscription(item);
             }
@@ -369,46 +573,13 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
         }
     };
 
-    // Unit helpers
-    function humanToBaseUnits(human: string, decimals: number): bigint {
-        const s = human.trim();
-        if (!/^[0-9]+(\.[0-9]+)?$/.test(s)) throw new Error('invalid');
-        const [intPart, fracPart = ''] = s.split('.');
-        const frac = (fracPart + '0'.repeat(decimals)).slice(0, decimals);
-        return BigInt(intPart || '0') * BigInt(10) ** BigInt(decimals) + BigInt(frac || '0');
-    }
-    function formatIntWithSep(x: string): string {
-        return x.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    }
-    function baseToHuman(base: string, decimals: number): string {
-        try {
-            const bi = BigInt(base);
-            const d = BigInt(decimals);
-            const scale = 10n ** d;
-            const integer = bi / scale;
-            const frac = bi % scale;
-            if (frac === 0n) return formatIntWithSep(integer.toString());
-            const fracStr = frac.toString().padStart(decimals, '0').replace(/0+$/,'');
-            return `${formatIntWithSep(integer.toString())}.${fracStr}`;
-        } catch { return base; }
-    }
-    // Input helpers: normalize (remove commas), format with thousand separators
-    function normalizeHumanInput(s: string): string {
-        return s.replace(/,/g, '').trim();
-    }
-    function formatHumanInput(value: string, decimals: number): string {
-        let raw = value.replace(/,/g, '').replace(/[^0-9.]/g, '');
-        const parts = raw.split('.');
-        if (parts.length > 2) raw = parts[0] + '.' + parts.slice(1).join('');
-        let [intPart = '', fracPart = ''] = raw.split('.');
-        if (intPart.length > 1) intPart = intPart.replace(/^0+(?=\d)/, '');
-        if (fracPart) fracPart = fracPart.slice(0, decimals);
-        const withCommas = formatIntWithSep(intPart || '0');
-        return fracPart || value.endsWith('.') ? `${withCommas}${value.includes('.') ? '.' : ''}${fracPart}` : (intPart ? withCommas : '');
-    }
-    function formatBigIntWithCommas(bi: bigint): string {
-        return bi.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    }
+    const formatTransferAmount = (ins: any): string => {
+        if (!ins?.zrc20) return '0';
+        const decimals = ins.zrc20.decimals ?? tokenDecimals;
+        if (ins.zrc20.amtBase) return baseToHuman(String(ins.zrc20.amtBase), decimals);
+        if (ins.zrc20.amtHuman) return String(ins.zrc20.amtHuman);
+        return '0';
+    };
 
     const availableHuman = useMemo(() => availableBalance ? baseToHuman(availableBalance, tokenDecimals) : null, [availableBalance, tokenDecimals]);
     const transferAmtBasePreview = useMemo(() => {
@@ -420,39 +591,39 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
         } catch { return ''; }
     }, [transferAmt, tokenDecimals]);
 
-    // Minimal tx decoder to read output value for seller token UTXO
-    const readVarInt = (buf: Uint8Array, o: { i: number }): number => {
-        const first = buf[o.i++];
-        if (first < 0xfd) return first;
-        if (first === 0xfd) { const v = new DataView(buf.buffer).getUint16(o.i, true); o.i += 2; return v; }
-        if (first === 0xfe) { const v = new DataView(buf.buffer).getUint32(o.i, true); o.i += 4; return v; }
-        const dv = new DataView(buf.buffer);
-        const low = dv.getUint32(o.i, true); const high = dv.getUint32(o.i + 4, true); o.i += 8; return low + high * 2 ** 32;
-    };
-    const decodeOutputs = (hex: string): { value: number; script: Uint8Array }[] => {
-        const bytes = hexToBytes(hex);
-        const dv = new DataView(bytes.buffer);
-        const o = { i: 0 };
-        o.i += 4; // version
-        o.i += 4; // versionGroupId
-        const vin = readVarInt(bytes, o);
-        for (let n = 0; n < vin; n++) {
-            o.i += 32; // txid
-            o.i += 4; // vout
-            const sl = readVarInt(bytes, o);
-            o.i += sl; // scriptSig
-            o.i += 4; // sequence
+    const verificationState = useMemo<VerificationFeedback | null>(() => {
+        if (!selectedInscription) return null;
+        if (verifyPending) {
+            const helperBase = 'We have your transfer, but the indexer still needs to confirm the ticker and amount before we allow listing. We keep retrying automatically.';
+            const helper = verifyNote && verifyNote !== 'Pending indexer'
+                ? `${verifyNote} — ${helperBase}`
+                : helperBase;
+            return {
+                label: 'Indexer pending',
+                tone: 'pending',
+                helper,
+            };
         }
-        const vout = readVarInt(bytes, o);
-        const outs: { value: number; script: Uint8Array }[] = [];
-        for (let n = 0; n < vout; n++) {
-            const val = Number(dv.getBigUint64(o.i, true)); o.i += 8;
-            const pkLen = readVarInt(bytes, o);
-            const script = bytes.slice(o.i, o.i + pkLen); o.i += pkLen;
-            outs.push({ value: val, script });
+        if (verifying) {
+            return {
+                label: 'Verifying…',
+                tone: 'info',
+                helper: 'Checking ownership and awaiting the indexer confirmation.',
+            };
         }
-        return outs;
-    };
+        if (verified) {
+            return {
+                label: 'Ready to list',
+                tone: 'success',
+                helper: verifyNote || 'Indexer confirmed the transfer and ownership.',
+            };
+        }
+        return {
+            label: 'Verification required',
+            tone: 'error',
+            helper: verifyNote || 'Indexer could not verify this transfer. Try another inscription or wait for the indexer to update.',
+        };
+    }, [selectedInscription, verified, verifying, verifyPending, verifyNote]);
 
     const handleCreate = async () => {
         if (!wallet || !selectedInscription || !price) return;
@@ -463,6 +634,20 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
             const zrc20 = selectedInscription.zrc20;
 
             if (!zrc20) throw new Error("Selected item is not a valid ZRC-20 transfer");
+
+            const decimalsForListing = zrc20.decimals ?? tokenDecimals;
+            const humanFromBase = zrc20.amtBase ? baseToHuman(zrc20.amtBase, decimalsForListing) : undefined;
+            const humanAmountRaw = zrc20.amtHuman ?? humanFromBase;
+            const normalizedHuman = humanAmountRaw ? humanAmountRaw.replace(/,/g, '') : undefined;
+            let tokenAmountDisplay: number | undefined;
+            if (normalizedHuman) {
+                const parsed = parseFloat(normalizedHuman);
+                if (Number.isFinite(parsed)) tokenAmountDisplay = parsed;
+            }
+            let tokenAmountBase: string | undefined = zrc20.amtBase;
+            if (!tokenAmountBase && normalizedHuman) {
+                try { tokenAmountBase = humanToBaseUnits(normalizedHuman, decimalsForListing).toString(); } catch {}
+            }
 
             // Extract txid and vout from location (format: "txid:vout")
             const location = selectedInscription.location;
@@ -475,20 +660,21 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
 
             console.log(`[CreateListing] Creating listing for inscription at ${location}`);
 
+            // CRITICAL: Validate transfer via indexer before creating listing
+            const validation = await validateTransfer({
+                sellerAddress: wallet.address,
+                tokenLocation: location,
+                tokenTicker: zrc20.tick,
+                expectedAmountBase: tokenAmountBase,
+                tokenDecimals: decimalsForListing,
+            });
+
             // Maker-ask signature (ZIP-243 SINGLE|ANYONECANPAY)
             const consensusBranchId = await getBranchId({});
-            // Fetch prevout value to include in sighash
-            let prevValue = 0;
-            try {
-                const r = await fetch(`/api/zcash/tx/${txid}`);
-                if (r.ok) {
-                    const { raw } = await r.json();
-                    const outs = decodeOutputs(raw);
-                    if (outs[vout]) prevValue = outs[vout].value;
-                }
-            } catch {}
+            // Use validated token value from indexer
+            const prevValue = validation.tokenValueZats;
             if (!Number.isFinite(prevValue) || prevValue <= 0) {
-                throw new Error('Failed to fetch token UTXO value');
+                throw new Error('Invalid token UTXO value from validation');
             }
 
             const priceZats = Math.round(parseFloat(price) * 1e8);
@@ -527,13 +713,15 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
             const sellerScriptSigHex = bytesToHex(scriptSig);
 
             // Save listing with maker fields
-            const tokenAmountDisplay = parseFloat(String(zrc20.amt));
             await createListing({
                 tokenLocation: location,
                 sellerAddress: wallet.address,
                 price: parseFloat(price),
                 tokenTicker: zrc20.tick,
-                tokenAmount: Number.isFinite(tokenAmountDisplay) ? tokenAmountDisplay : undefined,
+                tokenAmount: tokenAmountDisplay,
+                tokenAmountBase,
+                tokenDecimals: decimalsForListing,
+                tokenValueZats: prevValue, // From indexer validation
                 sellerInputTxid: txid,
                 sellerInputVout: vout,
                 sellerInputSequence: 0xfffffffd,
@@ -569,13 +757,25 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
         } else if (job.status === 'completed' && Array.isArray(job.inscriptionIds) && job.inscriptionIds.length > 0) {
             const inscriptionId = job.inscriptionIds[job.inscriptionIds.length - 1];
             // Optimistically add with :0 outpoint; indexer polling below will refine
-            const optimistic = { id: inscriptionId, location: `${String(inscriptionId).replace(/i0$/, '')}:0`, zrc20: { tick: (ticker || '').toUpperCase(), amt: transferAmt || '0' } };
+            const normalized = normalizeHumanInput(transferAmt || '0') || '0';
+            let optimisticBase: string | undefined;
+            try { optimisticBase = humanToBaseUnits(normalized, tokenDecimals).toString(); } catch {}
+            const optimistic = {
+                id: inscriptionId,
+                location: `${String(inscriptionId).replace(/i0$/, '')}:0`,
+                zrc20: {
+                    tick: (ticker || '').toUpperCase(),
+                    decimals: tokenDecimals,
+                    amtBase: optimisticBase,
+                    amtHuman: normalized,
+                },
+            };
             setInscriptions((prev) => [optimistic, ...prev]);
             setSelectedInscription(optimistic);
             setCreatingTransfer(false);
             setMintJobId(null);
         }
-    }, [job]);
+    }, [job, ticker, tokenDecimals, transferAmt]);
 
     return (
         <div className="w-full max-w-2xl mx-auto">
@@ -649,27 +849,62 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                             </div>
                         ) : (
                             <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto p-2 border border-gold-500/20 rounded-none bg-black/40 backdrop-blur-md">
-                                {inscriptions.map((ins: any, idx: number) => (
-                                    <div
-                                        key={ins.id || ins.inscription_id || idx}
-                                        onClick={() => setSelectedInscription(ins)}
-                                        className={`p-3 rounded-none cursor-pointer border transition-all ${
-                                            selectedInscription?.id === ins.id || selectedInscription?.inscription_id === ins.inscription_id
-                                            ? "border-gold-500 bg-gold-500/10"
-                                            : "border-gold-500/10 hover:border-gold-500/30"
+                                {inscriptions.map((ins: any, idx: number) => {
+                                    const candidateId = ins.id || ins.inscription_id || '';
+                                    const matchesId = Boolean(
+                                        (candidateId && selectedInscription?.id && selectedInscription.id === candidateId) ||
+                                        (candidateId && selectedInscription?.inscription_id && selectedInscription.inscription_id === candidateId)
+                                    );
+                                    const matchesLocation = Boolean(
+                                        selectedInscription?.location && ins.location && selectedInscription.location === ins.location
+                                    );
+                                    const isSelected = matchesId || matchesLocation;
+                                    const key = candidateId || ins.location || `optimistic-${idx}`;
+                                    const shortId = (ins.id || ins.inscription_id || ins.location || '').toString();
+
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={key}
+                                            onClick={() => setSelectedInscription(ins)}
+                                            aria-pressed={isSelected}
+                                            className={`w-full text-left p-3 rounded-none border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/60 ${
+                                                isSelected
+                                                    ? "border-gold-400/80 bg-gold-400/10 shadow-[0_0_25px_rgba(234,179,8,0.25)] ring-1 ring-gold-400/70"
+                                                    : "border-gold-500/10 hover:border-gold-500/40 hover:bg-gold-500/5"
                                             }`}
-                                    >
-                                        <div className="text-xs text-gold-300/60 mb-1">
-                                            #{ins.number || ins.inscription_number || idx + 1}
-                                        </div>
-                                        <div className="text-lg font-bold text-gold-100">
-                                            {baseToHuman(String(ins.zrc20?.amt || '0'), tokenDecimals)} {ins.zrc20?.tick}
-                                        </div>
-                                        <div className="text-xs text-gold-300/40 truncate">
-                                            {(ins.id || ins.inscription_id || ins.location || '').substring(0, 12)}...
-                                        </div>
-                                    </div>
-                                ))}
+                                        >
+                                            <div className="flex items-center justify-between mb-1">
+                                                <div className="text-xs text-gold-300/60">
+                                                    #{ins.number || ins.inscription_number || idx + 1}
+                                                </div>
+                                                {isSelected && (
+                                                    <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-gold-200">
+                                                        <svg
+                                                            width="12"
+                                                            height="12"
+                                                            viewBox="0 0 24 24"
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            strokeWidth="3"
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                        >
+                                                            <polyline points="20 6 9 17 4 12" />
+                                                        </svg>
+                                                        Selected
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-lg font-bold text-gold-100">
+                                                {formatTransferAmount(ins)} {ins.zrc20?.tick}
+                                            </div>
+                                            <div className="mt-1 text-[11px] text-gold-300/50 font-mono truncate">
+                                                {shortId ? `${shortId.slice(0, 14)}…` : 'Unknown id'}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
@@ -698,25 +933,22 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                             </div>
                             <div className="flex justify-between">
                                 <span>Amount:</span>
-                                <span className="text-gold-200">{baseToHuman(String((selectedInscription as any).zrc20?.amt || '0'), tokenDecimals)}</span>
+                                <span className="text-gold-200">{formatTransferAmount(selectedInscription)}</span>
                             </div>
-                            <div className="mt-2 flex items-center gap-2">
-                              {verifying && (
-                                <span className="text-gold-300/70">Verifying…</span>
-                              )}
-                              {!verifying && verifyPending && (
-                                <span className="px-2 py-1 rounded-none bg-gold-500/10 border border-gold-500/30 text-gold-200 text-xs font-bold">Pending indexer</span>
-                              )}
-                              {!verifying && !verifyPending && verified && (
-                                <span className="px-2 py-1 rounded-none bg-green-900/20 border border-green-700/40 text-green-300 text-xs font-bold">Verified by indexer</span>
-                              )}
-                              {!verifying && !verifyPending && !verified && (
-                                <span className="px-2 py-1 rounded-none bg-red-900/20 border border-red-800/40 text-red-300 text-xs font-bold">Not verifiable</span>
-                              )}
-                              {!verified && verifyNote && (
-                                <span className="text-xs text-gold-300/80 truncate" title={verifyNote}>{verifyNote}</span>
-                              )}
-                            </div>
+                            {verificationState && (
+                                <div className="mt-3">
+                                    <span
+                                        className={`inline-flex items-center gap-2 px-2 py-1 rounded-none text-[11px] font-semibold uppercase tracking-wide ${VERIFICATION_BADGE_STYLES[verificationState.tone]}`}
+                                    >
+                                        {verificationState.label}
+                                    </span>
+                                    {verificationState.helper && (
+                                        <p className={`mt-2 text-xs leading-relaxed ${VERIFICATION_HELPER_STYLES[verificationState.tone]}`}>
+                                            {verificationState.helper}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                     {/* Error/Success Messages */}
@@ -750,7 +982,13 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                         disabled={loading || !selectedInscription || !price || verifying || !verified}
                         className="w-full py-3 bg-gold-500 hover:bg-gold-400 text-black font-bold rounded-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        {loading ? "Creating Listing..." : (verifying ? 'Verifying…' : (verified ? "List Item" : (verifyPending ? 'Pending…' : 'Verify to List')))}
+                        {loading
+                            ? "Creating Listing..."
+                            : (verifyPending
+                                ? 'Pending…'
+                                : (verifying
+                                    ? 'Verifying…'
+                                    : (verified ? "List Item" : 'Verify to List')))}
                     </button>
                 </div>
             )}

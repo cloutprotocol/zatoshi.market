@@ -192,6 +192,8 @@ export default defineSchema({
     price: v.number(), // Price in ZEC (or other unit)
     tokenTicker: v.optional(v.string()), // Ticker of the token being sold (ZRC-20)
     tokenAmount: v.optional(v.number()), // Amount of tokens (ZRC-20)
+    tokenAmountBase: v.optional(v.string()), // Amount in base units (string)
+    tokenDecimals: v.optional(v.number()),
     collectionSlug: v.optional(v.string()), // Collection slug (NFT)
     tokenId: v.optional(v.number()), // Token ID (NFT)
     status: v.string(), // "active" | "completed" | "cancelled"

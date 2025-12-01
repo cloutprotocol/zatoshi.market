@@ -22,7 +22,8 @@ export async function callZcashRPC(method: string, params: any[] = []) {
             method,
             params,
             id: 'zatoshi-nextjs'
-        })
+        }),
+        cache: 'no-store'
     });
 
     if (!response.ok) {

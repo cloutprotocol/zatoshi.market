@@ -67,9 +67,12 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
                     return dec > 0 ? n / 10 ** dec : n;
                 };
 
-                // Use overall minted (holders + burned) for progress so fully minted tokens show 100%
-                const limit = toUnits(integrity?.supply_base_units || summary?.supply_base_units);
-                const mintedAmount = toUnits(integrity?.sum_overall_base_units ?? integrity?.sum_available_base_units ?? undefined);
+                // Use max supply as limit, fallback to current supply if max is missing
+                const limit = toUnits(summary?.max) ?? toUnits(integrity?.supply_base_units || summary?.supply_base_units);
+
+                // Use available (circulating) supply for progress to exclude pending transfers
+                const mintedAmount = toUnits(integrity?.sum_available_base_units ?? integrity?.sum_overall_base_units ?? undefined);
+
                 const holders = Number(summary?.holders ?? integrity?.total_holders ?? 0) || undefined;
                 const progress = mintedAmount !== undefined && limit ? Math.min(1, Math.max(0, mintedAmount / limit)) : undefined;
 
@@ -95,24 +98,7 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
         };
     }, [ticker]);
 
-    const mintStats = useMemo(() => {
-        const mintedRaw = tokenInfo?.mintedAmount ?? tokenInfo?.minted;
-        const limitRaw = tokenInfo?.limit ?? tokenInfo?.supply;
 
-        const mintedAmount = parseNumeric(mintedRaw);
-        const limit = parseNumeric(limitRaw);
-        const progressFromToken = typeof tokenInfo?.progress === "number" ? tokenInfo.progress : undefined;
-        const computedProgress =
-            mintedAmount !== undefined && limit !== undefined && limit > 0 ? mintedAmount / limit : undefined;
-        const progress = progressFromToken ?? computedProgress;
-        const clampedProgress = progress !== undefined ? Math.min(1, Math.max(0, progress)) : undefined;
-
-        return {
-            mintedAmount,
-            limit,
-            progressPercent: clampedProgress !== undefined ? clampedProgress * 100 : undefined,
-        };
-    }, [tokenInfo]);
 
     const marketStats = useMemo(() => {
         if (!listings) {
@@ -122,8 +108,9 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
         let totalVolume = 0;
 
         listings.forEach((listing) => {
-            const perToken = listing.price / listing.tokenAmount;
             totalVolume += listing.price;
+            if (!listing.tokenAmount) return;
+            const perToken = listing.price / listing.tokenAmount;
             if (perToken < floor) {
                 floor = perToken;
             }
@@ -140,7 +127,7 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
     const spotPrice = parseNumeric(tokenInfo?.price);
     const volume24h = parseNumeric(tokenInfo?.volume24h);
     const priceChange = parseNumeric(tokenInfo?.priceChange24h);
-    const mintedBarWidth = mintStats.progressPercent !== undefined ? Math.min(100, mintStats.progressPercent) : 0;
+
 
     const statsCards = [
         {
@@ -250,32 +237,7 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
                             </div>
                         </div>
 
-                        <div className="grid gap-4 lg:grid-cols-[1.1fr_1.2fr]">
-                            <div className="bg-black/40 border border-gold-500/20 rounded-2xl p-5">
-                                <div className="flex items-center justify-between text-[11px] uppercase tracking-widest text-gold-300/60 font-bold">
-                                    <span>Mint Progress</span>
-                                    <span>
-                                        {mintStats.progressPercent !== undefined
-                                            ? `${mintStats.progressPercent.toFixed(1)}%`
-                                            : loadingToken
-                                                ? "Loading..."
-                                                : "--"}
-                                    </span>
-                                </div>
-                                <div className="mt-3 h-2 w-full rounded-full bg-gold-500/10 overflow-hidden">
-                                    <div
-                                        className="h-full bg-gradient-to-r from-gold-400 via-amber-300 to-yellow-200 transition-[width] duration-700"
-                                        style={{ width: `${mintedBarWidth}%` }}
-                                    />
-                                </div>
-                                <div className="mt-3 text-sm font-medium text-gold-100">
-                                    {mintStats.mintedAmount !== undefined && mintStats.limit !== undefined
-                                        ? `${mintStats.mintedAmount.toLocaleString()} / ${mintStats.limit.toLocaleString()} Minted`
-                                        : "Supply data unavailable"}
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
                             {statsCards.map((card) => {
                                 const isZec = (card.label === 'Floor Price' || card.label === 'Spot Price' || card.label === '24H Volume') && typeof card.value === 'string' && card.value.includes('ZEC');
                                 const numPart = isZec ? String(card.value).replace(/\s*ZEC\s*$/i, '') : card.value;
@@ -298,7 +260,6 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
                                     </div>
                                 );
                             })}
-                            </div>
                         </div>
                     </div>
                 </section>

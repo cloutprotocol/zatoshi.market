@@ -46,6 +46,44 @@ export function varint(n: number): Uint8Array {
     if (n <= 0xffff) { const b = new Uint8Array(3); b[0] = 0xfd; new DataView(b.buffer).setUint16(1, n, true); return b; }
     const b = new Uint8Array(5); b[0] = 0xfe; new DataView(b.buffer).setUint32(1, n, true); return b;
 }
+function readVarInt(bytes: Uint8Array, cursor: { i: number }): number {
+    const first = bytes[cursor.i++];
+    if (first < 0xfd) return first;
+    if (first === 0xfd) { const v = new DataView(bytes.buffer).getUint16(cursor.i, true); cursor.i += 2; return v; }
+    if (first === 0xfe) { const v = new DataView(bytes.buffer).getUint32(cursor.i, true); cursor.i += 4; return v; }
+    const dv = new DataView(bytes.buffer);
+    const low = dv.getUint32(cursor.i, true);
+    const high = dv.getUint32(cursor.i + 4, true);
+    cursor.i += 8;
+    return low + high * 2 ** 32;
+}
+
+export function decodeTransparentOutputs(hex: string): { value: number; script: Uint8Array }[] {
+    const bytes = hexToBytes(hex);
+    const dv = new DataView(bytes.buffer);
+    const cursor = { i: 0 };
+    cursor.i += 4; // version
+    cursor.i += 4; // versionGroupId
+    const vin = readVarInt(bytes, cursor);
+    for (let n = 0; n < vin; n++) {
+        cursor.i += 32; // txid
+        cursor.i += 4;  // vout
+        const scriptLen = readVarInt(bytes, cursor);
+        cursor.i += scriptLen; // scriptSig
+        cursor.i += 4; // sequence
+    }
+    const vout = readVarInt(bytes, cursor);
+    const outs: { value: number; script: Uint8Array }[] = [];
+    for (let n = 0; n < vout; n++) {
+        const value = Number(dv.getBigUint64(cursor.i, true));
+        cursor.i += 8;
+        const scriptLen = readVarInt(bytes, cursor);
+        const script = bytes.slice(cursor.i, cursor.i + scriptLen);
+        cursor.i += scriptLen;
+        outs.push({ value, script });
+    }
+    return outs;
+}
 
 export function hash160(buf: Uint8Array): Uint8Array { return ripemd160(sha256(buf)); }
 
@@ -105,7 +143,7 @@ export function zip243Sighash(tx: {
     expiryHeight: number;
     inputs: { txid: string; vout: number; sequence: number; value: number; scriptPubKey: Uint8Array }[];
     outputs: { value: number; scriptPubKey: Uint8Array }[];
-}, inputIndex: number, hashType: number = 0x01): Uint8Array {
+}, inputIndex: number, hashType: number): Uint8Array {
     const i = tx.inputs[inputIndex];
     const anyoneCanPay = (hashType & 0x80) !== 0;
     const baseType = hashType & 0x1f; // 1=ALL, 2=NONE, 3=SINGLE
@@ -185,7 +223,7 @@ export function buildSplitSighashes(params: {
         inputs,
         outputs: params.outputs,
     };
-    return inputs.map((_, idx) => zip243Sighash(txData as any, idx));
+    return inputs.map((_, idx) => zip243Sighash(txData as any, idx, 0x01));
 }
 
 // Assemble a transaction from pre-built scriptSigs
