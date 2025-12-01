@@ -40,6 +40,80 @@ export default function FinalizeTrade({ listing, onCancel, zecPrice }: FinalizeT
   const prepareBuyerTemplate = useAction(api.psbt.prepareBuyerTemplate);
   const finalizeAndBroadcast = useAction(api.psbt.finalizeAndBroadcast);
 
+  const triggerFireworks = () => {
+    const canvas = document.createElement('canvas');
+    canvas.style.position = 'fixed';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
+    canvas.style.width = '100vw';
+    canvas.style.height = '100vh';
+    canvas.style.pointerEvents = 'none';
+    canvas.style.zIndex = '9999';
+    canvas.style.background = 'transparent';
+    document.body.appendChild(canvas);
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      console.error('Failed to get canvas context');
+      return;
+    }
+
+    const particles: Array<{ x: number; y: number; vx: number; vy: number; life: number }> = [];
+    const burstCount = 6; // 6 bursts for purchase celebration
+    let burstsCreated = 0;
+
+    for (let i = 0; i < burstCount; i++) {
+      setTimeout(() => {
+        const x = Math.random() * canvas.width;
+        const y = Math.random() * canvas.height * 0.6 + canvas.height * 0.1;
+
+        // Create 50 particles per burst
+        for (let j = 0; j < 50; j++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = Math.random() * 5 + 2;
+          particles.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 2,
+            life: 1
+          });
+        }
+        burstsCreated++;
+      }, i * 250);
+    }
+
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.2; // gravity
+        p.life -= 0.012;
+
+        if (p.life <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+
+        // Draw golden pixel
+        ctx.fillStyle = `rgba(255, 215, 0, ${p.life})`;
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), 1, 1);
+      }
+
+      if (particles.length > 0 || burstsCreated < burstCount) {
+        requestAnimationFrame(animate);
+      } else {
+        document.body.removeChild(canvas);
+      }
+    };
+
+    animate();
+  };
+
   const handleBuy = async () => {
     if (!wallet) return;
     setLoading(true);
@@ -146,9 +220,14 @@ export default function FinalizeTrade({ listing, onCancel, zecPrice }: FinalizeT
       // Assemble and finalize
       const hex = assembleFinalTx({ inputs: finalInputs as any, outputs: outputs as any, consensusBranchId });
       const txidFinal = await finalizeAndBroadcast({ listingId: listing._id, hex, buyerAddress: wallet.address });
-      toastSuccess('Purchase complete', `Tx: ${txidFinal.slice(0, 12)}…`);
+
+      // Success celebration!
+      triggerFireworks();
+      toastSuccess('🎉 Purchase Complete!', `${listing.tokenAmount} ${listing.tokenTicker} is yours! Tx: ${txidFinal.slice(0, 12)}…`);
       setSuccess(true);
-      onCancel();
+
+      // Close modal after a brief delay to let user see the success state
+      setTimeout(() => onCancel(), 2000);
     } catch (e: any) {
       console.error(e);
       const msg = e?.message || 'Purchase failed';
@@ -167,7 +246,9 @@ export default function FinalizeTrade({ listing, onCancel, zecPrice }: FinalizeT
         <div className="bg-red-900/50 border border-red-800 text-red-200 p-3 rounded mb-4 text-sm">{error}</div>
       )}
       {success && (
-        <div className="bg-green-900/40 border border-green-800/60 text-green-200 p-3 rounded mb-4 text-sm">Purchase completed successfully.</div>
+        <div className="bg-green-900/40 border border-green-800/60 text-green-200 p-3 rounded mb-4 text-sm">
+          🎉 Purchase completed successfully! Your {listing.tokenTicker} will appear in your wallet shortly.
+        </div>
       )}
 
       <div className="space-y-2 mb-4 text-sm text-zinc-400">
