@@ -1,3 +1,88 @@
+/**
+ * PSBT (Partially Signed Bitcoin Transaction) Marketplace for Zcash ZRC-20 Tokens
+ *
+ * This module implements a trustless, non-custodial marketplace using the maker-taker PSBT pattern
+ * with SIGHASH_SINGLE|ANYONECANPAY signatures.
+ *
+ * ## Architecture Overview:
+ *
+ * ### Maker-Taker Flow:
+ *
+ * 1. **Maker (Seller)** creates a listing:
+ *    - Owns a ZRC-20 transfer inscription at UTXO location `txid:vout`
+ *    - Pre-signs their token input with SIGHASH_SINGLE|ANYONECANPAY (0x83)
+ *    - Signature binds ONLY to their payout output (output index 1)
+ *    - Stores signature as `sellerScriptSigHex` in listing document
+ *
+ * 2. **Taker (Buyer)** completes the trade:
+ *    - Calls `prepareBuyerTemplate` to get canonical output structure
+ *    - Adds their own inputs to pay the price + fees
+ *    - Constructs transaction with EXACT output order:
+ *      - Output 0: Token UTXO → Buyer
+ *      - Output 1: Seller Payout (from `sellerPayoutZats`) → Seller
+ *      - Output 2: Marketplace Fee → Treasury
+ *    - Places seller's pre-signed input at **vin index 1** (CRITICAL for SIGHASH_SINGLE)
+ *    - Submits to `finalizeAndBroadcast` for validation + broadcast
+ *
+ * 3. **Validation** (in finalizeAndBroadcast):
+ *    - Verify listing still active and token unspent
+ *    - Re-validate ZRC-20 transfer ownership via indexer
+ *    - Parse transaction and confirm outputs match template
+ *    - Verify seller input at vin 1 with correct `sellerScriptSigHex`
+ *    - Protect buyer from spending inscribed UTXOs
+ *    - Broadcast to Zcash network via RPC
+ *
+ * ## Why SIGHASH_SINGLE|ANYONECANPAY?
+ *
+ * - **SIGHASH_SINGLE**: Seller's signature binds to ONLY output 1 (their payout)
+ *   - They don't care what other outputs exist (buyer's token, change, etc.)
+ *   - BUT: Input index MUST match output index (vin 1 → vout 1)
+ *
+ * - **ANYONECANPAY**: Seller's signature covers ONLY their input
+ *   - Buyer can add more inputs to pay the price
+ *   - Enables maker-taker pattern without coordinator
+ *
+ * ## Critical Invariants:
+ *
+ * 1. **Output Ordering**: MUST be [token, payout, treasury]. Never reorder.
+ * 2. **Seller Input Position**: MUST be at vin index 1. Never move.
+ * 3. **Stored Payout Values**: MUST use `sellerPayoutZats`/`sellerPayoutScriptHex` from listing.
+ *    Do NOT recompute based on current fee rates.
+ * 4. **Signature Immutability**: Once `sellerScriptSigHex` is stored, it cannot be changed.
+ *    If anything needs to change (price, payout, etc.), seller must cancel and re-list.
+ *
+ * ## Common Errors and Solutions:
+ *
+ * ### "mandatory-script-verify-flag-failed"
+ * - **Cause**: Seller's signature doesn't validate (sighash mismatch)
+ * - **Debug**: Compare `sellerPayoutZats` vs actual output 1 value
+ * - **Fix**: Use stored values from listing, don't recompute
+ *
+ * ### "Seller input not at index 1"
+ * - **Cause**: Buyer placed seller input at wrong position
+ * - **Fix**: Always place seller input at vin 1 (buyer inputs before/after)
+ *
+ * ### "Listing invalidated: token spent"
+ * - **Cause**: Seller spent their token UTXO elsewhere
+ * - **Fix**: Listing should be marked inactive (can't salvage)
+ *
+ * ## Database Schema:
+ *
+ * ### psbtListings table:
+ * - `tokenLocation`: "txid:vout" of ZRC-20 transfer inscription
+ * - `sellerAddress`: Seller's t-address
+ * - `price`: Price in ZEC
+ * - `sellerScriptSigHex`: Pre-signed scriptSig (signature + pubkey)
+ * - `sellerPayoutZats`: Exact amount seller receives (price - marketplace fee)
+ * - `sellerPayoutScriptHex`: Seller's payout script (usually P2PKH)
+ * - `status`: "active" | "completed" | "cancelled"
+ *
+ * ## References:
+ * - ZIP-243: https://zips.z.cash/zip-0243 (Zcash signature hash)
+ * - SIGHASH types: https://bitcoin.org/en/developer-guide#signature-hash-types
+ * - Ordinals envelope: https://docs.ordinals.com/inscriptions.html
+ */
+
 import { action, mutation, query } from "./_generated/server";
 import { api } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
@@ -23,6 +108,8 @@ async function withClientError<T>(fn: () => Promise<T>, fallback: string): Promi
   } catch (error) {
     if (error instanceof ConvexError) throw error;
     const message = error instanceof Error && error.message ? error.message : fallback;
+    // Log the full error for debugging
+    console.error('[withClientError] Caught error:', error);
     throw new ConvexError(message || fallback);
   }
 }
@@ -182,6 +269,38 @@ async function assertValidZrc20Transfer(args: ZrcTransferValidationArgs): Promis
   };
 }
 
+/**
+ * Build the canonical buyer transaction template from a listing.
+ *
+ * This function reconstructs the EXACT outputs the seller pre-signed with SIGHASH_SINGLE|ANYONECANPAY.
+ * Any deviation from what the seller signed will cause signature validation to fail with
+ * "mandatory-script-verify-flag-failed".
+ *
+ * ## Output Order (CRITICAL - Do Not Change):
+ *
+ * - Output 0: Token UTXO → Buyer (value = tokenValueZats)
+ * - Output 1: Seller Payout → Seller (value = sellerPayoutZats, script = sellerPayoutScriptHex)
+ * - Output 2: Marketplace Fee → Treasury (value = sellerFeeZats)
+ *
+ * The seller's SIGHASH_SINGLE signature binds their input (at vin index 1) to output index 1.
+ * If we reorder outputs or change amounts, the signature becomes invalid.
+ *
+ * ## Key Design Decisions:
+ *
+ * 1. **Use stored `sellerPayoutZats`**: We trust the value stored when the listing was created,
+ *    NOT recomputed fees. This prevents signature mismatches if marketplace fee rate changes.
+ *
+ * 2. **Use stored `sellerPayoutScriptHex`**: Seller may have specified a different payout address
+ *    than their main address (e.g., for escrow). We use what they signed.
+ *
+ * 3. **Validate token ownership**: Before building template, verify seller still owns the token
+ *    UTXO via ZRC-20 indexer and RPC checks.
+ *
+ * @param listing - Listing document from database
+ * @param buyerAddress - Buyer's t-address (for output 0 script)
+ * @returns Template with outputs, scripts, and amounts matching seller's signature
+ * @throws Error if token UTXO spent, transfer invalid, or amounts can't be determined
+ */
 async function buildBuyerTemplate(listing: any, buyerAddress: string) {
   let expectedBase: string | undefined = listing.tokenAmountBase;
   if (!expectedBase && typeof listing.tokenAmount === 'number' && typeof listing.tokenDecimals === 'number') {
@@ -260,8 +379,62 @@ async function buildBuyerTemplate(listing: any, buyerAddress: string) {
   };
 }
 
-// Create a new PSBT listing
-// Create a new PSBT listing
+/**
+ * Create a new PSBT listing for a ZRC-20 token or NFT.
+ *
+ * ## Maker-Taker Flow (PSBT Partial Signing):
+ *
+ * 1. **Maker (Seller)** creates a listing by:
+ *    - Pre-signing their token input with SIGHASH_SINGLE|ANYONECANPAY
+ *    - Locking their signature to specific outputs (token→buyer, payout→seller, fee→treasury)
+ *    - Storing `sellerScriptSigHex` which contains their signature + pubkey
+ *
+ * 2. **Taker (Buyer)** completes the transaction by:
+ *    - Adding their own inputs (to pay the price)
+ *    - Preserving the seller's pre-signed input at **vin index 1** (required by SIGHASH_SINGLE)
+ *    - Using the exact output order/amounts the seller signed (from `sellerPayoutZats`, `sellerPayoutScriptHex`)
+ *
+ * ## Critical Fields for Signature Validation:
+ *
+ * - `sellerScriptSigHex`: The seller's pre-signed scriptSig (signature + pubkey). This signature is
+ *   cryptographically bound to the outputs present when they signed.
+ * - `sellerPayoutZats`: The exact ZEC amount the seller will receive (after marketplace fee deduction).
+ * - `sellerPayoutScriptHex`: The seller's payout script (P2PKH). Must match what was used during signing.
+ * - `sellerInputValue`: The value of the token UTXO being sold (needed for ZIP-243 sighash).
+ *
+ * ## Common Signature Mismatch Causes:
+ *
+ * When `finalizeAndBroadcast` fails with "mandatory-script-verify-flag-failed (sighash mismatch)":
+ *
+ * 1. **Output ordering changed**: Seller signed with outputs [token, payout, treasury] but buyer
+ *    assembled them in different order.
+ * 2. **Payout amount changed**: `sellerPayoutZats` stored on listing doesn't match what seller
+ *    actually signed for (e.g., fee rate changed after listing created).
+ * 3. **Seller input not at vin index 1**: SIGHASH_SINGLE binds to output at same index as input.
+ *    If seller input moves, signature fails.
+ * 4. **Stale listing**: Seller spent/replaced their token UTXO but old listing still references it.
+ *
+ * ## Debugging Steps:
+ *
+ * 1. Fetch listing: `await db.get("psbtListings", "<listingId>")`
+ * 2. Verify seller UTXO unspent: `callZcashRPC('gettxout', [txid, vout, true])`
+ * 3. Decode `sellerScriptSigHex` to extract signature + pubkey
+ * 4. Recompute ZIP-243 sighash using listing's stored outputs and compare
+ * 5. If mismatch found, have seller cancel and re-list with fresh signature
+ *
+ * @param psbtBase64 - Optional legacy PSBT format (deprecated in favor of maker-taker fields)
+ * @param tokenLocation - UTXO location of token being sold (format: "txid:vout")
+ * @param sellerAddress - Seller's Zcash t-address (P2PKH)
+ * @param price - Sale price in ZEC
+ * @param tokenTicker - ZRC-20 ticker (e.g., "PEPE", "ZERO")
+ * @param tokenAmount - Human-readable token amount
+ * @param tokenAmountBase - Token amount in base units (with decimals)
+ * @param tokenDecimals - Number of decimals for token
+ * @param sellerScriptSigHex - Seller's pre-signed scriptSig (CRITICAL: must match outputs)
+ * @param sellerPayoutZats - Exact payout amount seller signed for (after fees)
+ * @param sellerPayoutScriptHex - Seller's payout script (usually P2PKH of sellerAddress)
+ * @param tokenValueZats - Value of token UTXO in zatoshis (from validateZrc20Transfer)
+ */
 export const createListing = mutation({
   args: {
     psbtBase64: v.optional(v.string()),
@@ -531,6 +704,69 @@ function buildP2PKHScript(pkh: Uint8Array): Uint8Array {
   return out;
 }
 
+/**
+ * Finalize and broadcast a buyer-completed PSBT transaction.
+ *
+ * This is the final validation + broadcast step in the maker-taker flow. It performs
+ * comprehensive checks before submitting the transaction to the Zcash network.
+ *
+ * ## Validation Steps (in order):
+ *
+ * 1. **Listing Status**: Verify listing is active and not already completed/cancelled
+ * 2. **Token Unspent**: Confirm seller's token UTXO hasn't been spent (prevents stale listings)
+ * 3. **ZRC-20 Transfer**: Re-validate transfer ownership via indexer (just-in-time check)
+ * 4. **Output Template Match**: Parse buyer's transaction and verify outputs match template:
+ *    - Output 0: Token → Buyer (correct amount + script)
+ *    - Output 1: Payout → Seller (correct amount + script from `sellerPayoutZats`/`sellerPayoutScriptHex`)
+ *    - Output 2: Fee → Treasury (correct amount + script)
+ * 5. **Seller Input Position**: Confirm seller's token input is at **vin index 1** (SIGHASH_SINGLE requirement)
+ * 6. **Seller Signature Match**: Verify `sellerScriptSigHex` in transaction matches listing's stored signature
+ * 7. **Inscription Protection**: Reject if any buyer input spends an inscribed UTXO (prevents NFT loss)
+ *
+ * ## Common Broadcast Errors:
+ *
+ * ### "mandatory-script-verify-flag-failed (Script evaluated without error but finished with false/empty top stack)"
+ *
+ * This means the seller's pre-signed scriptSig doesn't validate against the transaction we built.
+ * Root causes:
+ *
+ * - **Sighash Mismatch**: The outputs we assembled don't match what the seller signed for
+ *   - Check: `sellerPayoutZats` in listing vs actual output 1 value
+ *   - Check: Output ordering (must be token, payout, treasury)
+ *   - Check: `sellerPayoutScriptHex` matches output 1 script
+ *
+ * - **Wrong Input Index**: Seller input not at vin 1 (SIGHASH_SINGLE binds to same-index output)
+ *   - Fix: Buyer must always place seller input at index 1
+ *
+ * - **Legacy Listing**: Seller created listing before we started storing `sellerPayoutZats`/`sellerPayoutScriptHex`
+ *   - Fix: Have seller cancel and re-list
+ *
+ * ### Debugging a Failed Transaction:
+ *
+ * ```javascript
+ * // 1. Get the listing
+ * const listing = await db.get("psbtListings", listingId);
+ *
+ * // 2. Decode the stored seller signature
+ * const scriptSig = hexToBytes(listing.sellerScriptSigHex);
+ * // scriptSig format: [sigLength][signature+sighashType][pubkeyLength][pubkey]
+ *
+ * // 3. Verify outputs match what seller signed
+ * console.log("Stored payout:", listing.sellerPayoutZats);
+ * console.log("Stored script:", listing.sellerPayoutScriptHex);
+ *
+ * // 4. Parse buyer's transaction and compare
+ * const outs = decodeOutputs(buyerTxHex);
+ * console.log("Output 1 value:", outs[1].value, "should match", listing.sellerPayoutZats);
+ * console.log("Output 1 script:", bytesToHex(outs[1].script), "should match", listing.sellerPayoutScriptHex);
+ * ```
+ *
+ * @param listingId - ID of the listing being purchased
+ * @param hex - Complete transaction hex with buyer inputs + seller's pre-signed input
+ * @param buyerAddress - Buyer's address (for verification)
+ * @returns Transaction ID (txid) of the broadcast transaction
+ * @throws ConvexError with detailed message if validation or broadcast fails
+ */
 export const finalizeAndBroadcast = action({
   args: { listingId: v.id("psbtListings"), hex: v.string(), buyerAddress: v.string() },
   handler: async (ctx, args) => withClientError(async () => {
@@ -560,31 +796,96 @@ export const finalizeAndBroadcast = action({
       });
     }
 
-    // Parse inputs/outputs
+    // Parse inputs/outputs from buyer's transaction
     const inputs = decodeInputs(args.hex);
     const outs = decodeOutputs(args.hex);
     const template = await buildBuyerTemplate(listing, args.buyerAddress);
     if (outs.length < template.outputs.length) throw new Error('Invalid transaction: missing required outputs');
 
+    // CRITICAL VALIDATION: Outputs must EXACTLY match what seller pre-signed
+    // Any deviation (wrong order, wrong amounts, wrong scripts) will cause
+    // "mandatory-script-verify-flag-failed" when the node validates seller's signature
     template.outputs.forEach((expected, idx) => {
       const actual = outs[idx];
       const expectedScript = hexToBytes(expected.scriptHex);
+
+      // Debug logging for signature mismatch troubleshooting
+      if (actual.value !== expected.valueZats) {
+        console.error(`[PSBT] Output ${idx} value mismatch:`, {
+          expected: expected.valueZats,
+          actual: actual.value,
+          kind: expected.kind,
+          listing: listing._id,
+        });
+      }
+      if (!scriptsEqual(actual.script, expectedScript)) {
+        console.error(`[PSBT] Output ${idx} script mismatch:`, {
+          expectedHex: bytesToHex(expectedScript),
+          actualHex: bytesToHex(actual.script),
+          kind: expected.kind,
+          listing: listing._id,
+        });
+      }
+
       if (actual.value !== expected.valueZats || !scriptsEqual(actual.script, expectedScript)) {
-        throw new Error(`Output ${idx} does not match marketplace template`);
+        throw new Error(`Output ${idx} (${expected.kind}) does not match marketplace template. Expected value=${expected.valueZats}, got=${actual.value}. This will cause signature validation to fail.`);
       }
     });
 
     // Validate seller input presence and scriptSig equals stored maker-ask
     const [itxid, ivoutStr] = String(listing.tokenLocation).split(':');
     const ivout = parseInt(ivoutStr || '0', 10);
-    // Require seller input be index 1 to bind to payout (SINGLE)
+
+    // CRITICAL: Seller input MUST be at index 1 for SIGHASH_SINGLE to work
+    // SIGHASH_SINGLE binds input N to output N. Since seller signed output 1 (their payout),
+    // their input must be at vin index 1. If buyer reorders inputs, signature fails.
     if (inputs.length < 2) throw new Error('Invalid transaction: missing seller input at index 1');
     const sellerInput = inputs[1];
     if (sellerInput.txid !== itxid || sellerInput.vout !== ivout) {
-      throw new Error('Seller input not at index 1 or does not match tokenLocation');
+      throw new Error(`Seller input not at index 1 or does not match tokenLocation. Expected ${itxid}:${ivout}, got ${sellerInput.txid}:${sellerInput.vout}`);
     }
-    if (listing.sellerScriptSigHex && bytesToHex(sellerInput.scriptSig).toLowerCase() !== String(listing.sellerScriptSigHex).toLowerCase()) {
-      throw new Error('Seller scriptSig does not match listing maker signature');
+
+    // CRITICAL: Sequence number is part of the sighash! Must match what seller signed.
+    // ZIP-243 includes sequence in the sighash calculation. If buyer uses different sequence,
+    // the signature validation will fail even if outputs are correct.
+    if (typeof listing.sellerInputSequence === 'number' && sellerInput.sequence !== listing.sellerInputSequence) {
+      throw new Error(`Seller input sequence mismatch. Expected ${listing.sellerInputSequence} (0x${listing.sellerInputSequence.toString(16)}), got ${sellerInput.sequence} (0x${sellerInput.sequence.toString(16)}). This will cause signature validation to fail.`);
+    }
+
+    // Verify the scriptSig in buyer's transaction matches what seller pre-signed
+    // This is the seller's signature + pubkey that was stored when listing was created
+    if (listing.sellerScriptSigHex) {
+      const actualScriptSigHex = bytesToHex(sellerInput.scriptSig).toLowerCase();
+      const expectedScriptSigHex = String(listing.sellerScriptSigHex).toLowerCase();
+
+      // Decode the scriptSig to check sighash type
+      try {
+        const scriptSig = sellerInput.scriptSig;
+        const sigLength = scriptSig[0];
+        const sighashType = scriptSig[sigLength]; // Last byte of signature
+        console.log(`[PSBT] Seller signature sighash type: 0x${sighashType.toString(16)} (${
+          sighashType === 0x01 ? 'ALL' :
+          sighashType === 0x03 ? 'SINGLE' :
+          sighashType === 0x81 ? 'ALL|ANYONECANPAY' :
+          sighashType === 0x83 ? 'SINGLE|ANYONECANPAY' :
+          'UNKNOWN'
+        })`);
+
+        if (sighashType !== 0x83 && sighashType !== 0x03) {
+          console.warn(`[PSBT] WARNING: Expected sighash type 0x83 (SINGLE|ANYONECANPAY) but got 0x${sighashType.toString(16)}`);
+        }
+      } catch (e) {
+        console.error('[PSBT] Failed to decode sighash type:', e);
+      }
+
+      if (actualScriptSigHex !== expectedScriptSigHex) {
+        console.error(`[PSBT] Seller scriptSig mismatch:`, {
+          expected: expectedScriptSigHex.slice(0, 100) + '...',
+          actual: actualScriptSigHex.slice(0, 100) + '...',
+          listing: listing._id,
+        });
+        throw new Error('Seller scriptSig does not match listing maker signature. Transaction has been modified.');
+      }
     }
 
     // Guard: reject if any buyer input spends an inscribed UTXO (prevents accidental NFT loss)
@@ -636,6 +937,58 @@ export const finalizeAndBroadcast = action({
     let totalOut = 0;
     try { for (const o of outs) totalOut += o.value; } catch { }
     const feeZats = totalIn > 0 && totalOut > 0 ? (totalIn - totalOut) : undefined;
+
+    // Final debug log before broadcast - show EVERYTHING that goes into sighash
+    console.log(`[PSBT] Broadcasting transaction for listing ${listing._id}:`, {
+      listingPrice: listing.price,
+      listingData: {
+        sellerPayoutZats: listing.sellerPayoutZats,
+        sellerPayoutScriptHex: listing.sellerPayoutScriptHex,
+        sellerInputSequence: listing.sellerInputSequence,
+        sellerInputValue: listing.sellerInputValue,
+        tokenLocation: listing.tokenLocation,
+      },
+      expectedOutputs: template.outputs.map(o => ({
+        index: o.index,
+        kind: o.kind,
+        valueZats: o.valueZats,
+        scriptHex: o.scriptHex,
+      })),
+      actualOutputs: outs.map((o, i) => ({
+        index: i,
+        valueZats: o.value,
+        scriptHex: bytesToHex(o.script),
+      })),
+      actualInputs: inputs.map((inp, i) => ({
+        index: i,
+        txid: inp.txid,
+        vout: inp.vout,
+        sequence: inp.sequence,
+        sequenceHex: '0x' + inp.sequence.toString(16),
+        scriptSigHex: bytesToHex(inp.scriptSig).slice(0, 100) + '...',
+      })),
+    });
+
+    // Decode the transaction with RPC for additional verification
+    try {
+      const decoded: any = await callZcashRPC('decoderawtransaction', [args.hex]);
+      console.log(`[PSBT] Decoded transaction:`, {
+        txid: decoded.txid,
+        vin: decoded.vin?.map((v: any, i: number) => ({
+          idx: i,
+          txid: v.txid,
+          vout: v.vout,
+          sequence: v.sequence,
+        })),
+        vout: decoded.vout?.map((v: any, i: number) => ({
+          idx: i,
+          value: v.value,
+          valueZat: v.valueZat,
+        })),
+      });
+    } catch (e: any) {
+      console.error('[PSBT] Failed to decode transaction:', e.message);
+    }
 
     // Broadcast via our RPC
     const txid = await broadcastTransaction(args.hex);

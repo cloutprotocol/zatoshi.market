@@ -223,6 +223,42 @@ function outputsHash(outputs: { value: number; scriptPubKey: Uint8Array }[]): Ui
   return blake(concatBytes(parts), 'ZcashOutputsHash');
 }
 
+/**
+ * Compute ZIP-243 signature hash for Zcash Sapling+ transactions.
+ *
+ * This implements the ZIP-243 sighash algorithm used by Zcash for transaction signing.
+ * It creates a cryptographic commitment to specific parts of the transaction based on
+ * the sighash type.
+ *
+ * ## SIGHASH Types in Zcash:
+ *
+ * - **SIGHASH_ALL (0x01)**: Signs all inputs and all outputs (most common, most secure)
+ * - **SIGHASH_SINGLE (0x03)**: Signs all inputs but ONLY the output at the same index as this input
+ * - **ANYONECANPAY (0x80)**: Modifier flag - when combined with above, signs only THIS input
+ *   (allows others to add more inputs)
+ *
+ * ## Our Marketplace Usage:
+ *
+ * Sellers use **SIGHASH_SINGLE | ANYONECANPAY** (0x83) when creating listings:
+ * - Their input (vin 1) binds ONLY to their payout output (vout 1)
+ * - Buyers can add their own inputs to pay the price
+ * - Output ordering is CRITICAL: if seller input is at vin 1, output 1 MUST be seller payout
+ *
+ * ## Implementation Notes:
+ *
+ * - Uses BLAKE2b-256 with personalization strings ("ZcashPrevoutHash", etc.)
+ * - Consensus branch ID must match current network epoch (NU5 = 0xf919a198)
+ * - All integers are little-endian
+ * - Varint encoding for counts/lengths
+ *
+ * @param tx - Transaction data including inputs, outputs, version fields
+ * @param inputIndex - Which input we're signing (0-based)
+ * @param sighashType - SIGHASH type (default: 0x01 = ALL)
+ * @returns 32-byte sighash digest ready for ECDSA signing
+ *
+ * @see https://zips.z.cash/zip-0243 - ZIP-243 specification
+ * @see convex/psbt.ts:finalizeAndBroadcast - Where signature validation happens
+ */
 export function zip243Sighash(tx: {
   version: number;
   versionGroupId: number;
@@ -231,14 +267,50 @@ export function zip243Sighash(tx: {
   expiryHeight: number;
   inputs: { txid: string; vout: number; sequence: number; value: number; scriptPubKey: Uint8Array }[];
   outputs: { value: number; scriptPubKey: Uint8Array }[];
-}, inputIndex: number): Uint8Array {
+}, inputIndex: number, sighashType: number = 0x01): Uint8Array {
   const i = tx.inputs[inputIndex];
+
+  // Parse sighash type flags
+  const SIGHASH_ALL = 0x01;
+  const SIGHASH_SINGLE = 0x03;
+  const SIGHASH_ANYONECANPAY = 0x80;
+
+  const isAnyoneCanPay = (sighashType & SIGHASH_ANYONECANPAY) !== 0;
+  const baseType = sighashType & 0x1f;
+  const isSingle = baseType === SIGHASH_SINGLE;
+
+  // Compute hashPrevouts (depends on ANYONECANPAY)
+  const hashPrevouts = isAnyoneCanPay
+    ? new Uint8Array(32) // Empty if ANYONECANPAY
+    : prevoutsHash(tx.inputs);
+
+  // Compute hashSequence (empty if ANYONECANPAY)
+  const hashSequence = isAnyoneCanPay
+    ? new Uint8Array(32) // Empty if ANYONECANPAY
+    : sequenceHash(tx.inputs);
+
+  // Compute hashOutputs (depends on SINGLE vs ALL)
+  let hashOutputs: Uint8Array;
+  if (isSingle) {
+    // SIGHASH_SINGLE: hash only the output at the same index as input
+    if (inputIndex >= tx.outputs.length) {
+      // If no corresponding output exists, use empty hash
+      hashOutputs = new Uint8Array(32);
+    } else {
+      const singleOutput = tx.outputs[inputIndex];
+      hashOutputs = outputsHash([singleOutput]);
+    }
+  } else {
+    // SIGHASH_ALL: hash all outputs
+    hashOutputs = outputsHash(tx.outputs);
+  }
+
   const pre = concatBytes([
     u32le(tx.version), u32le(tx.versionGroupId),
-    prevoutsHash(tx.inputs), sequenceHash(tx.inputs), outputsHash(tx.outputs),
-    new Uint8Array(32), new Uint8Array(32), new Uint8Array(32),
-    u32le(tx.lockTime), u32le(tx.expiryHeight), u64le(0),
-    u32le(1), // SIGHASH_ALL
+    hashPrevouts, hashSequence, hashOutputs,
+    new Uint8Array(32), new Uint8Array(32), new Uint8Array(32), // joinsplits, shielded spends, shielded outputs
+    u32le(tx.lockTime), u32le(tx.expiryHeight), u64le(0), // valueBalance
+    u32le(sighashType), // Use provided sighash type
     reverseBytes(hexToBytes(i.txid)), u32le(i.vout),
     varint(i.scriptPubKey.length), i.scriptPubKey,
     u64le(i.value), u32le(i.sequence)
@@ -350,7 +422,52 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
   }
 }
 
-// RPC Helper
+/**
+ * Call Zcash RPC methods via our primary RPC endpoint (rpc.zatoshi.market).
+ *
+ * This is the primary interface for all blockchain queries and transaction broadcasts.
+ * It uses the Zcash JSON-RPC protocol over HTTP.
+ *
+ * ## Common Methods:
+ *
+ * - `getblockchaininfo`: Get current network status and consensus branch ID
+ * - `getrawtransaction(txid, 1)`: Get decoded transaction with vouts/vins
+ * - `gettxout(txid, vout, true)`: Check if UTXO is unspent (null if spent)
+ * - `getaddressutxos({addresses: [addr]})`: Get all UTXOs for an address
+ * - `sendrawtransaction(hex)`: Broadcast a signed transaction (returns txid or error)
+ * - `decoderawtransaction(hex)`: Decode transaction hex to JSON (for debugging)
+ *
+ * ## Broadcast Errors:
+ *
+ * When `sendrawtransaction` fails, the error message from the node tells us WHY:
+ *
+ * - **"mandatory-script-verify-flag-failed"**: Signature validation failed
+ *   - Usually means scriptSig doesn't match scriptPubKey (wrong key, wrong sighash)
+ *   - For PSBT: seller's pre-signed input doesn't match current transaction structure
+ *   - Debug: Compare outputs in transaction vs what seller signed
+ *
+ * - **"txn-mempool-conflict"**: Transaction conflicts with one already in mempool
+ *   - One of the inputs is already spent by another pending transaction
+ *   - Debug: Check if token UTXO was double-spent
+ *
+ * - **"bad-txns-inputs-missingorspent"**: Input UTXO doesn't exist or already spent
+ *   - Token was sold to someone else, or seller spent it elsewhere
+ *   - Listing should be marked invalid
+ *
+ * - **"scriptsig-not-pushonly"**: scriptSig contains opcodes other than data pushes
+ *   - Usually means malformed scriptSig (e.g., missing pushData wrapper)
+ *   - Check assembleCommitTxHex/assembleRevealTxHex logic
+ *
+ * ## Rate Limiting:
+ *
+ * Our RPC endpoint has rate limits. For high-frequency operations (like consensus branch ID),
+ * use the cached version (see getConsensusBranchId) instead of calling this directly.
+ *
+ * @param method - RPC method name (e.g., "sendrawtransaction")
+ * @param params - Array of parameters for the method
+ * @returns The `result` field from the JSON-RPC response
+ * @throws Error with the RPC error message if the call fails
+ */
 export async function callZcashRPC(method: string, params: any[] = []) {
   const url = process.env.NEXT_PUBLIC_ZCASH_RPC_URL || 'https://rpc.zatoshi.market/api/rpc';
   const headers: Record<string, string> = {
