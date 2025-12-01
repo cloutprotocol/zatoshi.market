@@ -1,13 +1,13 @@
 import { action, mutation, query } from "./_generated/server";
 import { api } from "./_generated/api";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { broadcastTransaction, bytesToHex, hexToBytes, fetchUtxos, callZcashRPC, checkInscriptionAt } from "./zcashHelpers";
 import { TREASURY_ADDRESS } from "./treasury.config";
 import bs58check from "bs58check";
 
 const MARKETPLACE_FEES = {
   BUYER_BPS: 0,
-  SELLER_BPS: 250,
+  SELLER_BPS: 200,
 } as const;
 
 function computeFeeBreakdown(priceZats: number) {
@@ -15,6 +15,16 @@ function computeFeeBreakdown(priceZats: number) {
   const buyerFeeZats = Math.ceil((priceZats * MARKETPLACE_FEES.BUYER_BPS) / 10_000);
   const sellerPayoutZats = priceZats - sellerFeeZats;
   return { sellerFeeZats, buyerFeeZats, sellerPayoutZats };
+}
+
+async function withClientError<T>(fn: () => Promise<T>, fallback: string): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (error instanceof ConvexError) throw error;
+    const message = error instanceof Error && error.message ? error.message : fallback;
+    throw new ConvexError(message || fallback);
+  }
 }
 
 // -----------------------------
@@ -82,14 +92,14 @@ export const validateZrc20Transfer = action({
     expectedAmountBase: v.optional(v.union(v.string(), v.number())),
     tokenDecimals: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args) => withClientError(async () => {
     const result = await assertValidZrc20Transfer(args);
     // Convert bigint to string for JSON serialization
     return {
       ...result,
       amtBase: result.amtBase.toString(),
     };
-  },
+  }, 'Unable to validate transfer'),
 });
 
 async function assertValidZrc20Transfer(args: ZrcTransferValidationArgs): Promise<ZrcTransferValidationResult> {
@@ -272,7 +282,7 @@ export const createListing = mutation({
     sellerPayoutScriptHex: v.optional(v.string()),
     tokenValueZats: v.optional(v.number()), // From validateZrc20Transfer action
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args) => withClientError(async () => {
     // IMPORTANT: For ZRC-20 listings, frontend must call validateZrc20Transfer action first
     // and pass the returned tokenValueZats here (mutations cannot use fetch for validation)
     const sellerInputValue = args.tokenValueZats;
@@ -311,7 +321,7 @@ export const createListing = mutation({
       sellerInputValue,
     });
     return listingId;
-  },
+  }, 'Unable to create listing'),
 });
 
 // List all active listings
@@ -417,7 +427,7 @@ export const updateStatus = mutation({
     buyerAddress: v.optional(v.string()),
     feeZats: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args) => withClientError(async () => {
     const { listingId, status, txid, buyerAddress } = args;
 
     // Validate status transition
@@ -431,7 +441,7 @@ export const updateStatus = mutation({
       buyerAddress,
       feeZats: args.feeZats,
     });
-  },
+  }, 'Unable to update listing status'),
 });
 
 // Helper: decode raw transparent tx outputs (value + scriptPubKey)
@@ -520,7 +530,7 @@ function buildP2PKHScript(pkh: Uint8Array): Uint8Array {
 
 export const finalizeAndBroadcast = action({
   args: { listingId: v.id("psbtListings"), hex: v.string(), buyerAddress: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args) => withClientError(async () => {
     // In actions, use runQuery to access DB
     const listing = await ctx.runQuery(api.psbt.getListing, { listingId: args.listingId });
     if (!listing) throw new Error('Listing not found');
@@ -629,13 +639,13 @@ export const finalizeAndBroadcast = action({
     // Update status via mutation from an action
     await ctx.runMutation(api.psbt.updateStatus, { listingId: args.listingId, status: 'completed', txid, buyerAddress: args.buyerAddress, feeZats });
     return txid;
-  }
+  }, 'Unable to finalize trade')
 });
 
 // Prepare a canonical buyer template for outputs/order/scripts/amounts
 export const prepareBuyerTemplate = action({
   args: { listingId: v.id('psbtListings'), buyerAddress: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args) => withClientError(async () => {
     // In actions, DB access must go through runQuery
     const listing = await ctx.runQuery(api.psbt.getListing, { listingId: args.listingId });
     if (!listing) throw new Error('Listing not found');
@@ -655,7 +665,7 @@ export const prepareBuyerTemplate = action({
         sellerSighash: 'SINGLE|ANYONECANPAY',
       },
     };
-  }
+  }, 'Unable to prepare buyer template')
 });
 
 // Submit buyer offer payload (JSON) for a listing
@@ -665,7 +675,7 @@ export const submitBuyerOffer = action({
     buyerAddress: v.string(),
     offerPayload: v.string(), // JSON string
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args) => withClientError(async () => {
     const listing = await ctx.runQuery(api.psbt.getListing, { listingId: args.listingId });
     if (!listing) throw new Error('Listing not found');
     if (listing.status !== 'active') throw new Error('Listing not active');
@@ -700,7 +710,7 @@ export const submitBuyerOffer = action({
       offerPayload: args.offerPayload,
     });
     return offerId;
-  }
+  }, 'Unable to submit offer')
 });
 
 // List offers for a seller (pending)
@@ -744,7 +754,7 @@ export const insertOffer = mutation({
 // Cancel an active listing (seller only)
 export const cancelListing = mutation({
   args: { listingId: v.id('psbtListings'), requester: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args) => withClientError(async () => {
     const rec = await ctx.db.get(args.listingId);
     if (!rec) throw new Error('Listing not found');
     if (rec.status !== 'active') throw new Error('Listing not active');
@@ -752,7 +762,7 @@ export const cancelListing = mutation({
       throw new Error('Only the seller can cancel this listing');
     }
     await ctx.db.patch(args.listingId, { status: 'cancelled' });
-  }
+  }, 'Unable to cancel listing')
 });
 
 // Get market stats for a ticker (spot price, 24h volume)

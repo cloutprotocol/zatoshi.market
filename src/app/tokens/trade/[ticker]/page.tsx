@@ -13,6 +13,7 @@ import ListingCard from "@/components/psbt/ListingCard";
 import CreateListing from "@/components/psbt/CreateListing";
 import FinalizeTrade from "@/components/psbt/FinalizeTrade";
 import { useWallet } from "@/contexts/WalletContext";
+import { useZecPrice } from "@/hooks/useZecPrice";
 
 const Dither = NextDynamic(() => import("@/components/Dither"), {
     ssr: false,
@@ -41,6 +42,7 @@ const formatZec = (value?: number, fractionDigits = 2) => {
 export default function TokenTradePage({ params }: { params: { ticker: string } }) {
     const router = useRouter();
     const { wallet } = useWallet();
+    const { price: zecPrice } = useZecPrice();
     const ticker = decodeURIComponent(params.ticker).toUpperCase();
     const listings = useQuery(api.psbt.listListingsByTicker, { ticker });
     const marketStatsData = useQuery(api.psbt.getMarketStats, { ticker });
@@ -352,6 +354,7 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
                                             listing={listing}
                                             onBuy={(item) => setSelectedListing(item)}
                                             floorPrice={marketStats?.floor ?? undefined}
+                                            zecPrice={zecPrice}
                                         />
                                     ))}
                             </div>
@@ -446,6 +449,7 @@ export default function TokenTradePage({ params }: { params: { ticker: string } 
                             <FinalizeTrade
                                 listing={selectedListing}
                                 onCancel={() => setSelectedListing(null)}
+                                zecPrice={zecPrice}
                             />
                         </div>
                     </div>

@@ -5,13 +5,15 @@ import { useIpfsImage } from "@/lib/imageLoader";
 import { useInViewport } from "@/hooks/useInViewport";
 import { buildImageUrls } from "@/lib/collectionAssets";
 import { getCollectionConfig } from "@/config/collections";
+import { formatUSD } from "@/config/fees";
 
 interface NFTListingCardProps {
     listing: Doc<"psbtListings">;
     onBuy: (listing: Doc<"psbtListings">) => void;
+    zecPrice?: number | null;
 }
 
-export default function NFTListingCard({ listing, onBuy }: NFTListingCardProps) {
+export default function NFTListingCard({ listing, onBuy, zecPrice }: NFTListingCardProps) {
     const timeAgo = new Date(listing.createdAt).toLocaleDateString();
     const collection = listing.collectionSlug ? getCollectionConfig(listing.collectionSlug) : null;
 
@@ -27,6 +29,9 @@ export default function NFTListingCard({ listing, onBuy }: NFTListingCardProps) 
     const { ref, inView } = useInViewport<HTMLDivElement>();
     const cacheKey = `${listing.collectionSlug}-${listing.tokenId}`;
     const { resolved, loading, errored } = useIpfsImage(imageUrls, inView, cacheKey);
+
+    const priceZats = Math.round(listing.price * 1e8);
+    const priceUsd = zecPrice ? formatUSD(priceZats, zecPrice) : null;
 
     return (
         <div ref={ref} className="bg-black/40 backdrop-blur-sm border border-gold-500/20 rounded-sm overflow-hidden hover:border-gold-500/40 transition-all group relative flex flex-col shadow-lg hover:shadow-gold-500/10">
@@ -77,6 +82,11 @@ export default function NFTListingCard({ listing, onBuy }: NFTListingCardProps) 
                         <div className="text-xl font-black text-gold-100 leading-none tracking-tight">
                             {listing.price} ZEC
                         </div>
+                        {priceUsd && (
+                            <div className="text-sm font-semibold text-gold-300/80 tracking-tight mt-1">
+                                ≈ {priceUsd} USD
+                            </div>
+                        )}
                     </div>
                 </div>
 

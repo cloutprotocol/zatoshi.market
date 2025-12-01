@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
 import NFTListingCard from "../../../../components/psbt/NFTListingCard";
@@ -9,6 +9,8 @@ import FinalizeTrade from "../../../../components/psbt/FinalizeTrade";
 import { Doc } from "../../../../../convex/_generated/dataModel";
 import { getCollectionConfig } from "@/config/collections";
 import Link from "next/link";
+import { useZecPrice } from "@/hooks/useZecPrice";
+import { formatUSD } from "@/config/fees";
 
 export default function CollectionTradePage({ params }: { params: { slug: string } }) {
     const slug = decodeURIComponent(params.slug);
@@ -18,6 +20,7 @@ export default function CollectionTradePage({ params }: { params: { slug: string
 
     const [showCreate, setShowCreate] = useState(false);
     const [selectedListing, setSelectedListing] = useState<Doc<"psbtListings"> | null>(null);
+    const { price: zecPrice } = useZecPrice();
 
     if (!collection) {
         return <div className="min-h-screen bg-black text-gold-100 flex items-center justify-center">Collection not found</div>;
@@ -27,6 +30,8 @@ export default function CollectionTradePage({ params }: { params: { slug: string
     const floorPrice = listings && listings.length > 0
         ? Math.min(...listings.map(l => l.price))
         : null;
+    const floorPriceZats = floorPrice !== null ? Math.round(floorPrice * 1e8) : null;
+    const floorPriceUsd = floorPriceZats !== null && zecPrice ? formatUSD(floorPriceZats, zecPrice) : null;
 
     return (
         <div className="min-h-screen bg-black text-gold-100 font-sans selection:bg-gold-500/30">
@@ -66,6 +71,9 @@ export default function CollectionTradePage({ params }: { params: { slug: string
                                 <div className="text-3xl font-black text-gold-400">
                                     {floorPrice ? `${floorPrice} ZEC` : "-"}
                                 </div>
+                                {floorPriceUsd && (
+                                    <div className="text-sm font-semibold text-gold-300/80 mt-1">≈ {floorPriceUsd} USD</div>
+                                )}
                             </div>
                             <div className="bg-black/40 border border-gold-500/20 rounded-sm p-6 backdrop-blur-md shadow-lg group hover:border-gold-500/40 transition-all">
                                 <div className="text-xs text-gold-200/60 font-bold uppercase tracking-wider mb-2">Active Listings</div>
@@ -165,6 +173,7 @@ export default function CollectionTradePage({ params }: { params: { slug: string
                                     key={listing._id}
                                     listing={listing}
                                     onBuy={() => setSelectedListing(listing)}
+                                    zecPrice={zecPrice}
                                 />
                             ))}
                         </div>
@@ -179,6 +188,7 @@ export default function CollectionTradePage({ params }: { params: { slug: string
                         <FinalizeTrade
                             listing={selectedListing}
                             onCancel={() => setSelectedListing(null)}
+                            zecPrice={zecPrice}
                         />
                     </div>
                 </div>

@@ -35,6 +35,7 @@ import { ConfirmTransaction } from '@/components/ConfirmTransaction';
 import { InscriptionHistory } from '@/components/InscriptionHistory';
 import { zcashRPC } from '@/services/zcash';
 import { ordinalIndexAPI, type TokenSummary } from '@/services/ordinalIndex';
+import { useZecPrice } from '@/hooks/useZecPrice';
 
 type TabKey = 'names' | 'text' | 'images' | 'zrc20' | 'utxo' | 'history';
 const SHOW_NAMES = false;
@@ -560,7 +561,7 @@ function InscribePageContent() {
   const [demoRunning, setDemoRunning] = useState(false);
   const [demoLog, setDemoLog] = useState<string[]>([]);
   const [blockHeight, setBlockHeight] = useState<number | null>(null);
-  const [zecPrice, setZecPrice] = useState<number | null>(null);
+  const { price: zecPrice } = useZecPrice();
   const formatBytes = (bytes?: number | null) => {
     if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return '...';
     const units = ['B', 'KB', 'MB', 'GB'];
@@ -709,14 +710,6 @@ function InscribePageContent() {
         }
       }
 
-      // Fetch ZEC price
-      try {
-        const priceResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=zcash&vs_currencies=usd');
-        const priceData = await priceResponse.json();
-        if (!cancelled && priceData.zcash?.usd) setZecPrice(priceData.zcash.usd);
-      } catch (error) {
-        console.error('Failed to fetch ZEC price:', error);
-      }
     }
 
     fetchData();

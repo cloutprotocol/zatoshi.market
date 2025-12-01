@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { formatUSD } from "@/config/fees";
+import { useZecPrice } from "@/hooks/useZecPrice";
 
 type LineItem = {
   label: string;
@@ -46,34 +47,7 @@ export function ConfirmTransaction(props: {
     onFeeOptionChange,
     extraContent,
   } = props;
-  const [zecPrice, setZecPrice] = useState<number | null>(null);
-  const [priceLoading, setPriceLoading] = useState(false);
-
-  // Fetch ZEC price only when modal opens
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const fetchPrice = async () => {
-      setPriceLoading(true);
-      try {
-        const response = await fetch(
-          'https://api.coingecko.com/api/v3/simple/price?ids=zcash&vs_currencies=usd'
-        );
-        if (response.ok) {
-          const data = await response.json();
-          if (data?.zcash?.usd) {
-            setZecPrice(data.zcash.usd);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch ZEC price:', err);
-      } finally {
-        setPriceLoading(false);
-      }
-    };
-
-    fetchPrice();
-  }, [isOpen]);
+  const { price: zecPrice, loading: priceLoading } = useZecPrice();
 
   if (!isOpen) return null;
 

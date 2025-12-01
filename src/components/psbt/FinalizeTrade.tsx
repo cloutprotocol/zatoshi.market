@@ -20,13 +20,15 @@ import * as secp from "@noble/secp256k1";
 import { calcFees, MARKETPLACE_FEES, BUY_TX_FEE_FLOOR_ZATS } from "@/config/marketplace";
 import { useToast } from "@/contexts/ToastContext";
 import { getSafeUTXOs } from "@/utils/utxoProtection";
+import { formatUSD } from "@/config/fees";
 
 interface FinalizeTradeProps {
   listing: Doc<"psbtListings">;
   onCancel: () => void;
+  zecPrice?: number | null;
 }
 
-export default function FinalizeTrade({ listing, onCancel }: FinalizeTradeProps) {
+export default function FinalizeTrade({ listing, onCancel, zecPrice }: FinalizeTradeProps) {
   const { wallet } = useWallet();
   const { success: toastSuccess, error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
@@ -173,29 +175,44 @@ export default function FinalizeTrade({ listing, onCancel }: FinalizeTradeProps)
           <span>Item:</span>
           <span className="text-zinc-200">{listing.tokenAmount} {listing.tokenTicker}</span>
         </div>
-        <div className="flex justify-between">
-          <span>Price:</span>
-          <span className="text-zinc-200">{listing.price.toFixed(8)} ZEC</span>
-        </div>
         {(() => {
           const priceZats = Math.round(listing.price * 1e8);
-          const { buyerFeeZats, sellerFeeZats, buyerTotalZats } = calcFees(priceZats);
+          const { buyerTotalZats, sellerPayoutZats } = calcFees(priceZats);
           const buyerTotal = buyerTotalZats / 1e8;
-          const netToSeller = (priceZats - sellerFeeZats) / 1e8;
+          const netToSeller = sellerPayoutZats / 1e8;
           const pctSeller = (MARKETPLACE_FEES.SELLER_BPS / 100).toFixed(1);
+          const priceUsd = zecPrice ? formatUSD(priceZats, zecPrice) : null;
+          const buyerTotalUsd = zecPrice ? formatUSD(buyerTotalZats, zecPrice) : null;
+          const sellerPayoutUsd = zecPrice ? formatUSD(sellerPayoutZats, zecPrice) : null;
           return (
             <>
+              <div className="flex justify-between">
+                <span>Price:</span>
+                <span className="text-right text-zinc-200">
+                  {listing.price.toFixed(8)} ZEC
+                  {priceUsd && <span className="block text-xs text-gold-300/80">≈ {priceUsd} USD</span>}
+                </span>
+              </div>
               <div className="flex justify-between text-zinc-300">
                 <span>No buyer fee</span>
-                <span className="text-zinc-200">{buyerTotal.toFixed(8)} ZEC</span>
+                <span className="text-right text-zinc-200">
+                  {buyerTotal.toFixed(8)} ZEC
+                  {buyerTotalUsd && <span className="block text-xs text-gold-200/70">≈ {buyerTotalUsd} USD</span>}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span>Net to Seller (after {pctSeller}%):</span>
-                <span className="text-zinc-200">{netToSeller.toFixed(8)} ZEC</span>
+                <span className="text-right text-zinc-200">
+                  {netToSeller.toFixed(8)} ZEC
+                  {sellerPayoutUsd && <span className="block text-xs text-gold-200/70">≈ {sellerPayoutUsd} USD</span>}
+                </span>
               </div>
               <div className="border-t border-zinc-800 pt-2 flex justify-between font-bold">
                 <span>Total (Buyer):</span>
-                <span className="text-orange-500">{buyerTotal.toFixed(8)} ZEC</span>
+                <span className="text-right text-orange-500">
+                  {buyerTotal.toFixed(8)} ZEC
+                  {buyerTotalUsd && <span className="block text-xs text-gold-200/80 font-normal">≈ {buyerTotalUsd} USD</span>}
+                </span>
               </div>
             </>
           );

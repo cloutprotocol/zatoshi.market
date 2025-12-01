@@ -12,6 +12,7 @@ import ListingCard from "@/components/psbt/ListingCard";
 import CreateListing from "@/components/psbt/CreateListing";
 import FinalizeTrade from "@/components/psbt/FinalizeTrade";
 import { useWallet } from "@/contexts/WalletContext";
+import { useZecPrice } from "@/hooks/useZecPrice";
 
 const Dither = NextDynamic(() => import("@/components/Dither"), {
     ssr: false,
@@ -35,6 +36,7 @@ export default function TradePage() {
     const [showCreate, setShowCreate] = useState(false);
     const [selectedListing, setSelectedListing] = useState<Doc<"psbtListings"> | null>(null);
     const { wallet } = useWallet();
+    const { price: zecPrice } = useZecPrice();
 
     const stats = useMemo(() => {
         if (!listings) {
@@ -287,6 +289,7 @@ export default function TradePage() {
                                     key={listing._id}
                                     listing={listing}
                                     onBuy={(item) => setSelectedListing(item)}
+                                    zecPrice={zecPrice}
                                 />
                             ))}
                         </div>
@@ -311,6 +314,7 @@ export default function TradePage() {
                         <FinalizeTrade
                             listing={selectedListing}
                             onCancel={() => setSelectedListing(null)}
+                            zecPrice={zecPrice}
                         />
                     </div>
                 </div>
