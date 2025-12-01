@@ -17,6 +17,10 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "zatoshi.market",
   description: "Host and trade ZRC20 tokens, ZMAPS, and inscriptions on Zcash.",
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -49,7 +53,6 @@ export default function RootLayout({
                        ,,,      .,,       :            ,                     ,;.
         */}
         <meta name="mobile-web-app-capable" content="yes" />
-        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link href="https://fonts.cdnfonts.com/css/vcr-osd-mono" rel="stylesheet" />
       </head>
       <body style={{ fontFamily: "'VCR OSD Mono', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', monospace" }}>
