@@ -584,7 +584,7 @@ export function ClaimClient({ collection }: Props) {
                 for displaying all minted tokens. This provides a more reliable and decentralized source of truth.
               </p>
               <p className="text-gold-200/80">
-                All tokens shown below are verified onchain. You can view your owned tokens by connecting your wallet.
+
               </p>
             </div>
           </div>
