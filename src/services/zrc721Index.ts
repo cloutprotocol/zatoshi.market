@@ -1,11 +1,14 @@
 /**
  * ZRC-721 Onchain Index API Client
- * 
+ *
  * This service interfaces with the onchain ZRC-721 indexer
  * to fetch collection and token data directly from the blockchain index.
  */
 
-const BASE_URL = 'http://135.181.6.234:3333/api/v1/zrc721';
+// Use proxy in production to avoid mixed content issues
+const BASE_URL = typeof window !== 'undefined' && window.location.protocol === 'https:'
+    ? '/api/zrc721'
+    : 'http://135.181.6.234:3333/api/v1/zrc721';
 
 export type ZRC721Token = {
     token_id: string;
