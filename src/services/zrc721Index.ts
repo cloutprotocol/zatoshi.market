@@ -137,7 +137,9 @@ class ZRC721IndexAPI {
     async getRecentTokens(collectionName: string, limit: number = 20): Promise<ZRC721Token[]> {
         try {
             // Query main inscription index which has timestamps
-            const baseUrl = this.baseUrl.replace('/zrc721', '');
+            // Use proxy route when on HTTPS, direct when on HTTP (dev)
+            const isProduction = typeof window !== 'undefined' && window.location.protocol === 'https:';
+            const baseUrl = isProduction ? '/api' : 'http://135.181.6.234:3333/api/v1';
             const url = `${baseUrl}/inscriptions?page=0&limit=1000`;
             const response = await fetch(url);
             if (!response.ok) {
