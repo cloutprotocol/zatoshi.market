@@ -61,11 +61,12 @@ export function ZgodsOnchainView({
                     t.tick?.toLowerCase() === collectionConfig.name.toLowerCase()
                 );
             } else {
-                // Get all tokens for the collection
-                allTokens = await zrc721IndexAPI.getCollectionTokens(collectionConfig.name.toLowerCase());
+                // Get recently inscribed tokens (chronological order)
+                // This queries the main inscription index which has timestamps
+                allTokens = await zrc721IndexAPI.getRecentTokens(collectionConfig.name.toLowerCase(), limit * 2);
             }
 
-            // Sort by token ID descending (most recent first) and limit
+            // Map to enriched format
             const sortedTokens = allTokens
                 .map(t => ({
                     ...t,
@@ -74,7 +75,6 @@ export function ZgodsOnchainView({
                     inscription: t.inscription_id,
                     collection: t.tick
                 }))
-                .sort((a, b) => b.tokenIdNum - a.tokenIdNum)
                 .slice(0, limit);
 
             // Enrich with collection artwork

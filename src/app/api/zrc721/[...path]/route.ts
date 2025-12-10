@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const ZRC721_API_BASE = 'http://135.181.6.234:3333/api/v1/zrc721';
+const API_BASE = 'http://135.181.6.234:3333/api/v1';
 
 /**
  * Proxy for ZRC-721 indexer API
  * This proxies requests to avoid CORS and mixed content issues
+ * Also proxies /inscriptions for getting recent mints with timestamps
  */
 export async function GET(
   request: NextRequest,
@@ -15,9 +16,14 @@ export async function GET(
     const searchParams = request.nextUrl.searchParams;
     const queryString = searchParams.toString();
 
+    // Handle inscriptions endpoint (not under /zrc721)
+    const apiPath = path === 'inscriptions' || path.startsWith('inscriptions/')
+      ? path
+      : `zrc721/${path}`;
+
     const url = queryString
-      ? `${ZRC721_API_BASE}/${path}?${queryString}`
-      : `${ZRC721_API_BASE}/${path}`;
+      ? `${API_BASE}/${apiPath}?${queryString}`
+      : `${API_BASE}/${apiPath}`;
 
     const response = await fetch(url, {
       headers: {
@@ -29,7 +35,7 @@ export async function GET(
 
     if (!response.ok) {
       return NextResponse.json(
-        { error: 'Failed to fetch from ZRC-721 indexer' },
+        { error: 'Failed to fetch from indexer' },
         { status: response.status }
       );
     }
@@ -42,7 +48,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error('ZRC-721 API proxy error:', error);
+    console.error('Indexer API proxy error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

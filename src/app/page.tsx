@@ -164,7 +164,7 @@ export default function Home() {
               <div className="flex flex-col items-center gap-1 md:flex-row md:gap-2 shrink-0">
                 <span className="text-gold-500/60 uppercase tracking-wider font-bold whitespace-nowrap">ZRC-721</span>
                 <span className="font-mono text-gold-100 font-bold">
-                  <StatsValue type="zrc721_tokens" />
+                  <StatsValue type="zrc721_collections" />
                 </span>
               </div>
             </div>
@@ -366,6 +366,10 @@ function StatsValue({ type }: { type: 'inscriptions' | 'tokens' | 'zrc721_collec
   }, [type]);
 
   if (value === null) return <span className="animate-pulse">...</span>;
+  // Show both collections and tokens for ZRC-721
+  if (type === 'zrc721_tokens' || type === 'zrc721_collections') {
+    return <span>{value.toLocaleString()}</span>;
+  }
   return <span>{value.toLocaleString()}</span>;
 }
 

@@ -76,6 +76,7 @@ class ZRC721IndexAPI {
 
     /**
      * Get all tokens for a collection with pagination
+     * Note: API returns tokens in alphabetical order, not numerical
      */
     async getCollectionTokens(
         collectionName: string,
@@ -88,8 +89,8 @@ class ZRC721IndexAPI {
             throw new Error(`Failed to fetch tokens for ${collectionName}: ${response.statusText}`);
         }
         const data = await response.json();
-        // The API returns an array of tokens directly
-        return Array.isArray(data) ? data : data.tokens || [];
+        // The API returns an object with tokens array
+        return data.tokens || [];
     }
 
     /**
@@ -127,6 +128,56 @@ class ZRC721IndexAPI {
             throw new Error(`Failed to fetch status: ${response.statusText}`);
         }
         return response.json();
+    }
+
+    /**
+     * Get recently inscribed tokens for a collection by querying the main inscription index
+     * This provides chronological order (most recent first) unlike the token endpoint
+     */
+    async getRecentTokens(collectionName: string, limit: number = 20): Promise<ZRC721Token[]> {
+        try {
+            // Query main inscription index which has timestamps
+            const baseUrl = this.baseUrl.replace('/zrc721', '');
+            const url = `${baseUrl}/inscriptions?page=0&limit=1000`;
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch recent inscriptions: ${response.statusText}`);
+            }
+            const data = await response.json();
+
+            // Filter for this collection's mint inscriptions and extract token IDs
+            const mintInscriptions = (data.items || [])
+                .filter((item: any) => {
+                    if (!item.preview_text) return false;
+                    try {
+                        const json = JSON.parse(item.preview_text);
+                        return json.p === 'zrc-721' &&
+                               json.op === 'mint' &&
+                               json.collection?.toLowerCase() === collectionName.toLowerCase();
+                    } catch {
+                        return false;
+                    }
+                })
+                .slice(0, limit);
+
+            // Fetch full token data for each inscription
+            const tokens = await Promise.all(
+                mintInscriptions.map(async (item: any) => {
+                    try {
+                        const json = JSON.parse(item.preview_text);
+                        return await this.getToken(collectionName, json.id);
+                    } catch (err) {
+                        return null;
+                    }
+                })
+            );
+
+            return tokens.filter((t): t is ZRC721Token => t !== null);
+        } catch (err) {
+            console.error('Failed to fetch recent tokens:', err);
+            // Fallback to regular token fetch
+            return [];
+        }
     }
 }
 
