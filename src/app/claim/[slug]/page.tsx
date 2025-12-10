@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import type { Metadata, Viewport } from 'next';
-import { ClaimClient } from './ClaimClient';
+import { ClaimClientOnchain } from './ClaimClientOnchain';
 import { getCollectionConfig } from '@/config/collections';
 
 type Props = {
@@ -25,10 +25,10 @@ export function generateMetadata({ params }: Props): Metadata {
   }
   return {
     title: `${collection.name} Claim`,
-    description: 'Claim your ZGODS allocation and mint inscription IDs.',
+    description: 'View all minted ZGODS tokens from the onchain ZRC-721 index.',
     openGraph: {
       title: `${collection.name} Claim`,
-      description: 'Claim your ZGODS allocation and mint inscription IDs.',
+      description: 'View all minted ZGODS tokens from the onchain ZRC-721 index.',
       url: `https://zatoshi.market/claim/${collection.slug}`,
       type: 'website',
       images: [
@@ -43,7 +43,7 @@ export function generateMetadata({ params }: Props): Metadata {
     twitter: {
       card: 'summary_large_image',
       title: `${collection.name} Claim`,
-      description: 'Claim your ZGODS allocation and mint inscription IDs.',
+      description: 'View all minted ZGODS tokens from the onchain ZRC-721 index.',
       images: ['https://zatoshi.market/social-og.png'],
     },
     themeColor: collection.themeColor || '#0b0b0b',
@@ -53,5 +53,5 @@ export function generateMetadata({ params }: Props): Metadata {
 export default function ClaimPage({ params }: Props) {
   const collection = getCollectionConfig(params.slug);
   if (!collection) return notFound();
-  return <ClaimClient collection={collection} />;
+  return <ClaimClientOnchain collection={collection} />;
 }

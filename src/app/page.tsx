@@ -6,8 +6,9 @@ import Image from 'next/image';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { zcashRPC } from '@/services/zcash';
-import { RecentClaims } from '@/components/RecentClaims';
+import { ZgodsOnchainView } from '@/components/ZgodsOnchainView';
 import { ordinalIndexAPI, type OrdinalIndexToken } from '@/services/ordinalIndex';
+import { zrc721IndexAPI } from '@/services/zrc721Index';
 
 // Helper to format numbers
 const formatNumber = (value?: number) => {
@@ -139,27 +140,31 @@ export default function Home() {
             ZCASH <span className="text-gold-500">INSCRIPTION MARKETPLACE</span>
           </h1>
 
-          <div className="mx-auto mt-8 max-w-3xl rounded-full border border-gold-500/10 bg-black/40 px-6 py-3 backdrop-blur-md">
-            <div className="flex items-center justify-between text-xs md:text-sm">
-              <div className="flex flex-col items-center gap-1 md:flex-row md:gap-2">
-                <span className="text-gold-500/60 uppercase tracking-wider font-bold">Block Height</span>
+          <div className="mx-auto mt-8 max-w-5xl rounded-full border border-gold-500/10 bg-black/40 px-6 py-3 backdrop-blur-md">
+            <div className="flex items-center justify-between text-xs md:text-sm gap-3 overflow-x-auto">
+              <div className="flex flex-col items-center gap-1 md:flex-row md:gap-2 shrink-0">
+                <span className="text-gold-500/60 uppercase tracking-wider font-bold whitespace-nowrap">Block Height</span>
                 <span className="font-mono text-gold-100 font-bold">{loadingHeight ? '...' : blockHeight.toLocaleString()}</span>
               </div>
               <div className="h-8 w-px bg-gold-500/10"></div>
-              <div className="flex flex-col items-center gap-1 md:flex-row md:gap-2">
-                <span className="text-gold-500/60 uppercase tracking-wider font-bold">Inscriptions</span>
+              <div className="flex flex-col items-center gap-1 md:flex-row md:gap-2 shrink-0">
+                <span className="text-gold-500/60 uppercase tracking-wider font-bold whitespace-nowrap">Inscriptions</span>
                 <span className="font-mono text-gold-100 font-bold">
-                  {/* We can fetch this from status or just show a placeholder/loading if not available yet */}
-                  {/* For now, let's use a hardcoded placeholder or fetch it if we had the hook ready */}
-                  {/* We'll add the hook in the component body */}
                   <StatsValue type="inscriptions" />
                 </span>
               </div>
               <div className="h-8 w-px bg-gold-500/10"></div>
-              <div className="flex flex-col items-center gap-1 md:flex-row md:gap-2">
-                <span className="text-gold-500/60 uppercase tracking-wider font-bold">ZRC-20 Tokens</span>
+              <div className="flex flex-col items-center gap-1 md:flex-row md:gap-2 shrink-0">
+                <span className="text-gold-500/60 uppercase tracking-wider font-bold whitespace-nowrap">ZRC-20</span>
                 <span className="font-mono text-gold-100 font-bold">
                   <StatsValue type="tokens" />
+                </span>
+              </div>
+              <div className="h-8 w-px bg-gold-500/10"></div>
+              <div className="flex flex-col items-center gap-1 md:flex-row md:gap-2 shrink-0">
+                <span className="text-gold-500/60 uppercase tracking-wider font-bold whitespace-nowrap">ZRC-721</span>
+                <span className="font-mono text-gold-100 font-bold">
+                  <StatsValue type="zrc721_tokens" />
                 </span>
               </div>
             </div>
@@ -213,21 +218,21 @@ export default function Home() {
                     </h3>
                   </div>
                   <p className="text-lg text-gold-300/80 max-w-xl mx-auto md:mx-0">
-                    Claim your allocated ZGODS using the same wallet you used in the pre-sale.
+                    View all minted ZGODS from the onchain ZRC-721 index. Check your owned tokens.
                   </p>
                   <div className="flex flex-col sm:flex-row items-center gap-3">
                     <Link
                       href="/claim/zgods"
                       className="inline-flex items-center justify-center rounded-sm bg-gold-500 px-8 py-3 text-sm font-bold uppercase tracking-wider text-black transition-all hover:bg-gold-400 hover:shadow-[0_0_20px_rgba(234,179,8,0.3)]"
                     >
-                      Claim Now
+                      View Collection
                     </Link>
                   </div>
                 </div>
               </div>
 
               <div className="border-t border-gold-500/10 pt-6">
-                <RecentClaims collectionSlug="zgods" limit={10} title="Recent Activity" cardSize="sm" />
+                <ZgodsOnchainView collectionSlug="zgods" limit={10} title="Recent Mints" cardSize="sm" />
               </div>
             </div>
           </div>
@@ -291,7 +296,7 @@ export default function Home() {
                       strokeLinejoin="round"
                       className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:translate-x-1"
                     >
-                      <path d="M5 12h14M12 5l7 7-7 7"/>
+                      <path d="M5 12h14M12 5l7 7-7 7" />
                     </svg>
                   </Link>
                 </div>
@@ -343,14 +348,21 @@ function SectionHeader({ title, link }: { title: string; link: string }) {
   );
 }
 
-function StatsValue({ type }: { type: 'inscriptions' | 'tokens' }) {
+function StatsValue({ type }: { type: 'inscriptions' | 'tokens' | 'zrc721_collections' | 'zrc721_tokens' }) {
   const [value, setValue] = useState<number | null>(null);
 
   useEffect(() => {
-    ordinalIndexAPI.getStatus().then(status => {
-      if (type === 'inscriptions') setValue(status.inscriptions || 0);
-      if (type === 'tokens') setValue(status.tokens || 0);
-    }).catch(() => { });
+    if (type === 'zrc721_collections' || type === 'zrc721_tokens') {
+      zrc721IndexAPI.getStatus().then(status => {
+        if (type === 'zrc721_collections') setValue(status.collections || 0);
+        if (type === 'zrc721_tokens') setValue(status.tokens || 0);
+      }).catch(() => { });
+    } else {
+      ordinalIndexAPI.getStatus().then(status => {
+        if (type === 'inscriptions') setValue(status.inscriptions || 0);
+        if (type === 'tokens') setValue(status.tokens || 0);
+      }).catch(() => { });
+    }
   }, [type]);
 
   if (value === null) return <span className="animate-pulse">...</span>;
@@ -652,5 +664,115 @@ function TrendingUpIcon({ className }: { className?: string }) {
       <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
       <polyline points="16 7 22 7 22 13" />
     </svg>
+  );
+}
+
+function ZRC721Collections() {
+  const [collections, setCollections] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchCollections() {
+      try {
+        const data = await zrc721IndexAPI.getCollections(0, 20);
+        // Ensure data is an array
+        const collectionsArray = Array.isArray(data) ? data : [];
+        setCollections(collectionsArray);
+      } catch (err) {
+        console.error('Failed to fetch ZRC-721 collections', err);
+        setCollections([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchCollections();
+    // Poll every 60 seconds
+    const interval = setInterval(fetchCollections, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="h-32 bg-white/5 rounded-sm animate-pulse border border-gold-500/5"></div>
+        ))}
+      </div>
+    );
+  }
+
+  if (collections.length === 0) {
+    return (
+      <div className="text-center py-12 text-gold-500/40 border border-dashed border-gold-500/10 rounded-sm">
+        No ZRC-721 collections deployed yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {collections.map((collection) => {
+        const progress = collection.supply > 0 ? (collection.minted / collection.supply) * 100 : 0;
+        const isCompleted = progress >= 99.9;
+
+        return (
+          <div
+            key={collection.collection}
+            className="group relative bg-black/40 border border-gold-500/10 rounded-sm p-5 hover:border-gold-500/30 hover:bg-white/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-gold-900/10"
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex-1">
+                <h3 className="text-xl font-black text-gold-100 tracking-tight mb-1 group-hover:text-gold-400 transition-colors">
+                  {collection.collection}
+                </h3>
+                <div className="flex items-center gap-2 text-xs text-gold-500/60">
+                  <span className="font-mono">{collection.minted.toLocaleString()} / {collection.supply.toLocaleString()}</span>
+                </div>
+              </div>
+              {isCompleted ? (
+                <span className="px-2 py-1 bg-green-500/20 text-green-300 text-[9px] font-bold uppercase tracking-wider rounded border border-green-500/30">
+                  Complete
+                </span>
+              ) : (
+                <span className="px-2 py-1 bg-gold-500/20 text-gold-300 text-[9px] font-bold uppercase tracking-wider rounded border border-gold-500/30">
+                  Minting
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between text-[10px] text-gold-300/70 font-medium">
+                <span>Progress</span>
+                <span className={isCompleted ? 'text-green-300 font-bold' : 'text-gold-100'}>
+                  {progress.toFixed(1)}%
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${isCompleted ? 'bg-green-500/80' : 'bg-gradient-to-r from-gold-600 to-gold-400'}`}
+                  style={{ width: `${Math.min(progress, 100)}%` }}
+                />
+              </div>
+            </div>
+
+            {collection.meta && (
+              <div className="mt-3 pt-3 border-t border-gold-500/10">
+                <div className="text-[10px] text-gold-400/60 uppercase tracking-wider mb-1">Metadata</div>
+                <div className="text-xs text-gold-200/70 font-mono truncate">{collection.meta}</div>
+              </div>
+            )}
+
+            {collection.collection.toUpperCase() === 'ZGODS' && (
+              <Link
+                href="/claim/zgods"
+                className="absolute inset-0 z-10"
+              >
+                <span className="sr-only">View {collection.collection}</span>
+              </Link>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }

@@ -9,6 +9,7 @@ import type { CollectionConfig } from '@/config/collections';
 import { getConvexClient } from '@/lib/convexClient';
 import { api } from '../../../../convex/_generated/api';
 import { ConfirmTransaction } from '@/components/ConfirmTransaction';
+import { zrc721IndexAPI, type ZRC721Collection } from '@/services/zrc721Index';
 import { PLATFORM_FEES, calculateTotalCost } from '@/config/fees';
 import { buildImageUrls, buildTokenName, fetchCollectionMetadata } from '@/lib/collectionAssets';
 import type { Id } from '../../../../convex/_generated/dataModel';
@@ -42,6 +43,11 @@ type ClaimStats = {
   mintedForAddress: { count: number };
   reservedCount?: number;
   reservedForAddress?: { count: number };
+};
+
+type OnchainStats = {
+  collection: ZRC721Collection | null;
+  userTokenCount: number;
 };
 
 type ReservationRef = {
@@ -110,6 +116,8 @@ export function ClaimClient({ collection }: Props) {
   const [copiedInscription, setCopiedInscription] = useState<string | null>(null);
   const [selectedToken, setSelectedToken] = useState<ClaimedToken | null>(null);
   const [selectedTokenMetadata, setSelectedTokenMetadata] = useState<any>(null);
+  const [onchainStats, setOnchainStats] = useState<OnchainStats>({ collection: null, userTokenCount: 0 });
+  const [loadingOnchain, setLoadingOnchain] = useState(true);
   const mintedCount = claimStats?.mintedForAddress?.count ?? 0;
   const reservedPending = claimStats?.reservedForAddress?.count ?? 0;
   const pendingTokens = useMemo(() => pendingReservations.map((r) => r.tokenId), [pendingReservations]);
@@ -177,35 +185,35 @@ export function ClaimClient({ collection }: Props) {
   }, [loadStatus, mintResults.length, claiming]);
 
   const refreshClaimedTokens = useCallback(async () => {
-    const convex = getConvexClient();
-    if (!convex || !wallet?.address) {
+    if (!wallet?.address) {
       setClaimedTokens([]);
       setLoadingClaims(false);
       return;
     }
     setLoadingClaims(true);
     try {
-      const res = await convex.query(api.collectionClaims.listMinted, {
-        collectionSlug: collection.slug,
-        address: wallet.address,
-        limit: 50,
-      });
-      const minted = (res as any[]) ?? [];
+      // Fetch tokens from onchain API
+      const tokens = await zrc721IndexAPI.getTokensByAddress(wallet.address);
+      const collectionTokens = tokens.filter(t =>
+        t.tick?.toLowerCase() === collection.name.toLowerCase()
+      );
+
       const enriched = await Promise.all(
-        minted.map(async (mint: any) => {
-          const metadata = await fetchCollectionMetadata(collection, mint.tokenId);
-          const imageUrls = buildImageUrls(collection, mint.tokenId, metadata);
+        collectionTokens.map(async (token) => {
+          const tokenId = parseInt(token.token_id, 10);
+          const metadata = await fetchCollectionMetadata(collection, tokenId);
+          const imageUrls = buildImageUrls(collection, tokenId, metadata);
           return {
-            tokenId: mint.tokenId,
-            inscriptionId: mint.inscriptionId,
+            tokenId,
+            inscriptionId: token.inscription_id,
             imageUrls,
-            name: buildTokenName(collection, mint.tokenId, metadata),
+            name: buildTokenName(collection, tokenId, metadata),
           } as ClaimedToken;
         })
       );
       setClaimedTokens(enriched);
     } catch (e) {
-      console.error('Failed to load claimed tokens', e);
+      console.error('Failed to load claimed tokens from onchain API', e);
     } finally {
       setLoadingClaims(false);
     }
@@ -214,6 +222,31 @@ export function ClaimClient({ collection }: Props) {
   useEffect(() => {
     refreshClaimedTokens();
   }, [refreshClaimedTokens]);
+
+  // Fetch onchain stats
+  const refreshOnchainStats = useCallback(async () => {
+    setLoadingOnchain(true);
+    try {
+      const collectionData = await zrc721IndexAPI.getCollection(collection.name.toLowerCase());
+      let userCount = 0;
+      if (wallet?.address) {
+        const tokens = await zrc721IndexAPI.getTokensByAddress(wallet.address);
+        userCount = tokens.filter(t => t.tick?.toLowerCase() === collection.name.toLowerCase()).length;
+      }
+      setOnchainStats({ collection: collectionData, userTokenCount: userCount });
+    } catch (e) {
+      console.error('Failed to load onchain stats', e);
+    } finally {
+      setLoadingOnchain(false);
+    }
+  }, [collection.name, wallet?.address]);
+
+  useEffect(() => {
+    refreshOnchainStats();
+    // Poll every 30 seconds
+    const interval = setInterval(refreshOnchainStats, 30000);
+    return () => clearInterval(interval);
+  }, [refreshOnchainStats]);
 
   const remainingAllowlist = useMemo(() => {
     if (!allocation) return 0;
@@ -476,6 +509,33 @@ export function ClaimClient({ collection }: Props) {
           )}
         </div>
 
+        {/* Onchain Stats */}
+        <div className="glass-card p-6 border border-gold-500/20 rounded-sm mb-6">
+          <h2 className="text-xl font-semibold mb-4">Collection Stats (Onchain)</h2>
+          {loadingOnchain ? (
+            <div className="text-sm text-gold-200/70">Loading onchain data...</div>
+          ) : (onchainStats.collection && typeof onchainStats.collection.minted === 'number' && onchainStats.collection.supply) ? (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-black/40 border border-gold-500/10 rounded p-4">
+                <div className="text-xs text-gold-200/60 uppercase tracking-wider mb-1">Total Supply</div>
+                <div className="text-2xl font-bold text-gold-100">{Number(onchainStats.collection.supply).toLocaleString()}</div>
+              </div>
+              <div className="bg-black/40 border border-gold-500/10 rounded p-4">
+                <div className="text-xs text-gold-200/60 uppercase tracking-wider mb-1">Minted</div>
+                <div className="text-2xl font-bold text-gold-100">{onchainStats.collection.minted.toLocaleString()}</div>
+              </div>
+              <div className="bg-black/40 border border-gold-500/10 rounded p-4">
+                <div className="text-xs text-gold-200/60 uppercase tracking-wider mb-1">Progress</div>
+                <div className="text-2xl font-bold text-gold-100">
+                  {((onchainStats.collection.minted / Number(onchainStats.collection.supply)) * 100).toFixed(1)}%
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-red-300">Failed to load onchain data</div>
+          )}
+        </div>
+
         <div className="glass-card p-6 border border-gold-500/20 rounded-sm mb-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="space-y-2">
@@ -498,9 +558,6 @@ export function ClaimClient({ collection }: Props) {
                 <span className="text-gold-200/70">Whitelist allocation:</span>
                 <span className="font-semibold text-gold-200">{allocation.max}</span>
               </div>
-              <div className="text-gold-200/60">
-                Claiming UI is being wired to batch mint ZRC-721. Your allocation is recognized.
-              </div>
             </div>
           )}
           {!allocation && wallet?.address && !statusLoading && !error && (
@@ -516,7 +573,24 @@ export function ClaimClient({ collection }: Props) {
           )}
         </div>
 
-        {wallet?.address && !statusLoading && allocation && availableToRequest > 0 && (
+        {/* Claim Paused Notice */}
+        <div className="glass-card p-6 border border-gold-500/20 rounded-sm mb-6 bg-amber-500/5">
+          <div className="flex items-start gap-4">
+            <div className="text-3xl">ℹ️</div>
+            <div className="flex-1 space-y-3">
+              <h2 className="text-xl font-bold text-gold-100">Claim System Paused</h2>
+              <p className="text-gold-200/80">
+                The {collection.name} claim system has been temporarily paused. We have transitioned to using the onchain ZRC-721 index
+                for displaying all minted tokens. This provides a more reliable and decentralized source of truth.
+              </p>
+              <p className="text-gold-200/80">
+                All tokens shown below are verified onchain. You can view your owned tokens by connecting your wallet.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {false && wallet?.address && !statusLoading && allocation && availableToRequest > 0 && (
           <div className="glass-card p-6 border border-gold-500/20 rounded-sm">
             <div className="flex items-center justify-between gap-3 mb-4">
               <h2 className="text-lg sm:text-xl font-semibold">Claim</h2>
@@ -594,7 +668,7 @@ export function ClaimClient({ collection }: Props) {
             )}
           </div>
         )}
-        {wallet?.address && !statusLoading && allocation && availableToRequest <= 0 && (
+        {false && wallet?.address && !statusLoading && allocation && availableToRequest <= 0 && (
           <div className="glass-card p-6 border border-gold-500/20 rounded-sm">
             <h2 className="text-lg sm:text-xl font-semibold mb-2">Allocation complete</h2>
             <p className="text-sm text-gold-200/70">You have already claimed your full allocation for this collection. Thank you!</p>
@@ -604,11 +678,11 @@ export function ClaimClient({ collection }: Props) {
         <div className="glass-card p-6 border border-gold-500/20 rounded-sm mt-6">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
-              <h3 className="text-xl font-semibold">My claimed ZGODS</h3>
+              <h3 className="text-xl font-semibold">My {collection.name} (Onchain)</h3>
             </div>
-            {claimStats?.mintedForAddress?.count !== undefined && (
+            {onchainStats.userTokenCount > 0 && (
               <span className="text-xs sm:text-sm text-gold-200/80 border border-gold-500/20 rounded-full px-2 sm:px-3 py-1 whitespace-nowrap">
-                Claimed {claimStats.mintedForAddress.count}
+                {onchainStats.userTokenCount} Owned
               </span>
             )}
           </div>

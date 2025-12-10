@@ -49,7 +49,7 @@ function baseToHuman(base: string, decimals: number): string {
         const integer = bi / scale;
         const frac = bi % scale;
         if (frac === 0n) return formatIntWithSep(integer.toString());
-        const fracStr = frac.toString().padStart(decimals, '0').replace(/0+$/,'');
+        const fracStr = frac.toString().padStart(decimals, '0').replace(/0+$/, '');
         return `${formatIntWithSep(integer.toString())}.${fracStr}`;
     } catch { return base; }
 }
@@ -206,7 +206,7 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                         try {
                             const res = await fetch(`/api/zcash/inscription-content/${id}`);
                             if (res.ok) txt = await res.text();
-                        } catch {}
+                        } catch { }
                     }
                     if (!txt) continue;
                     try {
@@ -226,7 +226,7 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                                 amtHuman: amtFields.human ?? String(json.amt),
                             },
                         });
-                    } catch {}
+                    } catch { }
                 }
                 return validTransfers;
             };
@@ -258,7 +258,7 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                         summaryDecimals = decNum;
                         setTokenDecimals(decNum);
                     }
-                } catch {}
+                } catch { }
                 const decimalsToUse = summaryDecimals ?? tokenDecimals;
                 // Expect portfolio has a list of transfers with IDs or a holdings map
                 const transfers: any[] = Array.isArray(portfolio?.transfers) ? portfolio.transfers : [];
@@ -275,9 +275,9 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                     if (!bal) {
                         const p: any = portfolio;
                         const direct = (p?.balances && (p.balances[T]?.available || p.balances[T]?.balance || p.balances[T]))
-                          || (p?.tokens && (p.tokens[T]?.available || p.tokens[T]?.balance))
-                          || (p?.available && p.available[T])
-                          || (Array.isArray(p?.holdings) && (p.holdings.find((h: any) => (String(h.tick || h.ticker || '').toUpperCase() === T && (!h.address || String(h.address).toLowerCase() === wallet.address.toLowerCase())))?.available));
+                            || (p?.tokens && (p.tokens[T]?.available || p.tokens[T]?.balance))
+                            || (p?.available && p.available[T])
+                            || (Array.isArray(p?.holdings) && (p.holdings.find((h: any) => (String(h.tick || h.ticker || '').toUpperCase() === T && (!h.address || String(h.address).toLowerCase() === wallet.address.toLowerCase())))?.available));
                         if (direct) bal = String(direct);
                     }
                     setAvailableBalance(bal ?? "0");
@@ -302,7 +302,7 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                                 amtHuman: amtFields.human ?? (amountRaw != null ? String(amountRaw) : undefined),
                             },
                         });
-                    } catch {}
+                    } catch { }
                 }
                 let walletTransfers: any[] = [];
                 try {
@@ -366,8 +366,8 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                 const [txid, voutStr] = loc.split(':');
                 const vout = parseInt(voutStr, 10);
                 const id: string = ((selectedInscription as any).id && typeof (selectedInscription as any).id === 'string')
-                  ? (selectedInscription as any).id
-                  : `${txid}i0`;
+                    ? (selectedInscription as any).id
+                    : `${txid}i0`;
 
                 const wantTick = String((selectedInscription as any).zrc20?.tick || '').toUpperCase();
                 const decimalsForInscription = (selectedInscription as any).zrc20?.decimals ?? tokenDecimals;
@@ -442,7 +442,7 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
 
                 // SECURITY: Never fall back to wallet data - indexer must validate the transfer
                 if (amountRaw == null) {
-                    throw pendingError('Transfer amount not found in indexer response');
+                    throw pendingError('Transfer amount is pending in the mempool');
                 }
 
                 const tfAmtFields = deriveAmountFields(amountRaw, decimalsForInscription);
@@ -527,7 +527,7 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                     setError('Amount exceeds available balance');
                     return;
                 }
-            } catch {}
+            } catch { }
         }
         setCreatingTransfer(true);
         setTransferFormOpen(false);
@@ -592,7 +592,7 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                         ok = true;
                         break;
                     }
-                } catch {}
+                } catch { }
                 await new Promise(r => setTimeout(r, 1500));
             }
             if (!ok) {
@@ -691,7 +691,7 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
             }
             let tokenAmountBase: string | undefined = zrc20.amtBase;
             if (!tokenAmountBase && normalizedHuman) {
-                try { tokenAmountBase = humanToBaseUnits(normalizedHuman, decimalsForListing).toString(); } catch {}
+                try { tokenAmountBase = humanToBaseUnits(normalizedHuman, decimalsForListing).toString(); } catch { }
             }
 
             // Extract txid and vout from location (format: "txid:vout")
@@ -916,7 +916,7 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
             // Optimistically add with :0 outpoint; indexer polling below will refine
             const normalized = normalizeHumanInput(transferAmt || '0') || '0';
             let optimisticBase: string | undefined;
-            try { optimisticBase = humanToBaseUnits(normalized, tokenDecimals).toString(); } catch {}
+            try { optimisticBase = humanToBaseUnits(normalized, tokenDecimals).toString(); } catch { }
             const optimistic = {
                 id: inscriptionId,
                 location: `${String(inscriptionId).replace(/i0$/, '')}:0`,
@@ -962,91 +962,90 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                             <div className="text-gold-500 animate-pulse">Scanning for valid transfers...</div>
                         ) : inscriptions.length === 0 ? (
                             <div className="space-y-3">
-                              <div className="text-gold-300/80">No transferable {ticker || ''} inscriptions found.</div>
-                              {transferBuilder}
+                                <div className="text-gold-300/80">No transferable {ticker || ''} inscriptions found.</div>
+                                {transferBuilder}
                             </div>
                         ) : (
                             <>
-                            <div className="flex gap-2 overflow-x-auto no-scrollbar py-2 px-1 border border-gold-500/20 rounded-none bg-black/40 backdrop-blur-md flex-nowrap">
-                                {inscriptions.map((ins: any, idx: number) => {
-                                    const candidateId = ins.id || ins.inscription_id || '';
-                                    const matchesId = Boolean(
-                                        (candidateId && selectedInscription?.id && selectedInscription.id === candidateId) ||
-                                        (candidateId && selectedInscription?.inscription_id && selectedInscription.inscription_id === candidateId)
-                                    );
-                                    const matchesLocation = Boolean(
-                                        selectedInscription?.location && ins.location && selectedInscription.location === ins.location
-                                    );
-                                    const isSelected = matchesId || matchesLocation;
-                                    const key = candidateId || ins.location || `optimistic-${idx}`;
-                                    const shortId = (ins.id || ins.inscription_id || ins.location || '').toString();
+                                <div className="flex gap-2 overflow-x-auto no-scrollbar py-2 px-1 border border-gold-500/20 rounded-none bg-black/40 backdrop-blur-md flex-nowrap">
+                                    {inscriptions.map((ins: any, idx: number) => {
+                                        const candidateId = ins.id || ins.inscription_id || '';
+                                        const matchesId = Boolean(
+                                            (candidateId && selectedInscription?.id && selectedInscription.id === candidateId) ||
+                                            (candidateId && selectedInscription?.inscription_id && selectedInscription.inscription_id === candidateId)
+                                        );
+                                        const matchesLocation = Boolean(
+                                            selectedInscription?.location && ins.location && selectedInscription.location === ins.location
+                                        );
+                                        const isSelected = matchesId || matchesLocation;
+                                        const key = candidateId || ins.location || `optimistic-${idx}`;
+                                        const shortId = (ins.id || ins.inscription_id || ins.location || '').toString();
 
-                                    const locationKey = String(ins.location || '');
-                                    const isListed = locationKey && listedLocations.has(locationKey);
-                                    return (
+                                        const locationKey = String(ins.location || '');
+                                        const isListed = locationKey && listedLocations.has(locationKey);
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={key}
+                                                onClick={() => {
+                                                    if (isListed) return;
+                                                    setSelectedInscription(ins);
+                                                }}
+                                                aria-pressed={isSelected}
+                                                disabled={isListed}
+                                                className={`relative flex-none w-[200px] text-left p-3 rounded-none border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/60 ${isSelected
+                                                        ? "border-gold-400/80 bg-gold-400/10 shadow-[0_0_25px_rgba(234,179,8,0.25)] ring-1 ring-gold-400/70"
+                                                        : "border-gold-500/10 hover:border-gold-500/40 hover:bg-gold-500/5"
+                                                    } ${isListed ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                            >
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <div className="text-xs text-gold-300/60">
+                                                        #{ins.number || ins.inscription_number || idx + 1}
+                                                    </div>
+                                                    {isSelected && (
+                                                        <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-gold-200">
+                                                            <svg
+                                                                width="12"
+                                                                height="12"
+                                                                viewBox="0 0 24 24"
+                                                                fill="none"
+                                                                stroke="currentColor"
+                                                                strokeWidth="3"
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                            >
+                                                                <polyline points="20 6 9 17 4 12" />
+                                                            </svg>
+                                                            Selected
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-lg font-bold text-gold-100">
+                                                    {formatTransferAmount(ins)} {ins.zrc20?.tick}
+                                                </div>
+                                                <div className="mt-1 text-[11px] text-gold-300/50 font-mono truncate">
+                                                    {shortId ? `${shortId.slice(0, 14)}…` : 'Unknown id'}
+                                                </div>
+                                                {isListed && (
+                                                    <span className="absolute top-2 right-2 text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 bg-black/70 border border-gold-500/30 text-gold-200">Listed</span>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {showTransferBuilder && (
+                                    <div className="mt-4 space-y-2">
                                         <button
                                             type="button"
-                                            key={key}
-                                            onClick={() => {
-                                                if (isListed) return;
-                                                setSelectedInscription(ins);
-                                            }}
-                                            aria-pressed={isSelected}
-                                            disabled={isListed}
-                                            className={`relative flex-none w-[200px] text-left p-3 rounded-none border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400/60 ${
-                                                isSelected
-                                                    ? "border-gold-400/80 bg-gold-400/10 shadow-[0_0_25px_rgba(234,179,8,0.25)] ring-1 ring-gold-400/70"
-                                                    : "border-gold-500/10 hover:border-gold-500/40 hover:bg-gold-500/5"
-                                            } ${isListed ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                            onClick={() => setTransferFormOpen((open) => !open)}
+                                            className="flex items-center justify-between w-full text-left px-3 py-2 text-xs uppercase tracking-wide border border-gold-500/20 text-gold-200 hover:border-gold-400"
                                         >
-                                            <div className="flex items-center justify-between mb-1">
-                                                <div className="text-xs text-gold-300/60">
-                                                    #{ins.number || ins.inscription_number || idx + 1}
-                                                </div>
-                                                {isSelected && (
-                                                    <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-gold-200">
-                                                        <svg
-                                                            width="12"
-                                                            height="12"
-                                                            viewBox="0 0 24 24"
-                                                            fill="none"
-                                                            stroke="currentColor"
-                                                            strokeWidth="3"
-                                                            strokeLinecap="round"
-                                                            strokeLinejoin="round"
-                                                        >
-                                                            <polyline points="20 6 9 17 4 12" />
-                                                        </svg>
-                                                        Selected
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="text-lg font-bold text-gold-100">
-                                                {formatTransferAmount(ins)} {ins.zrc20?.tick}
-                                            </div>
-                                            <div className="mt-1 text-[11px] text-gold-300/50 font-mono truncate">
-                                                {shortId ? `${shortId.slice(0, 14)}…` : 'Unknown id'}
-                                            </div>
-                                            {isListed && (
-                                                <span className="absolute top-2 right-2 text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 bg-black/70 border border-gold-500/30 text-gold-200">Listed</span>
-                                            )}
+                                            <span>Need another transfer?</span>
+                                            <span>{transferFormOpen ? '−' : '+'}</span>
                                         </button>
-                                    );
-                                })}
-                            </div>
-                            {showTransferBuilder && (
-                                <div className="mt-4 space-y-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setTransferFormOpen((open) => !open)}
-                                        className="flex items-center justify-between w-full text-left px-3 py-2 text-xs uppercase tracking-wide border border-gold-500/20 text-gold-200 hover:border-gold-400"
-                                    >
-                                        <span>Need another transfer?</span>
-                                        <span>{transferFormOpen ? '−' : '+'}</span>
-                                    </button>
-                                    {transferFormOpen && transferBuilder}
-                                </div>
-                            )}
+                                        {transferFormOpen && transferBuilder}
+                                    </div>
+                                )}
                             </>
                         )}
                     </div>
@@ -1108,20 +1107,20 @@ export default function CreateListing({ onCancel, onSuccess, ticker }: CreateLis
                     {/* Error/Success Messages */}
                     {error && (
                         <div
-                          role="alert"
-                          className="bg-gold-500/10 border border-gold-500/30 text-gold-200 p-3 rounded-none text-sm flex items-start gap-2"
+                            role="alert"
+                            className="bg-gold-500/10 border border-gold-500/30 text-gold-200 p-3 rounded-none text-sm flex items-start gap-2"
                         >
-                          <svg
-                            width="18"
-                            height="18"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className="text-gold-400 mt-0.5 shrink-0"
-                            aria-hidden="true"
-                          >
-                            <path d="M12 2c.5 0 .95.26 1.2.69l9.14 15.01c.47.78-.1 1.77-.99 1.77H2.65c-.89 0-1.46-.99-.99-1.77L10.8 2.69A1.38 1.38 0 0 1 12 2zm-.75 5.5h1.5v7h-1.5v-7zm0 8.5h1.5v2h-1.5v-2z" />
-                          </svg>
-                          <span>{error}</span>
+                            <svg
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                                className="text-gold-400 mt-0.5 shrink-0"
+                                aria-hidden="true"
+                            >
+                                <path d="M12 2c.5 0 .95.26 1.2.69l9.14 15.01c.47.78-.1 1.77-.99 1.77H2.65c-.89 0-1.46-.99-.99-1.77L10.8 2.69A1.38 1.38 0 0 1 12 2zm-.75 5.5h1.5v7h-1.5v-7zm0 8.5h1.5v2h-1.5v-2z" />
+                            </svg>
+                            <span>{error}</span>
                         </div>
                     )}
                     {success && (
