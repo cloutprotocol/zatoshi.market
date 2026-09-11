@@ -18,6 +18,18 @@ import { useState } from 'react';
 
 type Status = 'idle' | 'sending' | 'done' | 'error';
 
+/**
+ * Ecosystem row. These are the platforms Zatoshi is built on or competing in — not sponsors, and
+ * no endorsement is implied. Assets are self-hosted copies under public/ecosystem rather than
+ * hotlinked, so a third party rotating a URL cannot break or change the page.
+ */
+const ECOSYSTEM = [
+  { name: 'RadiantsDAO', href: 'https://www.radiant.nexus', src: '/ecosystem/radiants.jpg' },
+  { name: 'Solana Mobile Seeker', href: 'https://solanamobile.com', src: '/ecosystem/seeker.jpg' },
+  { name: 'Privy', href: 'https://www.privy.io', src: '/ecosystem/privy.png' },
+  { name: 'Zcash', href: 'https://z.cash', src: '/ecosystem/zcash.svg' },
+] as const;
+
 export default function ComingSoon() {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<Status>('idle');
@@ -185,6 +197,33 @@ export default function ComingSoon() {
             {', a Solana Mobile hackathon by RadiantsDAO'}
           </span>
         </p>
+
+        <div className="mt-9">
+          <p className="text-[11px] tracking-[0.22em] text-[#5d5a54]">BUILDING WITH</p>
+          {/* Scrolls horizontally when it cannot fit, so it degrades to a swipeable strip on
+              narrow phones instead of wrapping into a ragged block. */}
+          <ul className="mt-3 flex snap-x snap-mandatory items-center justify-center gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {ECOSYSTEM.map((e) => (
+              <li key={e.name} className="snap-center">
+                <a
+                  href={e.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={e.name}
+                  className="block h-11 w-11 overflow-hidden rounded-xl border border-[#2a2d31] bg-[#0b0c0e] p-1.5 opacity-70 transition-all hover:border-gold-500/40 hover:opacity-100"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={e.src}
+                    alt={e.name}
+                    className="h-full w-full rounded-md object-contain"
+                    loading="lazy"
+                  />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
 
         <nav className="mt-7 flex justify-center gap-3 text-[13px] text-[#5d5a54]">
           <a href="/market" className="text-[#9a948a] transition-colors hover:text-gold-500">
