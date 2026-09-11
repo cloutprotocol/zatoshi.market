@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import { usePathname } from 'next/navigation';
 import { useWallet } from '@/contexts/WalletContext';
 
 // Load WalletDrawer only on the client to avoid pulling crypto/WASM libs server-side
@@ -10,6 +11,7 @@ const WalletDrawer = dynamic(() => import('./WalletDrawer'), { ssr: false });
 
 export default function Header() {
   const { wallet, isConnected, mounted } = useWallet();
+  const pathname = usePathname();
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [desktopExpanded, setDesktopExpanded] = useState(true);
@@ -31,6 +33,10 @@ export default function Header() {
       }
     };
   }, []);
+
+  // The coming-soon landing page at "/" is chrome-free; the app header returns on every other
+  // route, including the retained marketplace homepage at /market.
+  if (pathname === '/') return null;
 
   return (
     <>

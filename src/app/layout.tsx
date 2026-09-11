@@ -14,12 +14,31 @@ export const viewport: Viewport = {
   themeColor: '#000000',
 };
 
+const SITE_DESCRIPTION =
+  'Zcash inscriptions and runes, with Solana rails. Coming to the Solana Mobile Seeker. Request an invite.';
+
 export const metadata: Metadata = {
+  metadataBase: new URL('https://zatoshi.market'),
   title: "zatoshi.market",
-  description: "Host and trade ZRC20 tokens, ZMAPS, and inscriptions on Zcash.",
+  description: SITE_DESCRIPTION,
   icons: {
     icon: '/favicon.svg',
     shortcut: '/favicon.svg',
+  },
+  openGraph: {
+    title: 'zatoshi.market',
+    description: SITE_DESCRIPTION,
+    url: 'https://zatoshi.market',
+    siteName: 'zatoshi.market',
+    images: [{ url: '/zlogo.png', width: 1254, height: 1254, alt: 'Zatoshi' }],
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    site: '@zatoshimarket',
+    title: 'zatoshi.market',
+    description: SITE_DESCRIPTION,
+    images: ['/zlogo.png'],
   },
   appleWebApp: {
     capable: true,
