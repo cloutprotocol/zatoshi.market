@@ -135,37 +135,89 @@ export default function ComingSoon() {
           </form>
         )}
 
-        <div className="mx-auto mt-10 inline-flex max-w-full items-center gap-2.5 rounded-full border border-[#2a2d31] px-4 py-2.5 text-left text-xs leading-relaxed text-[#9a948a]">
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-2.5">
+          <a
+            href="https://x.com/zatoshimarket"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-full border border-[#2a2d31] px-4 py-2.5 text-xs text-[#9a948a] transition-colors hover:border-gold-500/50 hover:text-gold-500"
+          >
+            <XIcon />
+            @zatoshimarket
+          </a>
+          <ContractChip />
+        </div>
+
+        <p className="mt-5 text-[13px] leading-relaxed text-[#6f6b64]">
+          Shipping to the Seeker and iOS: inscribe on Zcash, pay with SKR or USDC on Solana.
+        </p>
+        <p className="mt-2 inline-flex items-center gap-2 text-[13px] text-[#6f6b64]">
           <span
             aria-hidden
             className="h-[7px] w-[7px] flex-none rounded-full bg-[#7ee787] shadow-[0_0_10px_#7ee787]"
           />
           <span>
-            {'CLOCKED IN — '}
+            {'Clocked in for '}
             <span className="text-gold-500">CLOCK IN</span>
             {', a Solana Mobile hackathon by RadiantsDAO'}
           </span>
-        </div>
-
-        <p className="mt-4 text-[13px] text-[#6f6b64]">
-          Shipping to the Seeker: inscribe on Zcash, pay with SKR or USDC on Solana.
         </p>
 
         <nav className="mt-7 flex justify-center gap-3 text-[13px] text-[#5d5a54]">
-          <a
-            href="https://twitter.com/zatoshimarket"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[#9a948a] transition-colors hover:text-gold-500"
-          >
-            @zatoshimarket
-          </a>
-          <span aria-hidden>·</span>
           <a href="/market" className="text-[#9a948a] transition-colors hover:text-gold-500">
             Explorer
           </a>
         </nav>
       </section>
     </main>
+  );
+}
+
+function XIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="h-3.5 w-3.5 fill-current">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  );
+}
+
+/**
+ * Token contract address. Unset until the token exists, so the chip shows "TBA" rather than a
+ * placeholder that could be mistaken for a real address. Set NEXT_PUBLIC_CONTRACT_ADDRESS to
+ * reveal it, and it becomes click-to-copy.
+ */
+function ContractChip() {
+  const address = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS?.trim();
+  const [copied, setCopied] = useState(false);
+
+  if (!address) {
+    return (
+      <span className="inline-flex items-center gap-2 rounded-full border border-dashed border-[#2a2d31] px-4 py-2.5 text-xs text-[#6f6b64]">
+        CONTRACT: TBA
+      </span>
+    );
+  }
+
+  const short = `${address.slice(0, 4)}…${address.slice(-4)}`;
+
+  return (
+    <button
+      type="button"
+      title={address}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(address);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1600);
+        } catch {
+          /* clipboard blocked; the full address is in the title attribute */
+        }
+      }}
+      className="inline-flex items-center gap-2 rounded-full border border-[#2a2d31] px-4 py-2.5 text-xs text-[#9a948a] transition-colors hover:border-gold-500/50 hover:text-gold-500"
+    >
+      <span className="text-[#6f6b64]">CONTRACT</span>
+      <span className="font-mono">{short}</span>
+      <span className="text-gold-500">{copied ? '✓' : '⧉'}</span>
+    </button>
   );
 }
