@@ -6,7 +6,7 @@ import { addressToPkh, bytesToHex } from "./zcashHelpers";
 
 export const simpleTest = action({
   args: { address: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
     try {
       console.log("Step 1: Action started for address:", args.address);
 

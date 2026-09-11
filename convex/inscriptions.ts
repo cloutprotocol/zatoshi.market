@@ -1,4 +1,4 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
 /**
@@ -65,6 +65,57 @@ export const updateInscriptionStatus = mutation({
       blockHeight: args.blockHeight,
     });
 
+    return inscription._id;
+  },
+});
+
+// Pending rows for the confirmation tracker (oldest first, bounded)
+export const listPendingInscriptions = internalQuery({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 25, 1), 200);
+    return await ctx.db
+      .query("inscriptions")
+      .withIndex("by_status", (q) => q.eq("status", "pending"))
+      .order("asc")
+      .take(limit);
+  },
+});
+
+// Lookup by reveal txid for the tracker (internal so public actions need not reference `api`)
+export const getByTxid = internalQuery({
+  args: { txid: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("inscriptions")
+      .withIndex("by_txid", (q) => q.eq("txid", args.txid))
+      .first();
+  },
+});
+
+// Status transition used by the tracker (cron + on-demand check). Idempotent.
+export const setStatusByTxid = internalMutation({
+  args: {
+    txid: v.string(),
+    status: v.string(), // "pending" | "confirmed" | "failed"
+    blockHeight: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const inscription = await ctx.db
+      .query("inscriptions")
+      .withIndex("by_txid", (q) => q.eq("txid", args.txid))
+      .first();
+    if (!inscription) return null;
+
+    const patch: Record<string, unknown> = {};
+    if (inscription.status !== args.status) {
+      patch.status = args.status;
+      if (args.status === "confirmed") patch.confirmedAt = Date.now();
+    }
+    if (args.blockHeight !== undefined && inscription.blockHeight !== args.blockHeight) {
+      patch.blockHeight = args.blockHeight;
+    }
+    if (Object.keys(patch).length > 0) await ctx.db.patch(inscription._id, patch);
     return inscription._id;
   },
 });

@@ -381,17 +381,18 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
           if (typeof c2 === 'string') return c2;
           if (typeof c3 === 'string') return c3;
           if (typeof c4 === 'string') return c4;
-          // Try upgrades structure
+          // Try upgrades structure: keyed by branch id hex (zcashd/zebra shape),
+          // pick the active upgrade with the highest activation height.
           const upgrades = obj?.result?.upgrades || obj?.upgrades;
           if (upgrades && typeof upgrades === 'object') {
-            // Prefer NU5 if present, else take the last upgrade object
-            const nu5 = upgrades.NU5 || upgrades.nu5;
-            if (nu5?.branchid) return nu5.branchid;
-            const keys = Object.keys(upgrades);
-            if (keys.length) {
-              const last = upgrades[keys[keys.length - 1]];
-              if (last?.branchid) return last.branchid;
+            let best: { key: string; height: number } | null = null;
+            for (const key of Object.keys(upgrades)) {
+              const u = upgrades[key];
+              if (u?.status && u.status !== 'active') continue;
+              const h = Number(u?.activationheight ?? -1);
+              if (!best || h > best.height) best = { key: u?.branchid || key, height: h };
             }
+            if (best) return best.key;
           }
           return undefined;
         };
@@ -415,10 +416,14 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
         return val;
       }
     }
-    // Last-resort constant for Zcash mainnet (NU5)
-    const NU5_MAINNET = 0xf919a198;
-    _cachedBranchId = { value: NU5_MAINNET, expiresAt: now + BRANCH_ID_TTL_MS };
-    return NU5_MAINNET;
+    // Last-resort constant for Zcash mainnet. A wrong branch id makes every signature invalid
+    // ("mandatory-script-verify-flag-failed"), so this MUST track the live network upgrade.
+    // NU6.3 (ZIP 258) = 0x37A5165B, mainnet activation height 3428143. Set
+    // ZCASH_CONSENSUS_BRANCH_ID in the environment at the next upgrade rather than editing here.
+    const LAST_KNOWN_MAINNET_BRANCH_ID = 0x37a5165b;
+    console.warn('[branch-id] all providers failed; using last-known constant NU6.3 (0x37a5165b)');
+    _cachedBranchId = { value: LAST_KNOWN_MAINNET_BRANCH_ID, expiresAt: now + BRANCH_ID_TTL_MS };
+    return LAST_KNOWN_MAINNET_BRANCH_ID;
   }
 }
 
@@ -470,6 +475,9 @@ export async function getConsensusBranchId(tatumKey?: string): Promise<number> {
  */
 export async function callZcashRPC(method: string, params: any[] = []) {
   const url = process.env.NEXT_PUBLIC_ZCASH_RPC_URL || 'https://rpc.zatoshi.market/api/rpc';
+  // Bounded wait so a dead primary (e.g. Cloudflare 522 on rpc.zatoshi.market) fails over
+  // to Tatum/Blockchair quickly instead of stalling every action for the full TCP timeout.
+  const timeoutMs = Number(process.env.ZCASH_RPC_TIMEOUT_MS || 8000);
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -498,12 +506,13 @@ export async function callZcashRPC(method: string, params: any[] = []) {
       method,
       params,
       id: 'zatoshi-convex'
-    })
+    }),
+    signal: timeoutSignal(timeoutMs),
   });
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`RPC HTTP ${response.status}: ${text}`);
+    throw new Error(`RPC HTTP ${response.status}: ${text.slice(0, 200)}`);
   }
 
   const data = await response.json();
@@ -749,15 +758,119 @@ export async function fetchUtxos(address: string): Promise<Utxo[]> {
   throw new Error('UTXO fetch failed: All providers unavailable');
 }
 
+/**
+ * Verbose transaction lookup with the same provider failover as broadcastTransaction:
+ * 1) Zatoshi RPC  2) Tatum JSON-RPC (Zebra)  3) Blockchair raw + dashboard.
+ * Returns null only when every provider answered "not found"; throws when all providers errored.
+ * Shape follows zcashd/zebra `getrawtransaction(txid, 1)`: vin[].scriptSig.hex, vout[],
+ * blockhash?, height?, confirmations?
+ */
+export async function getRawTransactionVerbose(txid: string, tatumKey?: string): Promise<any | null> {
+  const errors: string[] = [];
+  let notFound = false;
+
+  // 1) Zatoshi RPC (primary)
+  try {
+    const tx = await callZcashRPC('getrawtransaction', [txid, 1]);
+    if (tx && typeof tx === 'object') return tx;
+    notFound = true;
+  } catch (e: any) {
+    const msg = e?.message || String(e);
+    if (/No such mempool or blockchain transaction|Transaction not found|-5\b/i.test(msg)) notFound = true;
+    else errors.push(`rpc: ${msg}`);
+  }
+
+  // 2) Tatum (secondary)
+  const key = tatumKey || process.env.TATUM_API_KEY || '';
+  if (key) {
+    try {
+      const r = await fetch('https://api.tatum.io/v3/blockchain/node/zcash-mainnet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'getrawtransaction', params: [txid, 1], id: 1 }),
+        signal: timeoutSignal(8000),
+      });
+      const j: any = r.ok ? await r.json().catch(() => null) : null;
+      if (j?.result && typeof j.result === 'object') return j.result;
+      const errMsg = j?.error?.message || (r.ok ? '' : `HTTP ${r.status}`);
+      if (/not found|No such/i.test(errMsg)) notFound = true;
+      else errors.push(`tatum: ${errMsg || 'empty result'}`);
+    } catch (e: any) {
+      errors.push(`tatum: ${e?.message || 'network error'}`);
+    }
+  }
+
+  // 3) Blockchair (tertiary) — raw gives decoded vin/vout, dashboard gives block height
+  try {
+    const bkey = process.env.BLOCKCHAIR_API_KEY;
+    const q = bkey ? `?key=${bkey}` : '';
+    const r = await fetch(`https://api.blockchair.com/zcash/raw/transaction/${txid}${q}`, { signal: timeoutSignal(8000) });
+    if (r.status === 404) {
+      notFound = true;
+    } else if (r.ok) {
+      const j: any = await r.json().catch(() => null);
+      const decoded = j?.data?.[txid]?.decoded_raw_transaction;
+      if (decoded && typeof decoded === 'object') {
+        const out: any = { ...decoded, txid };
+        try {
+          const d = await fetch(`https://api.blockchair.com/zcash/dashboards/transaction/${txid}${q}`, { signal: timeoutSignal(8000) });
+          const dj: any = d.ok ? await d.json().catch(() => null) : null;
+          const blockId = Number(dj?.data?.[txid]?.transaction?.block_id);
+          const tip = Number(dj?.context?.state);
+          if (Number.isFinite(blockId) && blockId > 0) {
+            out.height = blockId;
+            if (Number.isFinite(tip)) out.confirmations = Math.max(1, tip - blockId + 1);
+          } else if (Number.isFinite(blockId)) {
+            out.confirmations = 0; // -1 = mempool
+          }
+        } catch { }
+        return out;
+      }
+      notFound = true;
+    } else {
+      errors.push(`blockchair(${r.status})`);
+    }
+  } catch (e: any) {
+    errors.push(`blockchair: ${e?.message || 'network error'}`);
+  }
+
+  if (notFound && errors.length === 0) return null;
+  if (notFound) {
+    // At least one provider positively said "not found"; the rest errored. Treat as not found.
+    console.warn(`[getRawTransactionVerbose] ${txid} not found; provider errors: ${errors.join(' | ')}`);
+    return null;
+  }
+  throw new Error(`getrawtransaction failed on all providers: ${errors.join(' | ')}`);
+}
+
+export type TxConfirmation = {
+  found: boolean;
+  confirmations: number;
+  blockHeight?: number;
+  blockHash?: string;
+};
+
+/**
+ * Confirmation status for a txid, used by the inscription status tracker.
+ * `found=false` means no provider knows the tx (dropped from mempool or never broadcast).
+ */
+export async function getTxConfirmation(txid: string): Promise<TxConfirmation> {
+  const tx = await getRawTransactionVerbose(txid);
+  if (!tx) return { found: false, confirmations: 0 };
+  const confirmations = Number(tx.confirmations ?? (tx.blockhash ? 1 : 0)) || 0;
+  const blockHeight = Number.isFinite(Number(tx.height)) && Number(tx.height) > 0 ? Number(tx.height) : undefined;
+  return { found: true, confirmations, blockHeight, blockHash: tx.blockhash || undefined };
+}
+
 export async function checkInscriptionAt(location: string) {
-  // Use Zatoshi RPC (getrawtransaction) to check for "ord" tag in scriptSig
-  // FAIL-SAFE: If we cannot verify (RPC error, tx not found), we assume it IS an inscription
+  // Look for the "ord" tag in any input scriptSig (getrawtransaction verbose, with provider failover).
+  // FAIL-SAFE: If we cannot verify (all providers errored, tx not found), we assume it IS an inscription
   // to prevent accidental spending of potential inscriptions.
   try {
     const [txid, voutStr] = location.split(":");
     const vout = parseInt(voutStr || "0", 10) || 0;
 
-    const tx = await callZcashRPC('getrawtransaction', [txid, 1]);
+    const tx = await getRawTransactionVerbose(txid);
     if (!tx) {
       console.warn(`[inscription-check] tx ${txid} not found, treating as unsafe`);
       return true; // Fail safe
