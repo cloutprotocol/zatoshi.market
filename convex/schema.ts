@@ -384,4 +384,20 @@ export default defineSchema({
     .index("by_name", ["name"])
     .index("by_seller", ["sellerAddress"])
     .index("by_createdAt", ["createdAt"]),
+
+  // Access requests from the coming-soon landing page (/api/waitlist).
+  // No raw IP is stored: ipHash is a salted SHA-256 used only for rate limiting.
+  waitlist: defineTable({
+    email: v.string(), // normalised: trimmed + lowercased
+    createdAt: v.number(),
+    source: v.string(), // which surface captured it, e.g. "coming-soon"
+    referer: v.optional(v.string()),
+    country: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    ipHash: v.optional(v.string()),
+    invitedAt: v.optional(v.number()), // set when the invite is actually sent
+  })
+    .index("by_email", ["email"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_ipHash", ["ipHash"]),
 });

@@ -1,44 +1,41 @@
 /**
  * POST /api/waitlist  { email }  →  { ok: true, already?: boolean }
  *
- * Access-request capture for the coming-soon page. Backed by Upstash Redis (Vercel Marketplace),
- * chosen because a waitlist is an append-only set with dedupe — no schema or migrations needed.
+ * Access-request capture for the coming-soon page, stored in Convex (convex/waitlist.ts).
  *
- * Storage layout:
- *   waitlist:emails        sorted set, score = signup epoch ms, member = email (dedupe + ordering)
- *   waitlist:meta:<email>  hash of signup metadata (source, referer, ua, ip country)
- *   waitlist:rl:<ip>       counter with TTL, cheap abuse throttle
+ * The browser never talks to Convex directly here: routing through this handler keeps the
+ * deployment URL out of the client bundle for this flow and lets us derive the caller's IP for
+ * rate limiting. Only a salted SHA-256 of the IP is passed on — the raw address is never stored.
  *
- * Export the list with:  ZRANGE waitlist:emails 0 -1 WITHSCORES
- *
- * Returns 503 when the Upstash env vars are absent so a misconfigured deploy fails loudly
+ * Returns 503 when NEXT_PUBLIC_CONVEX_URL is absent so a misconfigured deploy fails loudly
  * instead of silently dropping signups.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { Redis } from '@upstash/redis';
+import { createHash } from 'crypto';
+import { ConvexHttpClient } from 'convex/browser';
+import { api } from '../../../../convex/_generated/api';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const EMAILS_KEY = 'waitlist:emails';
-const MAX_PER_WINDOW = 5;
-const WINDOW_SECONDS = 60 * 10;
-
-// RFC 5322 is not worth implementing; this rejects the mistakes people actually make.
 const EMAIL_RE = /^[^\s@]+@[^\s@,]+\.[a-z]{2,}$/i;
 
-function redisOrNull(): Redis | null {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) return null;
-  return new Redis({ url, token });
+function convexUrl(): string {
+  const env = (process.env.NEXT_PUBLIC_CONVEX_ENV || '').toLowerCase();
+  return (
+    process.env.NEXT_PUBLIC_CONVEX_URL ||
+    (env === 'prod' ? process.env.NEXT_PUBLIC_CONVEX_URL_PROD : process.env.NEXT_PUBLIC_CONVEX_URL_DEV) ||
+    process.env.NEXT_PUBLIC_CONVEX_URL_DEV ||
+    process.env.NEXT_PUBLIC_CONVEX_URL_PROD ||
+    ''
+  );
 }
 
 export async function POST(req: NextRequest) {
-  const redis = redisOrNull();
-  if (!redis) {
-    console.error('[waitlist] Upstash env vars missing; signup dropped');
+  const url = convexUrl();
+  if (!url) {
+    console.error('[waitlist] NEXT_PUBLIC_CONVEX_URL missing; signup dropped');
     return NextResponse.json(
       { error: 'Signups are not available right now. Try again shortly.' },
       { status: 503 },
@@ -60,33 +57,32 @@ export async function POST(req: NextRequest) {
   const ip =
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     req.headers.get('x-real-ip') ||
-    'unknown';
+    '';
+  // Salted so the hashes are not reversible via a rainbow table of the IPv4 space.
+  const ipHash = ip
+    ? createHash('sha256').update(`${process.env.WAITLIST_IP_SALT ?? 'zatoshi'}:${ip}`).digest('hex')
+    : undefined;
 
   try {
-    const rlKey = `waitlist:rl:${ip}`;
-    const hits = await redis.incr(rlKey);
-    if (hits === 1) await redis.expire(rlKey, WINDOW_SECONDS);
-    if (hits > MAX_PER_WINDOW) {
+    const client = new ConvexHttpClient(url);
+    const result = await client.mutation(api.waitlist.join, {
+      email,
+      source: 'coming-soon',
+      referer: req.headers.get('referer') ?? undefined,
+      country: req.headers.get('x-vercel-ip-country') ?? undefined,
+      userAgent: req.headers.get('user-agent') ?? undefined,
+      ipHash,
+    });
+    return NextResponse.json({ ok: true, already: result.already });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('rate-limited')) {
       return NextResponse.json({ error: 'Too many requests. Try again later.' }, { status: 429 });
     }
-
-    // NX so a repeat signup keeps its original position in the queue.
-    const added = await redis.zadd(EMAILS_KEY, { nx: true }, { score: Date.now(), member: email });
-    const already = added === 0;
-
-    if (!already) {
-      await redis.hset(`waitlist:meta:${email}`, {
-        at: new Date().toISOString(),
-        source: 'coming-soon',
-        referer: req.headers.get('referer') ?? '',
-        ua: (req.headers.get('user-agent') ?? '').slice(0, 300),
-        country: req.headers.get('x-vercel-ip-country') ?? '',
-      });
+    if (msg.includes('invalid-email')) {
+      return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
     }
-
-    return NextResponse.json({ ok: true, already });
-  } catch (err) {
-    console.error('[waitlist] store failed:', err);
+    console.error('[waitlist] store failed:', msg);
     return NextResponse.json(
       { error: 'Could not save your request. Try again shortly.' },
       { status: 502 },

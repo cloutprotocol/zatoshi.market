@@ -34,6 +34,7 @@ import type * as userPoints from "../userPoints.js";
 import type * as userProfiles from "../userProfiles.js";
 import type * as users from "../users.js";
 import type * as utxoLocks from "../utxoLocks.js";
+import type * as waitlist from "../waitlist.js";
 import type * as zcash from "../zcash.js";
 import type * as zcashHelpers from "../zcashHelpers.js";
 import type * as zmaps from "../zmaps.js";
@@ -71,6 +72,7 @@ declare const fullApi: ApiFromModules<{
   userProfiles: typeof userProfiles;
   users: typeof users;
   utxoLocks: typeof utxoLocks;
+  waitlist: typeof waitlist;
   zcash: typeof zcash;
   zcashHelpers: typeof zcashHelpers;
   zmaps: typeof zmaps;
