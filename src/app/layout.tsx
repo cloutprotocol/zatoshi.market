@@ -15,7 +15,7 @@ export const viewport: Viewport = {
 };
 
 const SITE_DESCRIPTION =
-  'Zcash inscriptions and runes, with Solana rails. Coming to the Solana Mobile Seeker. Request an invite.';
+  'Zcash inscriptions and runes marketplace, with Solana rails. Coming to the Solana Mobile Seeker. Request an invite.';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://zatoshi.market'),

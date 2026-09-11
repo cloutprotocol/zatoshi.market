@@ -89,7 +89,7 @@ export default function ComingSoon() {
           ZATOSHI.MARKET
         </h1>
         <p className="mt-3 text-[clamp(13px,3.6vw,17px)] leading-relaxed text-[#9a948a]">
-          Zcash inscriptions and runes.
+          Zcash inscriptions and runes marketplace.
           <br />
           Solana rails.
         </p>
@@ -135,7 +135,31 @@ export default function ComingSoon() {
           </form>
         )}
 
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-2.5">
+        {/* $ZATOSHI: launched on StonkFun (Solana), paired against ZEC. StonkFun converts the
+            transfer tax into the paired asset and distributes it to holders. */}
+        <div className="mx-auto mt-10 max-w-[460px] rounded-2xl border border-[#2a2d31] bg-[#0b0c0e]/70 p-5">
+          <div className="flex items-baseline justify-center gap-2">
+            <span className="text-[15px] tracking-[0.12em] text-gold-500">$ZATOSHI</span>
+            <span className="text-xs text-[#6f6b64]">on Solana</span>
+          </div>
+          <p className="mt-2.5 text-[13px] leading-relaxed text-[#9a948a]">
+            A 3% tax on every transfer is converted to ZEC and paid out to holders.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+            <a
+              href="https://www.stonkfun.xyz/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full border border-gold-500/40 px-4 py-2 text-xs text-gold-500 transition-colors hover:border-gold-500 hover:bg-gold-500/10"
+            >
+              Launching on StonkFun
+              <span aria-hidden>↗</span>
+            </a>
+            <ContractChip />
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
           <a
             href="https://x.com/zatoshimarket"
             target="_blank"
@@ -145,7 +169,6 @@ export default function ComingSoon() {
             <XIcon />
             @zatoshimarket
           </a>
-          <ContractChip />
         </div>
 
         <p className="mt-5 text-[13px] leading-relaxed text-[#6f6b64]">
